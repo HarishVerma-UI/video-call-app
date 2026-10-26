@@ -1,9 +1,19 @@
 {
-  "name": "video-call-app-server",
-  "version": "0.1.0",
-  "description": "Step 1 signaling server for the WebRTC video call app (zero dependencies)",
-  "main": "server.js",
+  "name": "@vca/server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js signaling server for the video call app (rooms, WebRTC signaling, chat)",
+  "type": "module",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node server.js"
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

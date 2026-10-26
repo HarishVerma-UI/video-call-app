@@ -1,4 +1,16 @@
 node_modules/
+dist/
 *.log
 .DS_Store
 .env
+.env.local
+
+# Expo / React Native
+mobile/.expo/
+mobile/android/
+mobile/ios/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision

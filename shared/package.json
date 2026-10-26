@@ -1,0 +1,9 @@
+{
+  "name": "@vca/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Signaling protocol + WebRTC call engine shared by the web and mobile clients",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false
+}

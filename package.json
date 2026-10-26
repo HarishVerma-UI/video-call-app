@@ -1,0 +1,27 @@
+{
+  "name": "video-call-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Group video calling app: React web + React Native mobile + Node.js signaling server (WebRTC)",
+  "workspaces": [
+    "shared",
+    "server",
+    "web",
+    "mobile"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @vca/server",
+    "dev:web": "npm run dev -w @vca/web",
+    "dev:mobile": "npm run start -w @vca/mobile",
+    "build": "npm run build -w @vca/web",
+    "start": "npm run start -w @vca/server",
+    "test": "npm test -w @vca/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

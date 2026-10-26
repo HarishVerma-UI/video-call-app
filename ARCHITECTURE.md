@@ -1,299 +1,304 @@
-# Architecture — how WebSocket & Node.js work together
+# Architecture: how WebSocket, Node.js and WebRTC work together
 
-This document explains the moving parts of **Step 1** (1-to-1 WebRTC call): what
-the Node.js server does, how the hand-rolled WebSocket signaling layer works, and
-how two browsers end up streaming video directly to each other.
+This document explains the moving parts of Huddle: the Node.js server, the
+WebSocket signaling protocol, the shared call engine used by both React and
+React Native, and how a group of devices ends up streaming video directly to
+each other.
 
 > **The one idea to hold onto:** the Node server is only a *matchmaker*. It helps
-> two browsers find each other and exchange connection details. Once they're
-> connected, **audio and video flow directly between the browsers** — the server
+> devices find each other and exchange connection details. Once they're
+> connected, **audio and video flow directly between the devices**. The server
 > never sees a single video frame.
 
 ---
 
-## 1. System architecture
+## 1. System overview
+
+```mermaid
+flowchart TB
+  subgraph Clients
+    direction LR
+    subgraph Web["🌐 Web · React + Vite"]
+      WUI["UI components<br/>Lobby · CallRoom · Chat"]
+      WHOOK["useCall hook"]
+      WUI --> WHOOK
+    end
+    subgraph Mobile["📱 Mobile · React Native (Expo)"]
+      MUI["Screens<br/>Home · Call · ChatSheet"]
+      MHOOK["useCallClient hook"]
+      MUI --> MHOOK
+    end
+  end
+
+  SHARED["📦 @vca/shared · CallClient<br/>signaling + one RTCPeerConnection per peer"]
+  WHOOK --> SHARED
+  MHOOK --> SHARED
+
+  subgraph Server["🖥️ Node.js · @vca/server"]
+    HTTP["HTTP<br/>/health · /api/rooms/:id · static web build"]
+    WSS["WebSocket /ws (ws library)<br/>validate → route"]
+    ROOMS["rooms<br/>Map&lt;roomId, Map&lt;clientId, client&gt;&gt;"]
+    WSS --- ROOMS
+  end
+
+  SHARED <-->|"signaling JSON over WebSocket"| WSS
+  SHARED -.->|"HTTP"| HTTP
+  STUN["STUN (Google) · TURN later"]
+  SHARED -.->|"discover public address"| STUN
+
+  classDef server fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
+  classDef shared fill:#2a1f3d,stroke:#8b5cf6,color:#e6e8ec;
+  class HTTP,WSS,ROOMS server;
+  class SHARED shared;
+```
+
+And the media itself, for a 3-person call:
 
 ```mermaid
 flowchart LR
-  subgraph BrowserA["🧑 Browser A · callee (1st to join)"]
-    A_media["getUserMedia()<br/>camera + mic"]
-    A_pc["RTCPeerConnection"]
-    A_media --> A_pc
-  end
-
-  subgraph NodeServer["🖥️ Node.js server · server.js"]
-    HTTP["HTTP server<br/>serves /web (index.html)"]
-    WS["WebSocket signaling<br/>hand-rolled RFC 6455"]
-    ROOMS["rooms<br/>Map&lt;roomId, Set&lt;conn&gt;&gt;"]
-    WS --- ROOMS
-  end
-
-  subgraph BrowserB["🧑 Browser B · caller (2nd to join)"]
-    B_media["getUserMedia()<br/>camera + mic"]
-    B_pc["RTCPeerConnection"]
-    B_media --> B_pc
-  end
-
-  STUN["🌐 STUN server<br/>stun.l.google.com"]
-
-  A_pc <-->|"signaling over WebSocket<br/>offer · answer · ICE"| WS
-  B_pc <-->|"signaling over WebSocket<br/>offer · answer · ICE"| WS
-  A_pc -.->|"what's my public IP?"| STUN
-  B_pc -.->|"what's my public IP?"| STUN
-  A_pc <==>|"🎥 MEDIA (encrypted SRTP) — peer-to-peer<br/>never passes through the server"| B_pc
-
-  classDef server fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
-  classDef media fill:#14301f,stroke:#35c47a,color:#e6e8ec;
-  class NodeServer,HTTP,WS,ROOMS server;
+  A["🧑 Asha<br/>(web)"] <==>|"🎥 SRTP, peer-to-peer"| B["🧑 Bala<br/>(Android)"]
+  B <==>|"🎥"| C["🧑 Chen<br/>(iPhone)"]
+  A <==>|"🎥"| C
+  S["🖥️ Node server"]
+  A -. "signaling only" .- S
+  B -. "signaling only" .- S
+  C -. "signaling only" .- S
 ```
 
-**Two completely separate data paths:**
+This is a **mesh**: every participant has one direct connection to every other
+participant. It's simple and needs no media server, but each device uploads its
+video once *per other person*, which is why rooms are capped at 6. An SFU (Step 3)
+removes that limit.
 
 | Path | Carries | Goes through the server? |
 |------|---------|--------------------------|
-| **Signaling** (thin WebSocket) | small JSON: offers, answers, ICE candidates | ✅ yes — this is the server's whole job |
-| **Media** (WebRTC) | the actual audio & video | ❌ no — flows browser ↔ browser directly |
+| **Signaling** (WebSocket) | small JSON: join, offers, answers, ICE candidates, chat, mute state | ✅ yes |
+| **Media** (WebRTC) | audio, video, screen share (encrypted) | ❌ no, device ↔ device |
 
 ---
 
-## 2. What the Node.js server is doing
+## 2. The shared call engine (`shared/src/CallClient.ts`)
 
-`server.js` is a single Node process wearing **two hats** on the same port (3000):
+Both React apps use **the same** `CallClient`. The UI never touches WebRTC; it
+calls a small API and re-renders on events:
+
+```mermaid
+flowchart LR
+  UI["React / React Native UI"] -- "join · leave · setAudioEnabled<br/>setVideoEnabled · replaceVideoTrack · sendChat" --> CC["CallClient"]
+  CC -- "events: participants · status · chat · error" --> UI
+  CC --> WS["WebSocket"]
+  CC --> PCS["RTCPeerConnection × (N-1)"]
+```
+
+It only uses standard WebRTC globals. On mobile, `react-native-webrtc`'s
+`registerGlobals()` (in `mobile/index.js`) installs `RTCPeerConnection`,
+`MediaStream` and `navigator.mediaDevices`, so the same code runs unchanged.
+
+Key behaviors:
+
+- **Who calls whom:** the *newcomer* sends an offer to everyone already in the
+  room; existing members only answer. Two people never send offers to each other
+  at the same moment ("glare").
+- **Fixed audio and video slots:** every connection negotiates one audio and one
+  video slot up front. Screen sharing and flipping the camera then just swap the
+  outgoing track with `sender.replaceTrack()`, which needs **no renegotiation**.
+- **Early ICE candidates** that arrive before the offer/answer are queued, then
+  applied once it lands.
+- **ICE restart:** if a connection fails, the side that made the original offer
+  retries with a fresh `iceRestart` offer.
+- **Reconnect:** if the WebSocket drops, the client tears down its peers and
+  rejoins with backoff (1s, 2s, 4s, 8s), up to 5 times.
+
+---
+
+## 3. What the Node.js server does
+
+`server/src/app.js` runs one Node process that does two jobs on one port (3001):
 
 ```mermaid
 flowchart TD
-  REQ["Incoming TCP connection on :3000"]
-  REQ --> Q{"Is it an HTTP<br/>'Upgrade: websocket'<br/>request?"}
-  Q -->|"No — normal HTTP GET"| H["Serve a static file<br/>from /web (index.html, etc.)"]
-  Q -->|"Yes"| U["Do the WebSocket handshake<br/>(SHA1 of key + magic GUID)"]
-  U --> C["Create a WSConn<br/>and start relaying signaling"]
+  REQ["Incoming request on :3001"]
+  REQ --> Q{"Upgrade: websocket<br/>to /ws ?"}
+  Q -->|No| R{"Path"}
+  R -->|"/health"| H["JSON: uptime, rooms, participants"]
+  R -->|"/api/rooms/:id"| API["JSON: participants, full?"]
+  R -->|"anything else"| ST["Static file from web/dist<br/>(unknown paths → index.html for /r/:room)"]
+  Q -->|Yes| U["ws library completes the handshake"]
+  U --> C["Client object<br/>{ id, roomId, name, media }"]
+  C --> V["validate.js<br/>reject anything malformed"]
+  V --> ROUTE["signaling.js routes by type"]
 
   classDef s fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
-  class H,U,C s;
+  class H,API,ST,U,C,V,ROUTE s;
 ```
 
-1. **HTTP hat** → a browser asks for `http://localhost:3000/`, the server reads
-   `web/index.html` off disk and sends it back. Plain static file serving.
-2. **WebSocket hat** → the same page then opens a `new WebSocket(...)` back to the
-   server. Node emits an `'upgrade'` event; the server completes the WebSocket
-   handshake and keeps that TCP socket open as a two-way message channel.
+Node fits this job well because it is **single-threaded and event-driven**: one
+process can hold thousands of idle WebSocket connections cheaply and wakes up
+only when a message arrives.
 
-Node is a great fit here because it's **single-threaded + event-driven**: one
-process can hold hundreds of idle WebSocket connections open cheaply, waking up
-only when a message actually arrives. No thread-per-connection, no blocking.
+Safety built into the server:
 
----
+| Concern | How it's handled |
+|---|---|
+| Malformed / hostile input | every message is parsed and checked in `validate.js` (types, lengths, room-id pattern) |
+| Huge messages | `maxPayload` 64 KB; SDP ≤ 32 KB; chat ≤ 1000 chars |
+| Chat spam | max 5 messages per 5 s per person, extras dropped |
+| Signals to the wrong person | relayed only to the `to` peer, and only within the same room |
+| Dead connections | ping every 30 s; no pong → terminated → `peer-left` sent |
+| Overcrowding | `MAX_PEERS` cap → `room-full` error |
+| Cross-site sockets | optional `ALLOWED_ORIGINS` allow-list (native apps send no Origin) |
 
-## 3. The hand-rolled WebSocket layer (no `ws` library)
+### How a WebSocket works under the hood
 
-Step 1 has **zero dependencies** — the WebSocket protocol is implemented directly
-in `server.js`. Two things make a raw TCP socket into a WebSocket:
-
-### a) The handshake (once, at connection time)
+The `ws` library handles this for us (Step 1 implemented it by hand; see git
+history). A WebSocket starts as a normal HTTP request and is then *upgraded*:
 
 ```mermaid
 sequenceDiagram
-  participant Br as Browser
-  participant Sv as Node server
-  Br->>Sv: GET / HTTP/1.1<br/>Upgrade: websocket<br/>Sec-WebSocket-Key: xyz==
-  Note over Sv: accept = base64( SHA1( key + GUID ) )
-  Sv-->>Br: HTTP/1.1 101 Switching Protocols<br/>Sec-WebSocket-Accept: ...
-  Note over Br,Sv: TCP socket is now a WebSocket — frames both ways
+  participant Br as Browser / phone
+  participant Sv as Node (ws)
+  Br->>Sv: GET /ws HTTP/1.1<br/>Upgrade: websocket<br/>Sec-WebSocket-Key: xyz==
+  Note over Sv: accept = base64( SHA1( key + magic GUID ) )
+  Sv-->>Br: 101 Switching Protocols<br/>Sec-WebSocket-Accept: …
+  Note over Br,Sv: Same TCP connection now carries framed messages both ways
 ```
 
-### b) Frame encoding/decoding (every message after that)
-
-WebSocket data travels in **frames**, not plain bytes. The `WSConn` class parses
-them. A frame looks like this:
-
-```
- 0                   1                   2                   3
- 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-+-+-+-+-+-------+-+-------------+-------------------------------+
-|F|R|R|R|opcode |M| Payload len |   Extended length (if 126/127)|
-|I|S|S|S| (4)   |A|    (7)      |                               |
-|N|V|V|V|       |S|             |                               |
-| |1|2|3|       |K|             |                               |
-+-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
-|   Masking key (client→server only, 4 bytes)   | Payload data  |
-+-----------------------------------------------+---------------+
-```
-
-What the parser in `WSConn._parse()` handles:
-- **Opcodes:** `0x1` text (our JSON), `0x8` close, `0x9` ping → auto-reply pong.
-- **Masking:** browser→server frames are XOR-masked with a 4-byte key; the server
-  un-masks them. Server→browser frames are sent **unmasked** (per spec).
-- **Length:** 7-bit for small messages, 16-bit (`126`) for larger SDP blobs,
-  64-bit (`127`) just in case.
-- **Partial TCP reads:** TCP can split one frame across chunks, so bytes are
-  buffered until a whole frame has arrived.
-
-The browser side needs none of this — `new WebSocket()` is built into every
-browser. We only had to implement the **server** half.
+After that, data travels in small **frames** (an opcode such as text, close or
+ping, a length, and a payload that is masked when it comes from the client). Our
+messages are text frames containing JSON.
 
 ---
 
-## 4. The signaling dance (join → offer → answer → ICE → media)
+## 4. Joining a group call
 
-This is the full sequence when two people join the same room:
+What happens when Chen joins a room where Asha and Bala are already talking:
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant A as Browser A (callee)
-  participant S as Node signaling server
-  participant B as Browser B (caller)
+  participant C as Chen (newcomer)
+  participant S as Node server
+  participant A as Asha
+  participant B as Bala
 
-  A->>S: connect + {type:"join", room:"test123"}
-  S-->>A: {type:"joined", initiator:false}
-  Note over A: waits…
+  C->>S: join { roomId, name, media }
+  S-->>C: welcome { selfId, peers: [Asha, Bala], maxPeers }
+  S-->>A: peer-joined { Chen }
+  S-->>B: peer-joined { Chen }
 
-  B->>S: connect + {type:"join", room:"test123"}
-  S-->>B: {type:"joined", initiator:true}
-  S-->>A: {type:"peer-joined"}
+  Note over C: newcomer offers to everyone
+  C->>S: signal { to: Asha, sdp: offer }
+  S->>A: signal { from: Chen, sdp: offer }
+  C->>S: signal { to: Bala, sdp: offer }
+  S->>B: signal { from: Chen, sdp: offer }
 
-  Note over B: initiator builds the offer
-  B->>B: createOffer() → setLocalDescription()
-  B->>S: {type:"signal", data:{sdp: offer}}
-  S->>A: relay offer
+  A->>S: signal { to: Chen, sdp: answer }
+  S->>C: answer from Asha
+  B->>S: signal { to: Chen, sdp: answer }
+  S->>C: answer from Bala
 
-  A->>A: setRemoteDescription() → createAnswer()
-  A->>S: {type:"signal", data:{sdp: answer}}
-  S->>B: relay answer
-
-  par ICE candidates trickle both ways
-    A->>S: {signal, candidate}
-    S->>B: relay candidate
+  par ICE candidates trickle in every direction
+    C->>S: signal { to: Asha, candidate }
+    S->>A: candidate
   and
-    B->>S: {signal, candidate}
-    S->>A: relay candidate
+    A->>S: signal { to: Chen, candidate }
+    S->>C: candidate
   end
 
-  Note over A,B: 🎥 Direct peer-to-peer media starts.<br/>The server goes idle — its job is done.
+  Note over A,C: 🎥 Direct media Chen↔Asha and Chen↔Bala.<br/>Asha↔Bala was already connected.
 ```
 
-**Why the 2nd joiner is the "caller":** someone has to make the first offer. The
-rule is simple — if a room already has one person when you join, *you* are the
-initiator and create the offer. The server decides this with one line:
-`isInitiator = room.size === 1`.
+Leaving is the reverse: the socket closes (or sends `leave`), the server
+broadcasts `peer-left`, and everyone closes that one peer connection.
 
 ---
 
-## 5. Room & connection state
+## 5. Server state
 
-All server state is a single in-memory map. No database in Step 1.
+All state lives in memory, with no database:
 
 ```mermaid
 flowchart LR
   ROOMS["rooms : Map"]
-  ROOMS --> R1["'test123' → Set { connA, connB }"]
-  ROOMS --> R2["'standup' → Set { connC }"]
-  R1 --> CA["connA (WSConn)"]
-  R1 --> CB["connB (WSConn)"]
-  R2 --> CC["connC (WSConn)"]
-
-  classDef s fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
-  class ROOMS,R1,R2 s;
+  ROOMS --> R1["'swift-comet-482' → Map"]
+  ROOMS --> R2["'standup' → Map"]
+  R1 --> A["id-a → { name: Asha, media: {audio,video,screen} }"]
+  R1 --> B["id-b → { name: Bala, … }"]
+  R1 --> C["id-c → { name: Chen, … }"]
+  R2 --> D["id-d → { name: Dev, … }"]
 ```
 
-- **Join:** add the connection to the room's `Set`. Reject with `room-full` if the
-  set already has 2 (Step 1 is a 2-person mesh).
-- **Relay:** a `signal` message is forwarded to *every other* connection in the
-  same room (just one peer, in a 1-to-1 call).
-- **Leave:** on socket close, drop the connection, tell the remaining peer
-  `peer-left`, and delete the room once it's empty.
-
-This map is exactly the part that grows in later steps — an **SFU** replaces the
-"relay to the other peer" logic to support group calls.
+Rooms are created on first join and deleted when the last person leaves. To run
+**several server instances** behind a load balancer later, this map would move to
+Redis (pub/sub) so instances can relay to each other.
 
 ---
 
-## 6. Signaling message protocol
+## 6. Signaling protocol
 
-Every message is a small JSON object over the WebSocket:
+Defined once in `shared/src/protocol.ts` and validated by `server/src/validate.js`.
 
-| Direction | Message | Meaning |
-|-----------|---------|---------|
-| client → server | `{ type:"join", room }` | join / create a room |
-| server → client | `{ type:"joined", initiator }` | you're in; are you the caller? |
-| server → client | `{ type:"peer-joined" }` | someone else joined your room |
-| server → client | `{ type:"room-full" }` | room already has 2 people |
-| server → client | `{ type:"peer-left" }` | the other person disconnected |
-| client ↔ server | `{ type:"signal", data }` | relay `data` to the other peer |
+**Client → server**
 
-`data` inside a `signal` is one of:
-- `{ sdp: {...} }` — an SDP **offer** or **answer** (the media "menu")
-- `{ candidate: {...} }` — an **ICE candidate** (a possible network route)
+| Message | Purpose |
+|---|---|
+| `{ type:"join", roomId, name, media }` | enter a room |
+| `{ type:"signal", to, data }` | send `data` (SDP offer/answer or ICE candidate) to one peer |
+| `{ type:"chat", text }` | message everyone in the room |
+| `{ type:"media-state", media }` | announce mic / camera / screen-share state |
+| `{ type:"leave" }` | leave politely (closing the socket also works) |
+
+**Server → client**
+
+| Message | Purpose |
+|---|---|
+| `{ type:"welcome", selfId, roomId, peers[], maxPeers }` | you're in; here's who is already here |
+| `{ type:"peer-joined", peer }` | someone new arrived (they'll send you an offer) |
+| `{ type:"peer-left", id }` | someone left |
+| `{ type:"signal", from, data }` | WebRTC data from a peer |
+| `{ type:"chat", message }` | chat message (sent to the sender too, as confirmation) |
+| `{ type:"media-state", id, media }` | someone muted / turned the camera off / started sharing |
+| `{ type:"error", code, message }` | `room-full`, `bad-request`, `not-joined`, `already-joined` |
+
+`media` is `{ audio: boolean, video: boolean, screen: boolean }`.
 
 ---
 
-## 7. UI design mockups
+## 7. UI design
 
-Four design directions for the app. **01 Midnight** is what Step 1 ships today;
-the others show where the UI can go as the app grows.
+The web app implements a dark **Midnight + Aurora** direction: a violet→cyan
+gradient accent, frosted-glass control dock, and a cyan ring around whoever is
+speaking. Screenshots of the real app are in [README.md](./README.md).
 
-### 01 · Midnight — focused 1-to-1 (current build)
-Dark, calm, two equal tiles. The active speaker gets a blue outline.
+The four design directions explored before building:
+
+### 01 · Midnight: focused 1-to-1
+Dark, calm, two equal tiles. The active speaker gets an outline.
 ![Midnight mockup](docs/mockups/01-midnight.svg)
 
-### 02 · Aurora — immersive
+### 02 · Aurora: immersive
 The remote person fills the screen over a gradient, your camera floats as a
 picture-in-picture, and controls sit in a frosted-glass dock.
 ![Aurora mockup](docs/mockups/02-aurora.svg)
 
-### 03 · Paper — group calls (Step 3 preview)
-Warm light theme with a 6-person grid, speaking indicator, mute badges, and a
-side chat panel — the layout the SFU step will need.
+### 03 · Paper: group calls
+A warm light theme with a 6-person grid, speaking indicator, mute badges and a
+side chat panel.
 ![Paper mockup](docs/mockups/03-paper-grid.svg)
 
-### 04 · Mobile (Step 4 preview)
-Portrait in-call screen with a draggable self-view, plus a home screen with
-recent calls and "join with room code".
+### 04 · Mobile
+A portrait in-call screen with a self-view, plus a home screen with
+"join with room code".
 ![Mobile mockup](docs/mockups/04-mobile.svg)
-
-### Wireframe of the current call screen
-
-```
-┌───────────────────────────────────────────────────────────┐
-│                    WebRTC Video Call                        │
-│                 Step 1 · 1-to-1 · peer-to-peer              │
-│                                                             │
-│      ┌──────────────────────────┐  [  Join  ]              │
-│      │  Room name: test123      │                          │
-│      └──────────────────────────┘                          │
-│                                                             │
-│              status: In call ✓                              │
-│                                                             │
-│   ┌──────────────────────┐   ┌──────────────────────┐      │
-│   │                      │   │                      │      │
-│   │                      │   │                      │      │
-│   │     [ your cam ]     │   │   [ remote cam ]     │      │
-│   │                      │   │                      │      │
-│   │  You                 │   │  Remote              │      │
-│   └──────────────────────┘   └──────────────────────┘      │
-│                                                             │
-│        [ Mute mic ]   [ Stop camera ]   [ Hang up ]         │
-└───────────────────────────────────────────────────────────┘
-```
-
-| Element | Backed by |
-|---------|-----------|
-| "You" tile | local `MediaStream` from `getUserMedia()` |
-| "Remote" tile | remote stream delivered by `pc.ontrack` |
-| Join | opens WebSocket + sends `join` |
-| Mute / Stop camera | toggles `track.enabled` on local tracks |
-| Hang up | closes the peer connection, socket, and local tracks |
 
 ---
 
-## 8. What this intentionally does NOT do yet
+## 8. Known limits and what's next
 
-| Missing piece | Why it matters | Arrives in |
-|---------------|----------------|------------|
-| **TURN server** | direct P2P fails across many real networks/firewalls | Step 2 |
-| **HTTPS/WSS** | camera/mic need a secure context off `localhost` | Step 2 |
-| **SFU** | mesh P2P collapses past ~4 people | Step 3 |
-| **Mobile clients** | web-only for now | Step 4 |
-| **Auth, reconnection, screen share** | polish | Step 5 |
-
-See the roadmap in [README.md](./README.md).
+| Limit | Why | Fix |
+|---|---|---|
+| Calls can fail on strict corporate / mobile-carrier networks | only STUN is configured; direct paths are sometimes blocked | **Step 2:** TURN server (coturn) |
+| Camera/mic need HTTPS off `localhost` | browser security rule | **Step 2:** HTTPS + WSS (e.g. Caddy / nginx + Let's Encrypt) |
+| Max 6 per room | mesh upload cost grows with each person | **Step 3:** SFU (mediasoup) |
+| One server instance | room state is in memory | Redis pub/sub when scaling out |
+| Mobile audio uses the OS default route | no audio-route manager yet | add `react-native-incall-manager` for speaker/earpiece/Bluetooth |

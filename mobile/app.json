@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Huddle",
+    "slug": "huddle-video-call",
+    "scheme": "huddle",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0e14",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.harishverma.huddle",
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio", "voip"]
+      }
+    },
+    "android": {
+      "package": "com.harishverma.huddle",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
+    },
+    "plugins": [
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Huddle uses your camera so people in the call can see you.",
+          "microphonePermission": "Huddle uses your microphone so people in the call can hear you."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}
