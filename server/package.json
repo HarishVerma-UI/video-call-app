@@ -1,0 +1,9 @@
+{
+  "name": "video-call-app-server",
+  "version": "0.1.0",
+  "description": "Step 1 signaling server for the WebRTC video call app (zero dependencies)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
