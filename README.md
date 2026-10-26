@@ -38,6 +38,13 @@ video flowing directly between the tabs. No `npm install` needed.
 4. They exchange **ICE candidates** (possible network paths).
 5. Once a path is agreed, audio/video flows **peer-to-peer** — the server never sees it.
 
+## Architecture & designs
+See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for diagrams of how the Node.js
+server and the WebSocket signaling work, the full join → offer → answer → ICE
+sequence, the message protocol, and four UI design mockups.
+
+![Midnight mockup](docs/mockups/01-midnight.svg)
+
 ## Roadmap
 - [x] **Step 1** — 1-to-1 web call (signaling + WebRTC)
 - [ ] **Step 2** — TURN server (coturn) + HTTPS, so calls work across real networks

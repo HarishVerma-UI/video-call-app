@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="560" viewBox="0 0 560 560" font-family="system-ui,Segoe UI,Roboto,sans-serif">
+  <rect width="560" height="560" rx="20" fill="#eef1f6"/>
+  <g transform="translate(40,20)">
+    <rect width="220" height="470" rx="34" fill="#0c0f14"/><rect x="10" y="10" width="200" height="450" rx="26" fill="#1a2433"/>
+    <rect x="80" y="18" width="60" height="16" rx="8" fill="#0c0f14"/>
+    <circle cx="110" cy="190" r="44" fill="#2e3d55"/><rect x="60" y="244" width="100" height="56" rx="28" fill="#2e3d55"/>
+    <text x="110" y="68" text-anchor="middle" fill="#fff" font-size="15" font-weight="600">Priya</text>
+    <text x="110" y="86" text-anchor="middle" fill="#9aa1ad" font-size="11">04:12</text>
+    <rect x="138" y="100" width="62" height="88" rx="12" fill="#3a4a63" stroke="#fff" stroke-opacity=".4"/>
+    <circle cx="50" cy="410" r="22" fill="#ffffff" opacity=".16"/><text x="50" y="415" text-anchor="middle" font-size="14">🎤</text>
+    <circle cx="110" cy="410" r="26" fill="#ff4d6d"/><text x="110" y="415" text-anchor="middle" font-size="14">📞</text>
+    <circle cx="170" cy="410" r="22" fill="#ffffff" opacity=".16"/><text x="170" y="415" text-anchor="middle" font-size="14">🔄</text>
+  </g>
+  <g transform="translate(300,20)">
+    <rect width="220" height="470" rx="34" fill="#0c0f14"/><rect x="10" y="10" width="200" height="450" rx="26" fill="#ffffff"/>
+    <rect x="80" y="18" width="60" height="16" rx="8" fill="#0c0f14"/>
+    <text x="26" y="72" fill="#111" font-size="18" font-weight="700">Calls</text>
+    <rect x="26" y="88" width="168" height="34" rx="17" fill="#f1f3f7"/><text x="40" y="110" fill="#8a909b" font-size="12">Join with room code</text>
+    <g font-size="13" fill="#111">
+      <circle cx="44" cy="156" r="16" fill="#c7d6f5"/><text x="70" y="161">Priya</text><text x="182" y="161" text-anchor="end" fill="#2f8f5b">📹</text>
+      <circle cx="44" cy="202" r="16" fill="#f5d6c7"/><text x="70" y="207">Arjun</text><text x="182" y="207" text-anchor="end" fill="#2f8f5b">📹</text>
+      <circle cx="44" cy="248" r="16" fill="#d6f5c7"/><text x="70" y="253">Design sync</text><text x="182" y="253" text-anchor="end" fill="#2f8f5b">📹</text>
+    </g>
+    <rect x="26" y="392" width="168" height="48" rx="24" fill="#4f8cff"/><text x="110" y="421" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">+ New call</text>
+  </g>
+  <text x="40" y="540" fill="#4f8cff" font-size="12" font-weight="600">04 · MOBILE — in-call &amp; home screens (preview of Step 4)</text>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="system-ui,Segoe UI,Roboto,sans-serif">
+  <rect width="960" height="560" rx="20" fill="#0f1115"/>
+  <text x="480" y="52" text-anchor="middle" fill="#e6e8ec" font-size="22" font-weight="600">WebRTC Video Call</text>
+  <text x="480" y="76" text-anchor="middle" fill="#9aa1ad" font-size="13">Room · test123 · 00:04:12</text>
+  <rect x="40" y="104" width="430" height="322" rx="16" fill="#1b2230" stroke="#272b35"/>
+  <circle cx="255" cy="240" r="46" fill="#2c3648"/><rect x="195" y="296" width="120" height="60" rx="30" fill="#2c3648"/>
+  <rect x="56" y="390" width="54" height="24" rx="7" fill="#000" opacity=".55"/><text x="83" y="407" text-anchor="middle" fill="#e6e8ec" font-size="12">You</text>
+  <rect x="490" y="104" width="430" height="322" rx="16" fill="#1d2a3a" stroke="#4f8cff" stroke-width="2"/>
+  <circle cx="705" cy="240" r="46" fill="#33465f"/><rect x="645" y="296" width="120" height="60" rx="30" fill="#33465f"/>
+  <rect x="506" y="390" width="70" height="24" rx="7" fill="#000" opacity=".55"/><text x="541" y="407" text-anchor="middle" fill="#e6e8ec" font-size="12">Priya</text>
+  <circle cx="900" cy="124" r="6" fill="#35c47a"/>
+  <g transform="translate(330,460)">
+    <rect width="88" height="52" rx="26" fill="#171a21" stroke="#272b35"/><text x="44" y="32" text-anchor="middle" fill="#e6e8ec" font-size="13">🎤 Mic</text>
+    <rect x="104" width="88" height="52" rx="26" fill="#171a21" stroke="#272b35"/><text x="148" y="32" text-anchor="middle" fill="#e6e8ec" font-size="13">📷 Cam</text>
+    <rect x="208" width="92" height="52" rx="26" fill="#ff5d5d"/><text x="254" y="32" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">Hang up</text>
+  </g>
+  <text x="40" y="540" fill="#4f8cff" font-size="12" font-weight="600">01 · MIDNIGHT — focused 1-to-1, dark, equal tiles</text>
+</svg>
