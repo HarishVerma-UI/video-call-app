@@ -1,7 +1,7 @@
 import { colorFor, initials, type Participant } from '@vca/shared';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
-import { theme } from '../config';
+import { fonts, theme } from '../config';
 
 interface Props {
   participant: Participant;
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   },
   avatarWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.surface2 },
   avatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontSize: 26, fontWeight: '700' },
+  avatarText: { color: theme.ink, fontSize: 26, fontFamily: fonts.bold },
   name: {
     position: 'absolute',
     left: 8,
@@ -72,10 +72,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: 'rgba(5,8,14,0.62)',
+    backgroundColor: 'rgba(21,15,38,0.66)',
   },
-  nameText: { color: theme.text, fontSize: 12, fontWeight: '500' },
-  muted: { fontSize: 11 },
-  badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: 'rgba(5,8,14,0.62)' },
-  badgeText: { color: theme.amber, fontSize: 11 },
+  nameText: { fontFamily: fonts.regular, color: theme.text, fontSize: 12 },
+  muted: { fontFamily: fonts.regular, fontSize: 11 },
+  badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: 'rgba(21,15,38,0.66)' },
+  badgeText: { fontFamily: fonts.regular, color: theme.amber, fontSize: 11 },
 });

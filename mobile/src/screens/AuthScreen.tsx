@@ -1,9 +1,9 @@
-import { ApiError, passwordStrength } from '@vca/shared';
+import { ApiError, initials, passwordStrength } from '@vca/shared';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,99 +12,73 @@ import {
   Text,
   TextInput,
   View,
-  type LayoutChangeEvent,
+  useWindowDimensions,
 } from 'react-native';
 import { useAuth } from '../auth';
-import { theme } from '../config';
+import { Aperture } from '../components/Aperture';
+import { fonts, theme } from '../config';
 
 type Mode = 'login' | 'register';
 type Field = 'name' | 'email' | 'password';
+type Lens = 'shut' | 'open' | 'peek' | 'blink' | 'wide';
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const LENS_OPEN: Record<Lens, number> = { shut: 0, open: 0.62, peek: 0.1, blink: 0, wide: 1 };
 
-/* ---------- animated constellation header ---------- */
-
-const NODES = [
-  { t: 'PS', c: '#8b5cf6', r: 1, a: 0 },
-  { t: 'AK', c: '#22d3ee', r: 1, a: 72 },
-  { t: 'MR', c: '#f59e0b', r: 1, a: 144 },
-  { t: 'RJ', c: '#e11d48', r: 1, a: 216 },
-  { t: 'SN', c: '#10b981', r: 1, a: 288 },
-  { t: 'DV', c: '#6366f1', r: 0.62, a: 40 },
-  { t: 'TK', c: '#ec4899', r: 0.62, a: 160 },
-  { t: 'LO', c: '#06b6d4', r: 0.62, a: 280 },
+const CAST = [
+  { name: 'Meera', bg: '#F09372', tone: '#5B2A3A' },
+  { name: 'Arjun', bg: '#6CC7B0', tone: '#163C3C' },
+  { name: 'Priya', bg: '#F2B85A', tone: '#4D2E14' },
+  { name: 'Dev', bg: '#A893EE', tone: '#2A1D55' },
 ];
 
-function Constellation({ size }: { size: number }) {
-  const spin = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+const COPY = {
+  login: { title: ['Back in', 'focus.'], sub: 'Sign in to start a call or join one.', cta: 'Sign in' },
+  register: { title: ['Get in', 'the picture.'], sub: 'One account for web, Android and iOS.', cta: 'Create account' },
+};
 
-  useEffect(() => {
-    const a = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 60000, easing: Easing.linear, useNativeDriver: true }));
-    const b = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 2600, easing: Easing.out(Easing.quad), useNativeDriver: true }));
-    a.start();
-    b.start();
-    return () => {
-      a.stop();
-      b.stop();
-    };
-  }, [spin, pulse]);
+/* ---------- what the lens sees ---------- */
 
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const counter = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-360deg'] });
-  const half = size / 2;
-
+function Portrait({ size, name, bg, tone, mine }: { size: number; name: string; bg: string; tone: string; mine?: boolean }) {
+  const head = size * 0.3;
   return (
-    <View style={{ width: size, height: size }}>
-      <View style={[styles.orbit, { width: size * 0.92, height: size * 0.92, borderRadius: size, left: size * 0.04, top: size * 0.04 }]} />
-      <View style={[styles.orbit, { width: size * 0.57, height: size * 0.57, borderRadius: size, left: size * 0.215, top: size * 0.215 }]} />
-      <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]}>
-        {NODES.map((n) => {
-          const rad = (n.a * Math.PI) / 180;
-          const d = n.r === 1 ? size * 0.46 : size * 0.285; // radius of the outer / inner orbit
-          const bubble = n.r === 1 ? 44 : 34;
-          return (
-            <Animated.View
-              key={n.t}
-              style={[
-                styles.bubble,
-                {
-                  width: bubble,
-                  height: bubble,
-                  borderRadius: bubble / 2,
-                  backgroundColor: n.c,
-                  left: half + Math.cos(rad) * d - bubble / 2,
-                  top: half + Math.sin(rad) * d - bubble / 2,
-                  transform: [{ rotate: counter }],
-                },
-              ]}
-            >
-              <Text style={[styles.bubbleText, { fontSize: n.r === 1 ? 13 : 11 }]}>{n.t}</Text>
-            </Animated.View>
-          );
-        })}
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.pulse,
-          {
-            left: half - 34,
-            top: half - 34,
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.3] }) }],
-          },
-        ]}
-      />
-      <View style={[styles.core, { left: half - 34, top: half - 34 }]}>
-        <Text style={{ fontSize: 26 }}>📹</Text>
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: bg, alignItems: 'center' }]}>
+      <View style={{ position: 'absolute', top: size * 0.25, width: head, height: head, borderRadius: head / 2, backgroundColor: tone, alignItems: 'center', justifyContent: 'center' }}>
+        {mine && <Text style={[styles.portraitInitials, { color: bg, fontSize: head * 0.38 }]}>{initials(name)}</Text>}
+      </View>
+      <View style={{ position: 'absolute', top: size * 0.62, width: size * 0.78, height: size * 0.78, borderRadius: size * 0.39, backgroundColor: tone }} />
+      <View style={[styles.tag, { top: size * 0.56 }]}>
+        <Text style={styles.tagText}>{mine ? `${name.trim().split(/\s+/)[0]} (you)` : name}</Text>
       </View>
     </View>
   );
 }
 
-/* ---------- inputs ---------- */
+function LensScene({ size, myName }: { size: number; myName: string }) {
+  const [i, setI] = useState(0);
+  const fade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (myName.trim()) return;
+    const t = setInterval(() => {
+      Animated.timing(fade, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => {
+        setI((n) => (n + 1) % CAST.length);
+        Animated.timing(fade, { toValue: 1, duration: 450, useNativeDriver: true }).start();
+      });
+    }, 3400);
+    return () => clearInterval(t);
+  }, [myName, fade]);
 
-function Input(props: {
-  icon: string;
+  if (myName.trim()) return <Portrait size={size} name={myName} bg="#F7A07F" tone="#2A1D45" mine />;
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]}>
+      <Portrait size={size} {...CAST[i]} />
+    </Animated.View>
+  );
+}
+
+/* ---------- underlined input ---------- */
+
+function Line(props: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
@@ -113,25 +87,28 @@ function Input(props: {
   onToggleSecure?: () => void;
   keyboardType?: 'default' | 'email-address';
   autoComplete?: 'name' | 'email' | 'password' | 'new-password';
+  onFocus?: () => void;
   onBlur?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <View>
-      <View style={[styles.field, focused && styles.fieldFocus, !!props.error && styles.fieldError]}>
-        <Text style={styles.fieldIcon}>{props.icon}</Text>
+      <Text style={[styles.lineLabel, focused && { color: theme.peach }]}>{props.label}</Text>
+      <View style={styles.lineRow}>
         <TextInput
           value={props.value}
           onChangeText={props.onChangeText}
-          placeholder={props.label}
-          placeholderTextColor={theme.muted}
-          style={styles.fieldInput}
+          style={styles.lineInput}
           secureTextEntry={props.secure}
           keyboardType={props.keyboardType}
           autoCapitalize={props.keyboardType === 'email-address' || props.secure !== undefined ? 'none' : 'words'}
           autoCorrect={false}
           autoComplete={props.autoComplete}
-          onFocus={() => setFocused(true)}
+          selectionColor={theme.peach}
+          onFocus={() => {
+            setFocused(true);
+            props.onFocus?.();
+          }}
           onBlur={() => {
             setFocused(false);
             props.onBlur?.();
@@ -139,12 +116,13 @@ function Input(props: {
           accessibilityLabel={props.label}
         />
         {props.onToggleSecure && (
-          <Pressable onPress={props.onToggleSecure} hitSlop={10} accessibilityLabel={props.secure ? 'Show password' : 'Hide password'}>
-            <Text style={styles.eye}>{props.secure ? '👁️' : '🙈'}</Text>
+          <Pressable onPress={props.onToggleSecure} hitSlop={10}>
+            <Text style={styles.toggle}>{props.secure ? 'Show' : 'Hide'}</Text>
           </Pressable>
         )}
       </View>
-      {!!props.error && <Text style={styles.errorText}>{props.error}</Text>}
+      <View style={[styles.rule, focused && styles.ruleFocus, !!props.error && styles.ruleError]} />
+      {!!props.error && <Text style={styles.error}>{props.error}</Text>}
     </View>
   );
 }
@@ -153,114 +131,127 @@ function Input(props: {
 
 export function AuthScreen() {
   const { login, register, notice } = useAuth();
+  const { width } = useWindowDimensions();
+  const lensSize = Math.min(width - 96, 300);
   const [mode, setMode] = useState<Mode>('login');
   const [v, setV] = useState<Record<Field, string>>({ name: '', email: '', password: '' });
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
   const [serverErrors, setServerErrors] = useState<Partial<Record<Field, string>>>({});
-  const [banner, setBanner] = useState<string | null>(notice);
+  const [message, setMessage] = useState<string | null>(notice);
   const [busy, setBusy] = useState(false);
   const [secure, setSecure] = useState(true);
-  const [segW, setSegW] = useState(0);
-  const thumb = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
+  const [lens, setLens] = useState<Lens>('shut');
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const passwordFocused = useRef(false);
 
-  useEffect(() => setBanner(notice), [notice]);
   useEffect(() => {
-    Animated.spring(thumb, { toValue: mode === 'login' ? 0 : 1, useNativeDriver: true, friction: 9, tension: 80 }).start();
-  }, [mode, thumb]);
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+    const t = setTimeout(() => setLens('open'), 250);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => setMessage(notice), [notice]);
+
+  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, reduceMotion ? 0 : ms));
 
   const errors: Partial<Record<Field, string>> = {};
-  if (mode === 'register' && v.name.trim().length < 2) errors.name = 'Tell us your name (2+ characters).';
-  if (!EMAIL.test(v.email.trim())) errors.email = 'Enter a valid email address.';
+  if (mode === 'register' && v.name.trim().length < 2) errors.name = 'Add your name, at least 2 characters.';
+  if (!EMAIL.test(v.email.trim())) errors.email = 'Enter an email like name@example.com.';
   if (mode === 'register') {
     if (v.password.length < 8) errors.password = 'Use at least 8 characters.';
-    else if (!/[a-zA-Z]/.test(v.password) || !/\d/.test(v.password)) errors.password = 'Include a letter and a number.';
+    else if (!/[a-zA-Z]/.test(v.password) || !/\d/.test(v.password)) errors.password = 'Mix in at least one letter and one number.';
   } else if (!v.password) errors.password = 'Enter your password.';
   const err = (f: Field) => serverErrors[f] ?? (touched[f] ? errors[f] : undefined);
   const strength = passwordStrength(v.password);
-
   const set = (f: Field) => (val: string) => {
     setV((s) => ({ ...s, [f]: val }));
     setServerErrors((s) => ({ ...s, [f]: undefined }));
   };
-  const doShake = () =>
-    Animated.sequence(
-      [8, -8, 6, -6, 0].map((x) => Animated.timing(shake, { toValue: x, duration: 60, useNativeDriver: true })),
-    ).start();
+
+  const blink = async () => {
+    setLens('blink');
+    await wait(380);
+    setLens(passwordFocused.current ? 'peek' : 'open');
+  };
 
   const switchMode = (m: Mode) => {
     setMode(m);
     setTouched({});
     setServerErrors({});
-    setBanner(null);
+    setMessage(null);
   };
 
   const submit = async () => {
     setTouched({ name: true, email: true, password: true });
-    if (Object.keys(errors).length) return doShake();
+    if (Object.keys(errors).length) return void blink();
     setBusy(true);
-    setBanner(null);
+    setMessage(null);
+    const enter = async () => {
+      setLens('wide');
+      await wait(700);
+    };
     try {
-      if (mode === 'register') await register(v.name.trim(), v.email.trim(), v.password);
-      else await login(v.email.trim(), v.password);
+      if (mode === 'register') await register(v.name.trim(), v.email.trim(), v.password, enter);
+      else await login(v.email.trim(), v.password, enter);
     } catch (e) {
       const apiErr = e instanceof ApiError ? e : null;
       setServerErrors((apiErr?.fields ?? {}) as Partial<Record<Field, string>>);
-      setBanner(apiErr?.message ?? 'Something went wrong. Please try again.');
-      doShake();
+      setMessage(apiErr?.message ?? 'That didn’t go through. Check your connection and try again.');
       setBusy(false);
+      void blink();
     }
   };
+
+  const copy = COPY[mode];
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.hero}>
-          <View style={styles.glowA} />
-          <View style={styles.glowB} />
-          <Constellation size={250} />
+        <View style={styles.brand}>
+          <View style={styles.markRing}>
+            <View style={styles.markDot} />
+          </View>
+          <Text style={styles.brandText}>Huddle</Text>
         </View>
 
-        <Text style={styles.h1}>{mode === 'login' ? 'Welcome back' : 'Create your account'}</Text>
-        <Text style={styles.sub}>{mode === 'login' ? 'Sign in to start or join a call.' : 'It takes 20 seconds. No credit card.'}</Text>
+        <View style={styles.lensWrap}>
+          <View style={[styles.glow, { width: lensSize * 1.5, height: lensSize * 1.5, borderRadius: lensSize }]} />
+          <View style={[styles.barrel, { width: lensSize + 20, height: lensSize + 20, borderRadius: (lensSize + 20) / 2 }]}>
+            <Aperture size={lensSize} open={LENS_OPEN[lens]}>
+              <LensScene size={lensSize} myName={mode === 'register' ? v.name : ''} />
+            </Aperture>
+          </View>
+          <Text style={styles.caption}>{lens === 'peek' ? 'Lens closed while you type your password.' : ' '}</Text>
+        </View>
 
-        <View style={styles.seg} onLayout={(e: LayoutChangeEvent) => setSegW(e.nativeEvent.layout.width)}>
-          {segW > 0 && (
-            <Animated.View
-              style={[
-                styles.segThumb,
-                { width: (segW - 8) / 2, transform: [{ translateX: thumb.interpolate({ inputRange: [0, 1], outputRange: [0, (segW - 8) / 2] }) }] },
-              ]}
-            />
-          )}
+        <Text style={styles.title}>{copy.title[0]}</Text>
+        <Text style={[styles.title, { color: theme.peach }]}>{copy.title[1]}</Text>
+        <Text style={styles.sub}>{copy.sub}</Text>
+
+        <View style={styles.switch}>
           {(['login', 'register'] as const).map((m) => (
-            <Pressable key={m} style={styles.segBtn} onPress={() => switchMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }}>
-              <Text style={[styles.segText, mode === m && { color: '#fff' }]}>{m === 'login' ? 'Sign in' : 'Create account'}</Text>
+            <Pressable key={m} onPress={() => switchMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={styles.switchBtn}>
+              <Text style={[styles.switchText, mode === m && { color: theme.text }]}>{m === 'login' ? 'Sign in' : 'Create account'}</Text>
+              <View style={[styles.switchBar, mode === m && { backgroundColor: theme.peach }]} />
             </Pressable>
           ))}
         </View>
 
-        <Animated.View style={{ transform: [{ translateX: shake }], gap: 12 }}>
-          {banner && (
-            <View style={styles.banner}>
-              <Text style={styles.bannerText}>{banner}</Text>
-            </View>
-          )}
+        {message && <Text style={styles.message}>{message}</Text>}
+
+        <View style={{ gap: 20 }}>
           {mode === 'register' && (
-            <Input icon="👤" label="Full name" value={v.name} onChangeText={set('name')} error={err('name')} autoComplete="name" onBlur={() => setTouched((t) => ({ ...t, name: true }))} />
+            <Line label="Your name" value={v.name} onChangeText={set('name')} error={err('name')} autoComplete="name" onBlur={() => v.name && setTouched((t) => ({ ...t, name: true }))} />
           )}
-          <Input
-            icon="✉️"
+          <Line
             label="Email"
             value={v.email}
             onChangeText={set('email')}
             error={err('email')}
             keyboardType="email-address"
             autoComplete="email"
-            onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+            onBlur={() => v.email && setTouched((t) => ({ ...t, email: true }))}
           />
-          <Input
-            icon="🔒"
+          <Line
             label="Password"
             value={v.password}
             onChangeText={set('password')}
@@ -268,69 +259,83 @@ export function AuthScreen() {
             secure={secure}
             onToggleSecure={() => setSecure((s) => !s)}
             autoComplete={mode === 'login' ? 'password' : 'new-password'}
-            onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+            onFocus={() => {
+              passwordFocused.current = true;
+              setLens('peek');
+            }}
+            onBlur={() => {
+              passwordFocused.current = false;
+              if (v.password) setTouched((t) => ({ ...t, password: true }));
+              setLens((l) => (l === 'peek' ? 'open' : l));
+            }}
           />
           {mode === 'register' && !!v.password && (
             <View style={styles.meter}>
-              {[1, 2, 3, 4].map((i) => (
+              <View style={styles.meterTrack}>
                 <View
-                  key={i}
-                  style={[
-                    styles.meterBar,
-                    i <= strength.score && { backgroundColor: ['', theme.red, theme.amber, theme.cyan, theme.green][strength.score] },
-                  ]}
+                  style={{
+                    width: `${strength.score * 25}%`,
+                    height: '100%',
+                    borderRadius: 4,
+                    backgroundColor: [theme.coral, theme.coral, theme.amber, theme.mint, theme.mint][strength.score],
+                  }}
                 />
-              ))}
+              </View>
               <Text style={styles.meterLabel}>{strength.label}</Text>
             </View>
           )}
-        </Animated.View>
+        </View>
 
-        <Pressable style={({ pressed }) => [styles.submit, (pressed || busy) && { opacity: 0.85 }]} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{mode === 'login' ? 'Sign in  →' : 'Create account  →'}</Text>}
+        <Pressable style={({ pressed }) => [styles.shutter, pressed && { transform: [{ scale: 0.98 }] }]} onPress={submit} disabled={busy}>
+          {busy ? <ActivityIndicator color={theme.ink} /> : <View style={styles.shutterDot} />}
+          <Text style={styles.shutterText}>{busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : copy.cta}</Text>
         </Pressable>
-
-        <Text style={styles.switch}>
-          {mode === 'login' ? 'New to Huddle? ' : 'Already have an account? '}
-          <Text style={styles.switchLink} onPress={() => switchMode(mode === 'login' ? 'register' : 'login')}>
-            {mode === 'login' ? 'Create an account' : 'Sign in'}
-          </Text>
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingBottom: 40 },
-  hero: { height: 270, alignItems: 'center', justifyContent: 'center', marginBottom: 8, overflow: 'hidden', borderRadius: 24, backgroundColor: '#070910' },
-  glowA: { position: 'absolute', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(139,92,246,0.25)', left: -40, top: -60 },
-  glowB: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(34,211,238,0.16)', right: -50, bottom: -60 },
-  orbit: { position: 'absolute', borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.12)' },
-  bubble: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
-  bubbleText: { color: '#fff', fontWeight: '700' },
-  core: { position: 'absolute', width: 68, height: 68, borderRadius: 20, backgroundColor: theme.violet, alignItems: 'center', justifyContent: 'center' },
-  pulse: { position: 'absolute', width: 68, height: 68, borderRadius: 20, borderWidth: 2, borderColor: theme.cyan },
-  h1: { color: theme.text, fontSize: 30, fontWeight: '800', letterSpacing: -0.8, marginTop: 14 },
-  sub: { color: theme.muted, fontSize: 15, marginTop: 4, marginBottom: 18 },
-  seg: { flexDirection: 'row', padding: 4, borderRadius: 14, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, marginBottom: 16 },
-  segThumb: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 10, backgroundColor: theme.violet },
-  segBtn: { flex: 1, paddingVertical: 11, alignItems: 'center' },
-  segText: { color: theme.muted, fontWeight: '600', fontSize: 14 },
-  banner: { padding: 12, borderRadius: 12, backgroundColor: 'rgba(244,63,94,0.12)', borderWidth: 1, borderColor: 'rgba(244,63,94,0.35)' },
-  bannerText: { color: '#fecdd3', fontSize: 14, lineHeight: 20 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 56, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.bg2 },
-  fieldFocus: { borderColor: theme.violet, backgroundColor: '#131a28' },
-  fieldError: { borderColor: 'rgba(244,63,94,0.7)' },
-  fieldIcon: { fontSize: 16 },
-  fieldInput: { flex: 1, color: theme.text, fontSize: 16, height: '100%' },
-  eye: { fontSize: 18 },
-  errorText: { color: '#fda4af', fontSize: 13, marginTop: 6, marginLeft: 2 },
-  meter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  meterBar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
-  meterLabel: { color: theme.muted, fontSize: 12, fontWeight: '600', minWidth: 64, textAlign: 'right' },
-  submit: { marginTop: 18, height: 54, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.violet },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  switch: { color: theme.muted, textAlign: 'center', marginTop: 20, fontSize: 14 },
-  switchLink: { color: theme.cyan, fontWeight: '600' },
+  container: { padding: 24, paddingBottom: 48 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  markRing: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: theme.peach, alignItems: 'center', justifyContent: 'center' },
+  markDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: theme.peach },
+  brandText: { color: theme.text, fontSize: 20, fontFamily: fonts.bold },
+  lensWrap: { alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 10 },
+  glow: { position: 'absolute', backgroundColor: 'rgba(255,180,143,0.10)' },
+  barrel: { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg2, borderWidth: 1, borderColor: 'rgba(255,180,143,0.18)' },
+  caption: { color: theme.muted, fontSize: 13, marginTop: 10, fontFamily: fonts.regular },
+  portraitInitials: { fontFamily: fonts.bold },
+  tag: { position: 'absolute', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(21,15,38,0.72)' },
+  tagText: { color: theme.text, fontSize: 13, fontFamily: fonts.bold },
+  title: { color: theme.text, fontSize: 44, lineHeight: 44, letterSpacing: -2, fontFamily: fonts.bold },
+  sub: { color: theme.muted, fontSize: 16, lineHeight: 23, marginTop: 10, marginBottom: 22, fontFamily: fonts.regular },
+  switch: { flexDirection: 'row', gap: 26, borderBottomWidth: 1, borderBottomColor: theme.border, marginBottom: 22 },
+  switchBtn: { paddingBottom: 0 },
+  switchText: { color: theme.muted, fontSize: 16, paddingBottom: 10, fontFamily: fonts.bold },
+  switchBar: { height: 3, borderRadius: 3, marginBottom: -1, backgroundColor: 'transparent' },
+  message: { color: '#ffd0c8', fontSize: 15, lineHeight: 21, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: theme.coral, marginBottom: 18, fontFamily: fonts.regular },
+  lineLabel: { color: theme.muted, fontSize: 14, marginBottom: 4, fontFamily: fonts.regular },
+  lineRow: { flexDirection: 'row', alignItems: 'center' },
+  lineInput: { flex: 1, color: theme.text, fontSize: 20, paddingVertical: 8, fontFamily: fonts.regular },
+  toggle: { color: theme.muted, fontSize: 14, paddingLeft: 12, fontFamily: fonts.bold },
+  rule: { height: 1, backgroundColor: 'rgba(246,239,231,0.22)' },
+  ruleFocus: { height: 2, backgroundColor: theme.peach },
+  ruleError: { backgroundColor: theme.coral },
+  error: { color: '#ffb1a5', fontSize: 14, marginTop: 6, fontFamily: fonts.regular },
+  meter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  meterTrack: { flex: 1, height: 4, borderRadius: 4, backgroundColor: 'rgba(246,239,231,0.12)', overflow: 'hidden' },
+  meterLabel: { color: theme.muted, fontSize: 13, minWidth: 70, textAlign: 'right', fontFamily: fonts.bold },
+  shutter: {
+    marginTop: 28,
+    height: 58,
+    borderRadius: 999,
+    backgroundColor: theme.peach,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  shutterDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: theme.coral },
+  shutterText: { color: theme.ink, fontSize: 18, fontFamily: fonts.bold },
 });

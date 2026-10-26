@@ -20,8 +20,9 @@ interface AuthValue {
   token: string | null;
   api: ApiClient;
   notice: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  /** `beforeEnter` runs after the server accepts, before switching screens (for the exit animation). */
+  login: (email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
+  register: (name: string, email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   logout: (reason?: string) => Promise<void>;
 }
 
@@ -91,8 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api,
     notice,
     logout,
-    login: async (email, password) => accept(await api.login({ email, password })),
-    register: async (name, email, password) => accept(await api.register({ name, email, password })),
+    login: async (email, password, beforeEnter) => {
+      const r = await api.login({ email, password });
+      await beforeEnter?.();
+      await accept(r);
+    },
+    register: async (name, email, password, beforeEnter) => {
+      const r = await api.register({ name, email, password });
+      await beforeEnter?.();
+      await accept(r);
+    },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

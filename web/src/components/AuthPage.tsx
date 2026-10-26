@@ -1,149 +1,150 @@
-import { ApiError, passwordStrength } from '@vca/shared';
+import { ApiError, initials, passwordStrength } from '@vca/shared';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { Aperture } from './Aperture';
 
 type Mode = 'login' | 'register';
 type Field = 'name' | 'email' | 'password';
+type Lens = 'shut' | 'open' | 'peek' | 'blink' | 'wide';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const LENS_OPEN: Record<Lens, number> = { shut: 0, open: 0.62, peek: 0.1, blink: 0, wide: 1 };
+const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, reducedMotion() ? 0 : ms));
 
 function validate(mode: Mode, v: Record<Field, string>): Partial<Record<Field, string>> {
   const e: Partial<Record<Field, string>> = {};
-  if (mode === 'register' && v.name.trim().length < 2) e.name = 'Tell us your name (2+ characters).';
-  if (!EMAIL.test(v.email.trim())) e.email = 'Enter a valid email address.';
+  if (mode === 'register' && v.name.trim().length < 2) e.name = 'Add your name, at least 2 characters.';
+  if (!EMAIL.test(v.email.trim())) e.email = 'Enter an email like name@example.com.';
   if (mode === 'register') {
     if (v.password.length < 8) e.password = 'Use at least 8 characters.';
-    else if (!/[a-zA-Z]/.test(v.password) || !/\d/.test(v.password)) e.password = 'Include a letter and a number.';
+    else if (!/[a-zA-Z]/.test(v.password) || !/\d/.test(v.password)) e.password = 'Mix in at least one letter and one number.';
   } else if (!v.password) e.password = 'Enter your password.';
   return e;
 }
 
-/* ---------- decorative stage ---------- */
+/* ---------- what you see through the lens ---------- */
 
-const ORBIT = [
-  { initials: 'PS', hue: 'violet', ring: 'outer', angle: 0 },
-  { initials: 'AK', hue: 'cyan', ring: 'outer', angle: 72 },
-  { initials: 'MR', hue: 'amber', ring: 'outer', angle: 144 },
-  { initials: 'RJ', hue: 'pink', ring: 'outer', angle: 216 },
-  { initials: 'SN', hue: 'green', ring: 'outer', angle: 288 },
-  { initials: 'DV', hue: 'blue', ring: 'inner', angle: 40 },
-  { initials: 'TK', hue: 'pink', ring: 'inner', angle: 160 },
-  { initials: 'LO', hue: 'cyan', ring: 'inner', angle: 280 },
+const CAST = [
+  { name: 'Meera', bg: ['#FFB48F', '#E8735A'], tone: '#5B2A3A' },
+  { name: 'Arjun', bg: ['#8EE6C9', '#3E9C8C'], tone: '#163C3C' },
+  { name: 'Priya', bg: ['#FFD27A', '#E39A3B'], tone: '#4D2E14' },
+  { name: 'Dev', bg: ['#C7B6FF', '#7D63D1'], tone: '#2A1D55' },
 ];
 
-function Stage() {
+function Portrait({ name, bg, tone, mine }: { name: string; bg: string[]; tone: string; mine?: boolean }) {
   return (
-    <section className="auth__stage" aria-hidden="true">
-      <div className="aurora">
-        <span className="aurora__blob aurora__blob--1" />
-        <span className="aurora__blob aurora__blob--2" />
-        <span className="aurora__blob aurora__blob--3" />
-      </div>
-      <div className="stars" />
-
-      <div className="constellation">
-        {(['outer', 'inner'] as const).map((ring) => (
-          <div key={ring} className={`ring ring--${ring}`}>
-            <svg className="ring__lines" viewBox="-100 -100 200 200">
-              {ORBIT.filter((o) => o.ring === ring).map((o) => {
-                const r = ring === 'outer' ? 92 : 100; // node distance as % of the ring's half-width
-                const rad = (o.angle * Math.PI) / 180;
-                return (
-                  <line
-                    key={o.initials + o.angle}
-                    x1="0"
-                    y1="0"
-                    x2={(Math.cos(rad) * r).toFixed(2)}
-                    y2={(Math.sin(rad) * r).toFixed(2)}
-                    className="signal"
-                    style={{ animationDelay: `${(o.angle / 360) * -2.4}s` }}
-                  />
-                );
-              })}
-            </svg>
-            {ORBIT.filter((o) => o.ring === ring).map((o) => (
-              <div key={o.initials} className="node" style={{ ['--angle' as string]: `${o.angle}deg` }}>
-                <div className={`bubble bubble--${o.hue}`}>
-                  <span>{o.initials}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-        <div className="core">
-          <span className="core__pulse" />
-          <span className="core__pulse core__pulse--late" />
-          <div className="core__dot">
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="6" width="14" height="12" rx="3" />
-              <path d="M16 10l6-3v10l-6-3z" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div className="float-card float-card--chat">
-        <span className="float-card__avatar bubble--amber">MR</span>
-        <div>
-          <strong>Meera</strong>
-          <p>Joining in 2 min 👋</p>
-        </div>
-      </div>
-      <div className="float-card float-card--speak">
-        <div className="wave">
-          {Array.from({ length: 5 }, (_, i) => (
-            <i key={i} style={{ animationDelay: `${i * 0.12}s` }} />
-          ))}
-        </div>
-        <span>Arjun is speaking</span>
-      </div>
-
-      <div className="auth__pitch">
-        <h2>
-          Step into
-          <br />
-          <span className="grad">the room.</span>
-        </h2>
-        <p>Peer-to-peer video for up to six people, on web, Android &amp; iOS. One account, every device.</p>
-      </div>
-    </section>
+    <div className="portrait" style={{ background: `radial-gradient(120% 90% at 35% 25%, ${bg[0]}, ${bg[1]})` }}>
+      <svg viewBox="-100 -100 200 200" className="portrait__figure" aria-hidden="true">
+        <circle cx="0" cy="-12" r="34" fill={tone} />
+        <path d="M -78 100 C -74 44 -40 30 0 30 C 40 30 74 44 78 100 Z" fill={tone} />
+        {mine && (
+          <text x="0" y="-1" textAnchor="middle" className="portrait__initials" fill={bg[0]}>
+            {initials(name)}
+          </text>
+        )}
+      </svg>
+      <span className="portrait__tag">
+        {!mine && (
+          <span className="portrait__wave" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
+        {mine ? `${name.trim().split(/\s+/)[0]} (you)` : name}
+      </span>
+    </div>
   );
 }
 
-/* ---------- form pieces ---------- */
+function LensScene({ myName }: { myName: string }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (myName || reducedMotion()) return;
+    const t = setInterval(() => setI((n) => (n + 1) % CAST.length), 3400);
+    return () => clearInterval(t);
+  }, [myName]);
 
-interface InputProps {
-  label: string;
-  type: string;
-  value: string;
-  onChange: (v: string) => void;
-  onBlur?: () => void;
-  error?: string;
-  autoComplete: string;
-  icon: ReactNode;
-  trailing?: ReactNode;
-  onKeyUp?: (e: KeyboardEvent<HTMLInputElement>) => void;
-  autoFocus?: boolean;
-  name: string;
+  if (myName.trim()) return <Portrait name={myName} bg={['#FFB48F', '#FF6A55']} tone="#2A1D45" mine />;
+  return (
+    <>
+      {CAST.map((c, n) => (
+        <div key={c.name} className={`scene-slide${n === i ? ' scene-slide--on' : ''}`}>
+          <Portrait {...c} />
+        </div>
+      ))}
+    </>
+  );
 }
 
-function FloatingInput({ label, error, icon, trailing, onChange, ...rest }: InputProps) {
-  const id = useId();
+/* ---------- the lens barrel's aperture scale ---------- */
+
+const STOPS = ['1.4', '2', '2.8', '4', '5.6', '8', '11', '16'];
+const STEP = 13; // degrees between stops
+
+function FStopRing({ open }: { open: number }) {
+  // fully open → f/1.4, nearly shut → f/16
+  const k = Math.max(0, Math.min(STOPS.length - 1, ((1 - open) / 0.9) * (STOPS.length - 1)));
   return (
-    <div className={`fi${error ? ' fi--error' : ''}`}>
-      <span className="fi__icon">{icon}</span>
-      <input
-        id={id}
-        placeholder=" "
-        aria-invalid={!!error}
-        aria-describedby={error ? `${id}-err` : undefined}
-        onChange={(e) => onChange(e.target.value)}
-        {...rest}
-      />
+    <svg className="fring" viewBox="-120 -120 240 240" aria-hidden="true">
+      {/* stops run anticlockwise up the left of the barrel, clear of the heading */}
+      <g style={{ transform: 'rotate(-36deg)' }}>
+      <g className="fring__scale" style={{ transform: `rotate(${k * STEP}deg)` }}>
+        {STOPS.map((s, n) => (
+          <g key={s} transform={`rotate(${-n * STEP})`}>
+            <line x1="0" y1="-108" x2="0" y2="-103" className="fring__tick" />
+            <text x="0" y="-111" textAnchor="middle" className={`fring__label${Math.round(k) === n ? ' fring__label--on' : ''}`}>
+              {s}
+            </text>
+          </g>
+        ))}
+        {Array.from({ length: 60 }, (_, n) => (
+          <line key={n} x1="0" y1="-104" x2="0" y2="-102" transform={`rotate(${n * 6})`} className="fring__minor" />
+        ))}
+      </g>
+      </g>
+      <g transform="rotate(-36)">
+        <path d="M -4 -99 L 4 -99 L 0 -94 Z" className="fring__marker" />
+      </g>
+    </svg>
+  );
+}
+
+/* ---------- form field ---------- */
+
+function Line(props: {
+  label: string;
+  type: string;
+  name: string;
+  value: string;
+  autoComplete: string;
+  error?: string;
+  onChange: (v: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onKeyUp?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  trailing?: ReactNode;
+  autoFocus?: boolean;
+}) {
+  const id = useId();
+  const { label, error, onChange, trailing, ...rest } = props;
+  return (
+    <div className={`line${error ? ' line--error' : ''}`}>
       <label htmlFor={id}>{label}</label>
-      {trailing}
+      <div className="line__row">
+        <input
+          id={id}
+          aria-invalid={!!error}
+          aria-describedby={error ? `${id}-e` : undefined}
+          onChange={(e) => onChange(e.target.value)}
+          {...rest}
+        />
+        {trailing}
+      </div>
+      <span className="line__rule" />
       {error && (
-        <p className="fi__error" id={`${id}-err`}>
+        <p className="line__error" id={`${id}-e`}>
           {error}
         </p>
       )}
@@ -151,68 +152,52 @@ function FloatingInput({ label, error, icon, trailing, onChange, ...rest }: Inpu
   );
 }
 
-const I = {
-  user: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21a8 8 0 0 1 16 0" />
-    </svg>
-  ),
-  mail: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="3" />
-      <path d="M3 7l9 6 9-6" />
-    </svg>
-  ),
-  lock: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="4" y="10" width="16" height="11" rx="3" />
-      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-    </svg>
-  ),
-  eye: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  ),
-  eyeOff: (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.9M6.3 6.3A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.7-1.8M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" />
-    </svg>
-  ),
-};
-
 /* ---------- page ---------- */
+
+const COPY = {
+  login: { title: ['Back in', 'focus.'], sub: 'Sign in to start a call or join one.', cta: 'Sign in' },
+  register: { title: ['Get in', 'the picture.'], sub: 'One account for web, Android and iOS. Calls hold up to six people.', cta: 'Create account' },
+};
 
 export function AuthPage() {
   const { login, register, notice } = useAuth();
   const [mode, setMode] = useState<Mode>(() => (location.pathname.startsWith('/register') ? 'register' : 'login'));
-  const [values, setValues] = useState<Record<Field, string>>({ name: '', email: '', password: '' });
+  const [v, setV] = useState<Record<Field, string>>({ name: '', email: '', password: '' });
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
   const [serverErrors, setServerErrors] = useState<Partial<Record<Field, string>>>({});
-  const [banner, setBanner] = useState<string | null>(notice);
-  const [shake, setShake] = useState(0);
+  const [message, setMessage] = useState<string | null>(notice);
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [capsLock, setCapsLock] = useState(false);
+  const [caps, setCaps] = useState(false);
+  const [lens, setLens] = useState<Lens>('shut');
+  const [leaving, setLeaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  useEffect(() => setBanner(notice), [notice]);
-
-  // Keep /login and /register in the URL (but don't clobber a /r/<room> invite link).
+  // The one orchestrated moment on arrival: the iris opens.
   useEffect(() => {
-    if (location.pathname.startsWith('/r/')) return;
+    const t = setTimeout(() => setLens('open'), reducedMotion() ? 0 : 250);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => setMessage(notice), [notice]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/r/')) return; // keep invite links intact
     const path = mode === 'register' ? '/register' : '/login';
     if (location.pathname !== path) history.replaceState(null, '', path + location.search);
   }, [mode]);
 
-  const clientErrors = validate(mode, values);
-  const errorFor = (f: Field) => serverErrors[f] ?? (touched[f] ? clientErrors[f] : undefined);
-  const strength = passwordStrength(values.password);
-  const set = (f: Field) => (v: string) => {
-    setValues((s) => ({ ...s, [f]: v }));
+  const errors = validate(mode, v);
+  const errorFor = (f: Field) => serverErrors[f] ?? (touched[f] ? errors[f] : undefined);
+  const strength = passwordStrength(v.password);
+  const set = (f: Field) => (val: string) => {
+    setV((s) => ({ ...s, [f]: val }));
     setServerErrors((s) => ({ ...s, [f]: undefined }));
+  };
+
+  const blink = async () => {
+    setLens('blink');
+    await wait(380);
+    setLens(document.activeElement?.getAttribute('name') === 'password' ? 'peek' : 'open');
   };
 
   const switchMode = (m: Mode) => {
@@ -220,142 +205,144 @@ export function AuthPage() {
     setMode(m);
     setTouched({});
     setServerErrors({});
-    setBanner(null);
+    setMessage(null);
   };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched({ name: true, email: true, password: true });
-    if (Object.keys(clientErrors).length) {
-      setShake((n) => n + 1);
+    if (Object.keys(errors).length) {
+      void blink();
       formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
       return;
     }
     setBusy(true);
-    setBanner(null);
+    setMessage(null);
+    const enter = async () => {
+      setLens('wide');
+      setLeaving(true);
+      await wait(720);
+    };
     try {
-      if (mode === 'register') await register(values.name.trim(), values.email.trim(), values.password);
-      else await login(values.email.trim(), values.password);
+      if (mode === 'register') await register(v.name.trim(), v.email.trim(), v.password, enter);
+      else await login(v.email.trim(), v.password, enter);
     } catch (err) {
       const apiErr = err instanceof ApiError ? err : null;
       setServerErrors((apiErr?.fields ?? {}) as Partial<Record<Field, string>>);
-      setBanner(apiErr?.message ?? 'Something went wrong. Please try again.');
-      setShake((n) => n + 1);
+      setMessage(apiErr?.message ?? 'That didn’t go through. Check your connection and try again.');
       setBusy(false);
+      void blink();
     }
   };
 
-  const capsCheck = (e: KeyboardEvent<HTMLInputElement>) => setCapsLock(e.getModifierState?.('CapsLock') ?? false);
+  const open = LENS_OPEN[lens];
+  const copy = COPY[mode];
 
   return (
-    <div className="auth" data-mode={mode}>
-      <Stage />
+    <div className={`studio${leaving ? ' studio--leaving' : ''}`} data-mode={mode}>
+      <div className="studio__grain" aria-hidden="true" />
 
-      <section className="auth__panel">
-        <div className="auth__card">
-          <div className="logo">
-            <span className="logo__mark" />
-            Huddle
+      <header className="studio__brand">
+        <Aperture open={0.42} className="mark" />
+        <span>Huddle</span>
+      </header>
+
+      <div className="lens" data-lens={lens}>
+        <FStopRing open={open} />
+        <Aperture open={open} className="lens__iris" label={`Preview of a call. The lens is ${lens === 'peek' ? 'closed while you type your password' : 'open'}.`}>
+          <LensScene myName={mode === 'register' ? v.name : ''} />
+        </Aperture>
+        <p className="lens__caption" aria-live="polite">
+          {lens === 'peek' ? 'Lens closed while you type your password.' : ' '}
+        </p>
+      </div>
+
+      <main className="studio__panel">
+        <h1 key={mode} className="studio__title">
+          <span>{copy.title[0]}</span>
+          <span>{copy.title[1]}</span>
+        </h1>
+        <p className="studio__sub">{copy.sub}</p>
+
+        <div className="switch" role="tablist" aria-label="Sign in or create an account">
+          <button role="tab" type="button" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>
+            Sign in
+          </button>
+          <button role="tab" type="button" aria-selected={mode === 'register'} onClick={() => switchMode('register')}>
+            Create account
+          </button>
+          <span className="switch__bar" aria-hidden="true" />
+        </div>
+
+        {message && (
+          <p className="studio__message" role="alert">
+            {message}
+          </p>
+        )}
+
+        <form ref={formRef} className="studio__form" onSubmit={submit} noValidate>
+          <div className={`reveal${mode === 'register' ? ' reveal--open' : ''}`} aria-hidden={mode !== 'register'}>
+            <div>
+              <Line
+                name="name"
+                label="Your name"
+                type="text"
+                autoComplete="name"
+                value={v.name}
+                onChange={set('name')}
+                onBlur={() => v.name && setTouched((t) => ({ ...t, name: true }))}
+                error={mode === 'register' ? errorFor('name') : undefined}
+              />
+            </div>
           </div>
+          <Line
+            name="email"
+            label="Email"
+            type="email"
+            autoComplete="email"
+            value={v.email}
+            onChange={set('email')}
+            onBlur={() => v.email && setTouched((t) => ({ ...t, email: true }))}
+            error={errorFor('email')}
+            autoFocus
+          />
+          <Line
+            name="password"
+            label="Password"
+            type={showPw ? 'text' : 'password'}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            value={v.password}
+            onChange={set('password')}
+            onFocus={() => setLens('peek')}
+            onBlur={() => {
+              if (v.password) setTouched((t) => ({ ...t, password: true }));
+              setLens((l) => (l === 'peek' ? 'open' : l));
+            }}
+            onKeyUp={(e) => setCaps(e.getModifierState?.('CapsLock') ?? false)}
+            error={errorFor('password')}
+            trailing={
+              <button type="button" className="line__toggle" onClick={() => setShowPw((s) => !s)} aria-pressed={showPw}>
+                {showPw ? 'Hide' : 'Show'}
+              </button>
+            }
+          />
+          {caps && <p className="studio__hint">Caps Lock is on.</p>}
 
-          <div key={mode} className="auth__heading">
-            <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
-            <p>{mode === 'login' ? 'Sign in to start or join a call.' : 'It takes 20 seconds. No credit card, no downloads.'}</p>
-          </div>
-
-          <div className="seg" role="tablist" aria-label="Sign in or create an account">
-            <span className="seg__thumb" />
-            <button role="tab" type="button" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>
-              Sign in
-            </button>
-            <button role="tab" type="button" aria-selected={mode === 'register'} onClick={() => switchMode('register')}>
-              Create account
-            </button>
-          </div>
-
-          {banner && (
-            <div key={shake} className={`auth__banner${shake ? ' shake' : ''}`} role="alert">
-              {banner}
+          {mode === 'register' && v.password && (
+            <div className={`meter meter--${strength.score}`} aria-live="polite">
+              <div className="meter__track">
+                <span style={{ width: `${strength.score * 25}%` }} />
+              </div>
+              <span className="meter__label">{strength.label}</span>
             </div>
           )}
 
-          <form ref={formRef} className="auth__form" onSubmit={submit} noValidate>
-            <div className={`collapse${mode === 'register' ? ' collapse--open' : ''}`}>
-              <div>
-                <FloatingInput
-                  name="name"
-                  label="Full name"
-                  type="text"
-                  autoComplete="name"
-                  value={values.name}
-                  onChange={set('name')}
-                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                  error={mode === 'register' ? errorFor('name') : undefined}
-                  icon={I.user}
-                />
-              </div>
-            </div>
-            <FloatingInput
-              name="email"
-              label="Email"
-              type="email"
-              autoComplete="email"
-              value={values.email}
-              onChange={set('email')}
-              onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-              error={errorFor('email')}
-              icon={I.mail}
-              autoFocus
-            />
-            <FloatingInput
-              name="password"
-              label="Password"
-              type={showPw ? 'text' : 'password'}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              value={values.password}
-              onChange={set('password')}
-              onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-              onKeyUp={capsCheck}
-              error={errorFor('password')}
-              icon={I.lock}
-              trailing={
-                <button
-                  type="button"
-                  className="fi__toggle"
-                  onClick={() => setShowPw((s) => !s)}
-                  aria-label={showPw ? 'Hide password' : 'Show password'}
-                >
-                  {showPw ? I.eyeOff : I.eye}
-                </button>
-              }
-            />
-            {capsLock && <p className="caps">⇪ Caps Lock is on</p>}
-
-            {mode === 'register' && values.password && (
-              <div className={`meter meter--${strength.score}`} aria-live="polite">
-                <div className="meter__bars">
-                  {[1, 2, 3, 4].map((i) => (
-                    <span key={i} className={i <= strength.score ? 'on' : ''} />
-                  ))}
-                </div>
-                <span className="meter__label">{strength.label}</span>
-              </div>
-            )}
-
-            <button className="auth__submit" type="submit" disabled={busy}>
-              {busy ? <span className="spinner" aria-label="Please wait" /> : mode === 'login' ? 'Sign in' : 'Create account'}
-              {!busy && <span className="auth__arrow">→</span>}
-            </button>
-          </form>
-
-          <p className="auth__switch">
-            {mode === 'login' ? "New to Huddle? " : 'Already have an account? '}
-            <button type="button" className="link-btn" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>
-              {mode === 'login' ? 'Create an account' : 'Sign in'}
-            </button>
-          </p>
-        </div>
-      </section>
+          <button className="shutter" type="submit" disabled={busy}>
+            <span className="shutter__dot" aria-hidden="true" />
+            {busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : copy.cta}
+          </button>
+        </form>
+      </main>
     </div>
   );
 }

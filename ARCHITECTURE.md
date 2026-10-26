@@ -341,22 +341,33 @@ device) and `userId` identifies the account.
 
 ## 8. UI design
 
-The web app implements a dark **Midnight + Aurora** direction: a violet→cyan
-gradient accent, frosted-glass control dock, and a cyan ring around whoever is
-speaking.
+The app is built around one signature element, a **camera aperture** (`web/src/components/Aperture.tsx`,
+`mobile/src/components/Aperture.tsx`). It's six blades over whatever the lens is showing:
 
-The **sign-in page** pairs that with a "step into the room" scene: participant
-bubbles orbit a glowing room on two counter-rotating rings, with dashed signal
-lines flowing toward the center, a floating chat bubble and a speaking-waveform
-card. The form card has a sliding Sign in / Create account switch, floating
-labels and a live password-strength meter. All animation stops under
-`prefers-reduced-motion`.
+```mermaid
+flowchart LR
+  shut(["shut · open=0"]) -- page load --> open(["open · 0.62"])
+  open -- focus password --> peek(["peek · 0.1"])
+  peek -- leave password --> open
+  open -- bad submit / wrong password --> blink(["blink · 0 → back"])
+  blink --> open
+  open -- signed in --> wide(["wide · 1 → lobby irises in"])
+```
+
+How it's drawn: each blade is a half-plane rotated 60° from the last and pushed
+`open × 118` units out from the centre, so the gap between them is a hexagon.
+Closing also twists the blades up to 34°, like a real iris. On the web it's one
+SVG with CSS transitions; on mobile it's plain `Animated.View`s on the native
+driver. Around the sign-in lens, an engraved aperture scale (f/1.4 to f/16)
+turns to show the current opening.
+
+Tokens: aubergine `#1C1530` / `#2A2046`, peach `#FFB48F`, coral `#FF6A55`,
+mint `#8EE6C9`, paper `#F6EFE7`; type is TeX Gyre Adventor, self-hosted.
+Everything respects `prefers-reduced-motion`.
 
 ![Sign in](docs/screenshots/auth-login.png)
 
-Screenshots of the rest of the app are in [README.md](./README.md).
-
-The four design directions explored before building:
+The four directions below were explored before the aperture concept:
 
 ### 01 · Midnight: focused 1-to-1
 Dark, calm, two equal tiles. The active speaker gets an outline.

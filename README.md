@@ -8,16 +8,38 @@ between devices.
 
 ![Sign in](docs/screenshots/auth-login.png)
 
-| Create account | Lobby | Call with chat | Phone |
-|---|---|---|---|
-| ![Register](docs/screenshots/auth-register.png) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
+| Your name appears in the lens | Lens shuts for your password | Lobby | Call with chat | Phone |
+|---|---|---|---|---|
+| ![Register](docs/screenshots/auth-register.png) | ![Password](docs/screenshots/auth-password.png) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
+
+## Design: "the lens opens"
+
+The whole app is built around one object from the world of video: a **camera
+aperture**. Its six blades open, close and twist like a real iris, and they
+respond to what you do instead of looping for decoration:
+
+| When you… | The lens… |
+|---|---|
+| open the sign-in page | opens from shut, and the aperture scale on the barrel turns to match (f/16 → f/4) |
+| click into the password field | **closes**, so the lens never peeks while you type it |
+| type your name when signing up | shows your initials inside, the way others will see you before your camera starts |
+| make a mistake | blinks shut and open, like a shutter |
+| sign in | opens wide, and the lobby appears through an expanding circle |
+| turn your camera off in the lobby | closes over your preview |
+| are in a call with your camera off | your tile shows a shut iris behind your initials |
+
+**Palette ("darkroom"):** aubergine `#1C1530`, lens-flare peach `#FFB48F`,
+signal coral `#FF6A55`, glass mint `#8EE6C9`, warm paper `#F6EFE7`.
+**Type:** TeX Gyre Adventor, a free revival of the geometric face used in 1970s
+broadcast design, shipped with the app under the GUST Font License (`web/public/fonts`).
+All motion stops when the system "reduce motion" setting is on.
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
 
 ## Features
 
 **Accounts**
-- Sign in / create account page with an animated "constellation" of participants, a sliding Sign in / Create account switch, floating labels, a show-password toggle, a Caps Lock warning and a live password-strength meter
+- Sign in / create account page built around the animated aperture (above), with a sliding Sign in / Create account switch, a show-password toggle, a Caps Lock warning and a live password-strength meter
 - Accounts in **MongoDB** (unique, case-insensitive email) with **scrypt**-hashed passwords
 - **JWT** sessions (7 days by default), sent on every API call and on joining a call. Your name in a call comes from your account and can't be spoofed.
 - Login rate limiting, identical errors for "wrong password" and "no such account" (so people can't probe which emails are registered), invite links that survive sign-in
@@ -154,7 +176,7 @@ Each folder has a `.env.example`.
   - Sign-up and sign-in: field validation, duplicate emails (any letter case), the same error for wrong password and unknown email, rate limiting, and forged or orphaned tokens.
   - MongoDB user store: checked against a fake collection. Set `MONGODB_URI` to run the same test against a real database.
   - Calls: a token is required to join and the name can't be spoofed. Room cap, signal relay, chat and mute state all work.
-- **Web, end to end in Chromium (18 checks):** sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and a live video call between two signed-in accounts.
+- **Web, end to end in Chromium (24 checks):** the lens opens on load, closes for the password, reopens, blinks on a bad submit, shows your initials and opens wide on success. Also checked: sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and live video calls between signed-in accounts (with chat and screen share in a 3-person call).
 - **Mobile:** written against `react-native-webrtc` and `expo-secure-store`, and syntax-checked. It still needs a first run on a real device.
 
 ## Roadmap

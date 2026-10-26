@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '../config';
+import { fonts, theme } from '../config';
 
 interface Props {
   visible: boolean;
@@ -70,7 +70,7 @@ export function ChatSheet({ visible, messages, selfId, onSend, onClose }: Props)
                     <Text style={styles.metaTime}>{time(item.ts)}</Text>
                   </View>
                   <View style={[styles.bubble, mine && styles.bubbleMine]}>
-                    <Text style={styles.bubbleText}>{item.text}</Text>
+                    <Text style={[styles.bubbleText, mine && { color: theme.ink }]}>{item.text}</Text>
                   </View>
                 </View>
               );
@@ -110,18 +110,18 @@ const styles = StyleSheet.create({
   },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', marginTop: 8 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
-  title: { color: theme.text, fontSize: 16, fontWeight: '700' },
-  close: { color: theme.cyan, fontWeight: '600', fontSize: 15 },
-  empty: { color: theme.muted, textAlign: 'center', marginTop: 40, fontSize: 13 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  title: { color: theme.text, fontSize: 16, fontFamily: fonts.bold },
+  close: { color: theme.cyan, fontFamily: fonts.bold, fontSize: 15 },
+  empty: { fontFamily: fonts.regular, color: theme.muted, textAlign: 'center', marginTop: 40, fontSize: 13 },
+  meta: { fontFamily: fonts.regular, flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  metaName: { color: theme.text, fontSize: 12, fontWeight: '600' },
-  metaTime: { color: theme.muted, fontSize: 11 },
+  metaName: { color: theme.text, fontSize: 12, fontFamily: fonts.bold },
+  metaTime: { fontFamily: fonts.regular, color: theme.muted, fontSize: 11 },
   bubble: { maxWidth: '85%', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: theme.surface2 },
   bubbleMine: { backgroundColor: theme.violet },
-  bubbleText: { color: theme.text, fontSize: 14, lineHeight: 20 },
+  bubbleText: { fontFamily: fonts.regular, color: theme.text, fontSize: 14, lineHeight: 20 },
   form: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.border },
-  input: { flex: 1, color: theme.text, backgroundColor: theme.bg2, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, borderWidth: 1, borderColor: theme.border, fontSize: 15 },
+  input: { fontFamily: fonts.regular, flex: 1, color: theme.text, backgroundColor: theme.bg2, borderRadius: 12, paddingHorizontal: 13, paddingVertical: 11, borderWidth: 1, borderColor: theme.border, fontSize: 15 },
   send: { width: 46, borderRadius: 12, backgroundColor: theme.violet, alignItems: 'center', justifyContent: 'center' },
-  sendText: { color: '#fff', fontSize: 18 },
+  sendText: { fontFamily: fonts.bold, color: theme.ink, fontSize: 18 },
 });

@@ -27,7 +27,8 @@ export function initials(name: string): string {
 
 /** Stable color per participant id, for avatars. */
 export function colorFor(id: string): string {
-  const palette = ['#4f8cff', '#35c47a', '#ff7a59', '#b07cff', '#f5b941', '#2ec5d3', '#ff5d8f', '#7c8cff'];
+  // Darkroom palette: light, warm tones that read on aubergine with dark ink initials.
+  const palette = ['#ffb48f', '#8ee6c9', '#ffd27a', '#c7b6ff', '#f4a6c1', '#8fc8ff', '#e8c9a0', '#ff9a85'];
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return palette[h % palette.length];

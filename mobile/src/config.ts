@@ -23,17 +23,29 @@ export const ICE_SERVERS: RTCIceServer[] = (() => {
   }
 })();
 
+// "Darkroom" palette, shared with the web app.
 export const theme = {
-  bg: '#0b0e14',
-  bg2: '#111622',
-  surface: '#161c29',
-  surface2: '#1d2535',
-  border: 'rgba(255,255,255,0.08)',
-  text: '#eef1f6',
-  muted: '#98a2b3',
-  violet: '#8b5cf6',
-  cyan: '#22d3ee',
-  green: '#34d399',
-  red: '#f43f5e',
-  amber: '#fbbf24',
+  bg: '#1c1530',
+  bg2: '#150f26',
+  surface: '#2a2046',
+  surface2: '#362a5a',
+  border: 'rgba(246,239,231,0.10)',
+  text: '#f6efe7',
+  muted: '#b4a9c9',
+  peach: '#ffb48f',
+  coral: '#ff6a55',
+  mint: '#8ee6c9',
+  amber: '#ffd27a',
+  ink: '#1c1530',
+  // legacy names used by older components
+  violet: '#ffb48f',
+  cyan: '#8ee6c9',
+  green: '#8ee6c9',
+  red: '#ff6a55',
+};
+
+/** TeX Gyre Adventor, bundled in assets/fonts and loaded in App.tsx. */
+export const fonts = {
+  regular: 'Adventor',
+  bold: 'Adventor-Bold',
 };

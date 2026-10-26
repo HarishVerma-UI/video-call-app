@@ -1,3 +1,4 @@
+import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -10,6 +11,13 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { useLocalStream } from './src/useLocalStream';
 
 export default function App() {
+  // TeX Gyre Adventor (GUST Font License), bundled with the app.
+  const [fontsLoaded] = useFonts({
+    Adventor: require('./assets/fonts/texgyreadventor-regular.otf'),
+    'Adventor-Bold': require('./assets/fonts/texgyreadventor-bold.otf'),
+  });
+  if (!fontsLoaded) return <View style={styles.root} />;
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
@@ -27,7 +35,7 @@ function Gate() {
   if (status === 'checking') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={theme.violet} size="large" />
+        <ActivityIndicator color={theme.peach} size="large" />
       </View>
     );
   }

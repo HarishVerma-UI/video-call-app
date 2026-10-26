@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { theme } from '../config';
+import { fonts, theme } from '../config';
 
 interface Props {
   icon: string;
@@ -61,5 +61,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#04222a', fontSize: 10, fontWeight: '700' },
+  badgeText: { color: theme.ink, fontSize: 10, fontFamily: fonts.bold },
 });

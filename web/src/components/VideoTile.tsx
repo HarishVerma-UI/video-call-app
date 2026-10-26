@@ -1,6 +1,7 @@
 import { colorFor, initials, type Participant } from '@vca/shared';
 import { useEffect, useRef } from 'react';
 import { useSpeaking } from '../hooks/useSpeaking';
+import { Aperture } from './Aperture';
 import { MicOffIcon, ScreenIcon } from './Icons';
 
 interface Props {
@@ -44,6 +45,8 @@ export function VideoTile({ participant: p, displayStream, variant = 'grid' }: P
       />
       {!showVideo && (
         <div className="tile__avatar-wrap">
+          {/* camera off = the lens is shut, same as in the lobby */}
+          <Aperture open={0} className="tile__iris" />
           <div className="tile__avatar" style={{ background: colorFor(p.id) }}>
             {initials(p.name)}
           </div>

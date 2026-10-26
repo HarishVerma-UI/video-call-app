@@ -2,6 +2,7 @@ import { colorFor, generateRoomId, initials, normalizeRoomId, type AuthUser } fr
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
+import { Aperture } from './Aperture';
 import { CamIcon, CamOffIcon, MicIcon, MicOffIcon, SparkIcon } from './Icons';
 
 interface Props {
@@ -64,49 +65,41 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
     onJoin(id);
   };
 
+  const first = user.name.trim().split(/\s+/)[0];
+  // The preview sits behind an iris: wide open with the camera on, shut when it's off.
+  const lensOpen = !media.ready ? 0.22 : media.videoOn ? 1 : 0;
+
   return (
     <div className="lobby-wrap">
-    <main className="lobby">
-      <header className="lobby__top">
-        <div className="logo">
-          <span className="logo__mark" />
-          Huddle
-        </div>
-        <div className="account">
-          <span className="account__avatar" style={{ background: colorFor(user.id) }}>
-            {initials(user.name)}
-          </span>
-          <span className="account__text">
-            <strong>{user.name}</strong>
-            <span>{user.email}</span>
-          </span>
-          <button className="ghost-btn" onClick={onSignOut} data-testid="sign-out">
-            Sign out
-          </button>
-        </div>
-      </header>
-      <section className="lobby__brand">
-        <h1>
-          Face-to-face,
-          <br />
-          <span className="grad">from anywhere.</span>
-        </h1>
-        <p className="lobby__lede">
-          Private group video calls for up to 6 people. Nothing to install — share a room code and you're in.
-        </p>
-        <ul className="lobby__points">
-          <li>Peer-to-peer, encrypted media</li>
-          <li>Screen sharing &amp; live chat</li>
-          <li>Works on web, Android &amp; iOS</li>
-        </ul>
-      </section>
+      <main className="lobby">
+        <header className="lobby__top">
+          <div className="logo">
+            <Aperture open={0.42} className="mark" />
+            Huddle
+          </div>
+          <div className="account">
+            <span className="account__avatar" style={{ background: colorFor(user.id) }}>
+              {initials(user.name)}
+            </span>
+            <span className="account__text">
+              <strong>{user.name}</strong>
+              <span>{user.email}</span>
+            </span>
+            <button className="ghost-btn" onClick={onSignOut} data-testid="sign-out">
+              Sign out
+            </button>
+          </div>
+        </header>
 
-      <section className="lobby__card">
-        <div className="preview">
-          <video ref={videoRef} autoPlay playsInline muted className="preview__video" style={{ opacity: media.videoOn ? 1 : 0 }} />
-          {!media.videoOn && (
-            <div className="preview__off">{media.ready ? (media.hasVideo ? 'Camera is off' : 'No camera') : 'Starting camera…'}</div>
-          )}
+        <section className="lobby__lens">
+          <div className="preview">
+            <Aperture open={lensOpen} className="preview__iris" label={media.videoOn ? 'Your camera preview' : 'Camera off'}>
+              <video ref={videoRef} autoPlay playsInline muted className="preview__video" />
+            </Aperture>
+            <p className="preview__state" aria-live="polite">
+              {!media.ready ? 'Starting your camera…' : media.videoOn ? 'This is how others will see you.' : media.hasVideo ? 'Camera off. People will see your initials.' : 'No camera found. You can still talk.'}
+            </p>
+          </div>
           <div className="preview__controls">
             <button
               type="button"
@@ -127,28 +120,34 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
               {media.videoOn ? <CamIcon /> : <CamOffIcon />}
             </button>
           </div>
-        </div>
+        </section>
 
-        {media.problem && (
-          <p className="alert">
-            {PROBLEM_TEXT[media.problem]}{' '}
-            {media.problem !== 'insecure' && (
-              <button className="link-btn" onClick={media.retry}>
-                Try again
-              </button>
-            )}
-          </p>
-        )}
-        {notice && <p className="notice">{notice}</p>}
+        <section className="lobby__card">
+          <h1 className="lobby__title">
+            <span>Ready when</span>
+            <span>you are, {first}.</span>
+          </h1>
+          <p className="lobby__lede">Start a new room, or enter the code someone shared with you.</p>
 
-        <form className="join-form" onSubmit={submit}>
-          <p className="signed-as">
-            Joining as <strong>{user.name}</strong>
-          </p>
-          <label>
-            Room code
+          {media.problem && (
+            <p className="alert">
+              {PROBLEM_TEXT[media.problem]}{' '}
+              {media.problem !== 'insecure' && (
+                <button className="link-btn" onClick={media.retry}>
+                  Try again
+                </button>
+              )}
+            </p>
+          )}
+          {notice && <p className="notice">{notice}</p>}
+
+          <form className="join-form" onSubmit={submit}>
+            <label className="join-form__label" htmlFor="room-code">
+              Room code
+            </label>
             <div className="input-row">
               <input
+                id="room-code"
                 value={room}
                 onChange={(e) => {
                   setRoom(e.target.value);
@@ -157,21 +156,22 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
                 placeholder="Leave empty for a new room"
                 maxLength={64}
                 spellCheck={false}
+                autoComplete="off"
               />
-              <button type="button" className="ghost-btn" onClick={() => setRoom(generateRoomId())} title="Generate a room code">
+              <button type="button" className="ghost-btn" onClick={() => setRoom(generateRoomId())} title="Make up a room code">
                 <SparkIcon width={18} height={18} />
-                New
+                New code
               </button>
             </div>
-          </label>
-          {roomError && <p className="field-error">{roomError}</p>}
-          {roomInfo && <p className="field-hint">{roomInfo}</p>}
-          <button className="primary-btn" type="submit" disabled={!media.ready}>
-            {room ? 'Join call' : 'Start a new call'}
-          </button>
-        </form>
-      </section>
-    </main>
+            {roomError && <p className="field-error">{roomError}</p>}
+            {roomInfo && <p className="field-hint">{roomInfo}</p>}
+            <button className="primary-btn shutter" type="submit" disabled={!media.ready}>
+              <span className="shutter__dot" aria-hidden="true" />
+              {room ? 'Join call' : 'Start a new call'}
+            </button>
+          </form>
+        </section>
+      </main>
     </div>
   );
 }
