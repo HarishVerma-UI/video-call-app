@@ -14,7 +14,8 @@ const CHAT_WINDOW_MS = 5000;
 
 /**
  * @param {import('node:http').Server} httpServer
- * @param {{ maxPeersPerRoom: number, heartbeatMs: number, maxPayloadBytes: number, allowedOrigins: string[], log?: (...a: any[]) => void }} options
+ * @param {{ maxPeersPerRoom: number, heartbeatMs: number, maxPayloadBytes: number, allowedOrigins: string[],
+ *   userFromToken: (token: string) => Promise<{ id: string, name: string } | null>, log?: (...a: any[]) => void }} options
  */
 export function attachSignaling(httpServer, options) {
   const log = options.log ?? (() => {});
@@ -33,8 +34,8 @@ export function attachSignaling(httpServer, options) {
   });
 
   /**
-   * @typedef {{ id: string, ws: import('ws').WebSocket, roomId: string | null, name: string,
-   *   media: { audio: boolean, video: boolean, screen: boolean }, chatTimes: number[] }} Client
+   * @typedef {{ id: string, ws: import('ws').WebSocket, roomId: string | null, name: string, userId: string | null,
+   *   joining: boolean, media: { audio: boolean, video: boolean, screen: boolean }, chatTimes: number[] }} Client
    */
 
   const send = (client, msg) => {
@@ -45,7 +46,7 @@ export function attachSignaling(httpServer, options) {
     if (!room) return;
     for (const c of room.values()) if (c.id !== exceptId) send(c, msg);
   };
-  const peerInfo = (c) => ({ id: c.id, name: c.name, media: c.media });
+  const peerInfo = (c) => ({ id: c.id, userId: c.userId, name: c.name, media: c.media });
 
   function leaveRoom(client) {
     const roomId = client.roomId;
@@ -66,11 +67,13 @@ export function attachSignaling(httpServer, options) {
       ws,
       roomId: null,
       name: '',
+      userId: null,
+      joining: false,
       media: { audio: false, video: false, screen: false },
       chatTimes: [],
     };
 
-    ws.on('message', (raw) => {
+    ws.on('message', async (raw) => {
       const msg = parseClientMessage(raw.toString());
       if (!msg) {
         send(client, { type: 'error', code: 'bad-request', message: 'Invalid message.' });
@@ -78,10 +81,23 @@ export function attachSignaling(httpServer, options) {
       }
 
       if (msg.type === 'join') {
-        if (client.roomId) {
+        if (client.roomId || client.joining) {
           send(client, { type: 'error', code: 'already-joined', message: 'Already in a room.' });
           return;
         }
+        client.joining = true;
+        let user = null;
+        try {
+          user = await options.userFromToken(msg.token);
+        } catch (err) {
+          log('auth lookup failed', err);
+        }
+        client.joining = false;
+        if (!user) {
+          send(client, { type: 'error', code: 'unauthorized', message: 'Your session has expired. Please sign in again.' });
+          return;
+        }
+        if (ws.readyState !== ws.OPEN) return; // left while we were checking
         let room = rooms.get(msg.roomId);
         if (room && room.size >= options.maxPeersPerRoom) {
           send(client, {
@@ -97,7 +113,8 @@ export function attachSignaling(httpServer, options) {
         }
         const existing = [...room.values()].map(peerInfo);
         client.roomId = msg.roomId;
-        client.name = msg.name;
+        client.name = user.name;
+        client.userId = user.id;
         client.media = msg.media;
         room.set(client.id, client);
 

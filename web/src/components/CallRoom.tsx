@@ -9,9 +9,9 @@ import { VideoTile } from './VideoTile';
 
 interface Props {
   roomId: string;
-  name: string;
+  auth: { token: string; name: string };
   media: LocalMedia;
-  onLeave: (reason?: string) => void;
+  onLeave: (reason?: string, code?: string) => void;
 }
 
 // Phones' browsers generally can't share their screen.
@@ -37,8 +37,8 @@ function useElapsed(running: boolean) {
   return s >= 3600 ? `${Math.floor(s / 3600)}:${mm.slice(-2)}:${ss}` : `${mm}:${ss}`;
 }
 
-export function CallRoom({ roomId, name, media, onLeave }: Props) {
-  const { client, participants, status, messages, error, clearError } = useCall(roomId, name, media.stream);
+export function CallRoom({ roomId, auth, media, onLeave }: Props) {
+  const { client, participants, status, messages, error, clearError } = useCall(roomId, auth, media.stream);
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -64,8 +64,8 @@ export function CallRoom({ roomId, name, media, onLeave }: Props) {
   // Fatal errors (room full / server gone) send you back to the lobby.
   useEffect(() => {
     if (!error) return;
-    if (error.code === 'room-full' || (error.code === 'signaling' && status === 'error')) {
-      onLeave(error.message);
+    if (error.code === 'room-full' || error.code === 'unauthorized' || (error.code === 'signaling' && status === 'error')) {
+      onLeave(error.message, error.code);
     } else {
       setToast(error.message);
       clearError();

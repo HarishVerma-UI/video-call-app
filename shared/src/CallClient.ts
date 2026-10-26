@@ -90,6 +90,7 @@ export class CallClient {
   private selfId = '';
   private roomId = '';
   private name = '';
+  private token = '';
   private localStream: MediaStream | null = null;
   private localMedia: MediaState = { audio: true, video: true, screen: false };
   private outgoingVideoTrack: MediaStreamTrack | null = null;
@@ -134,11 +135,15 @@ export class CallClient {
     return () => set.delete(fn);
   }
 
-  /** Join a room with an already-acquired local stream (may be null for receive-only). */
-  join(roomId: string, name: string, localStream: MediaStream | null): void {
+  /**
+   * Join a room with an already-acquired local stream (may be null for receive-only).
+   * `auth.token` is the JWT from sign-in; the server takes your name from it.
+   */
+  join(roomId: string, auth: { token: string; name: string }, localStream: MediaStream | null): void {
     if (this._status === 'connecting' || this._status === 'joined') return;
     this.roomId = roomId;
-    this.name = name;
+    this.name = auth.name;
+    this.token = auth.token;
     this.localStream = localStream;
     this.outgoingVideoTrack = localStream?.getVideoTracks()[0] ?? null;
     this.localMedia = {
@@ -223,7 +228,7 @@ export class CallClient {
     this.ws = ws;
 
     ws.onopen = () => {
-      this.send({ type: 'join', roomId: this.roomId, name: this.name, media: this.localMedia });
+      this.send({ type: 'join', roomId: this.roomId, token: this.token, media: this.localMedia });
     };
     ws.onmessage = (ev: MessageEvent) => {
       let msg: ServerMessage;
@@ -308,7 +313,7 @@ export class CallClient {
       }
       case 'error': {
         this.emit('error', { code: msg.code, message: msg.message });
-        if (msg.code === 'room-full') {
+        if (msg.code === 'room-full' || msg.code === 'unauthorized') {
           this.intentionalClose = true;
           this.ws?.close();
           this.setStatus('error');
@@ -404,7 +409,7 @@ export class CallClient {
     let peer = this.peers.get(from);
     if (!peer) {
       // Signal raced ahead of peer-joined; create a placeholder.
-      peer = this.addPeer({ id: from, name: 'Guest', media: { audio: true, video: true, screen: false } }, false);
+      peer = this.addPeer({ id: from, userId: '', name: 'Guest', media: { audio: true, video: true, screen: false } }, false);
     }
     const pc = peer.pc;
     if (!pc) return;

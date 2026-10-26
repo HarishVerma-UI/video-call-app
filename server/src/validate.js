@@ -2,7 +2,6 @@
 // Anything that doesn't match returns null and is rejected with "bad-request".
 
 const ROOM_ID = /^[a-zA-Z0-9_-]{1,64}$/;
-const MAX_NAME = 40;
 const MAX_CHAT = 1000;
 const MAX_SDP = 32 * 1024;
 
@@ -49,10 +48,10 @@ export function parseClientMessage(raw) {
   switch (msg.type) {
     case 'join': {
       if (typeof msg.roomId !== 'string' || !ROOM_ID.test(msg.roomId)) return null;
-      const name = typeof msg.name === 'string' ? msg.name.trim().slice(0, MAX_NAME) : '';
-      if (!name) return null;
+      // Who you are comes from the signed token, never from what the client claims.
+      if (typeof msg.token !== 'string' || !msg.token || msg.token.length > 4096) return null;
       const media = parseMedia(msg.media) ?? { audio: false, video: false, screen: false };
-      return { type: 'join', roomId: msg.roomId.toLowerCase(), name, media };
+      return { type: 'join', roomId: msg.roomId.toLowerCase(), token: msg.token, media };
     }
     case 'signal': {
       if (typeof msg.to !== 'string' || msg.to.length > 64) return null;

@@ -1,4 +1,4 @@
-import { generateRoomId, normalizeRoomId } from '@vca/shared';
+import { colorFor, generateRoomId, initials, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -11,19 +11,21 @@ import {
   View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
-import { API_BASE, theme } from '../config';
+import { useAuth } from '../auth';
+import { theme } from '../config';
 import type { LocalStream } from '../useLocalStream';
 
 interface Props {
   media: LocalStream;
-  initialName: string;
+  user: AuthUser;
   initialRoom: string;
   notice: string | null;
-  onJoin: (roomId: string, name: string) => void;
+  onJoin: (roomId: string) => void;
+  onSignOut: () => void;
 }
 
-export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: Props) {
-  const [name, setName] = useState(initialName);
+export function HomeScreen({ media, user, initialRoom, notice, onJoin, onSignOut }: Props) {
+  const { api } = useAuth();
   const [room, setRoom] = useState(initialRoom);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [roomInfo, setRoomInfo] = useState<string | null>(null);
@@ -32,18 +34,22 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
     const id = normalizeRoomId(room);
     setRoomInfo(null);
     if (!id) return;
+    let cancelled = false;
     const t = setTimeout(() => {
-      fetch(`${API_BASE}/api/rooms/${id}`)
-        .then((r) => (r.ok ? r.json() : null))
+      api
+        .roomInfo(id)
         .then((info) => {
-          if (!info) return;
+          if (cancelled) return;
           if (info.full) setRoomInfo(`Room is full (${info.participants}/${info.maxPeers})`);
           else if (info.participants > 0) setRoomInfo(`${info.participants} in this room now`);
         })
         .catch(() => setRoomInfo(null));
     }, 350);
-    return () => clearTimeout(t);
-  }, [room]);
+    return () => {
+      clearTimeout(t);
+      cancelled = true;
+    };
+  }, [room, api]);
 
   const join = () => {
     const id = normalizeRoomId(room || generateRoomId());
@@ -51,8 +57,7 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
       setRoomError('Use letters, numbers, - or _');
       return;
     }
-    if (!name.trim()) return;
-    onJoin(id, name.trim());
+    onJoin(id);
   };
 
   const stream: any = media.stream;
@@ -60,9 +65,17 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.logoRow}>
-          <View style={styles.logoMark} />
-          <Text style={styles.logo}>Huddle</Text>
+        <View style={styles.topRow}>
+          <View style={styles.logoRow}>
+            <View style={styles.logoMark} />
+            <Text style={styles.logo}>Huddle</Text>
+          </View>
+          <Pressable style={styles.account} onPress={onSignOut} accessibilityLabel="Sign out">
+            <View style={[styles.avatar, { backgroundColor: colorFor(user.id) }]}>
+              <Text style={styles.avatarText}>{initials(user.name)}</Text>
+            </View>
+            <Text style={styles.signOut}>Sign out</Text>
+          </Pressable>
         </View>
         <Text style={styles.h1}>Face-to-face,</Text>
         <Text style={[styles.h1, { color: theme.cyan }]}>from anywhere.</Text>
@@ -107,16 +120,9 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
           </View>
         )}
 
-        <Text style={styles.label}>Your name</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Harish"
-          placeholderTextColor={theme.muted}
-          style={styles.input}
-          maxLength={40}
-          autoCapitalize="words"
-        />
+        <Text style={styles.joiningAs}>
+          Joining as <Text style={{ color: theme.text, fontWeight: '700' }}>{user.name}</Text>
+        </Text>
 
         <Text style={styles.label}>Room code</Text>
         <View style={styles.row}>
@@ -141,9 +147,9 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
         {roomInfo && <Text style={styles.hint}>{roomInfo}</Text>}
 
         <Pressable
-          style={({ pressed }) => [styles.primary, (!media.ready || !name.trim()) && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}
+          style={({ pressed }) => [styles.primary, !media.ready && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}
           onPress={join}
-          disabled={!media.ready || !name.trim()}
+          disabled={!media.ready}
         >
           <Text style={styles.primaryText}>{room ? 'Join call' : 'Start a new call'}</Text>
         </Pressable>
@@ -154,10 +160,16 @@ export function HomeScreen({ media, initialName, initialRoom, notice, onJoin }: 
 
 const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 40 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  account: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 4, paddingRight: 12, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: theme.border },
+  avatar: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  signOut: { color: theme.text, fontWeight: '600', fontSize: 13 },
+  joiningAs: { color: theme.muted, fontSize: 14, marginTop: 18 },
   logoMark: { width: 26, height: 26, borderRadius: 8, backgroundColor: theme.violet },
   logo: { color: theme.text, fontSize: 18, fontWeight: '700' },
-  h1: { color: theme.text, fontSize: 34, fontWeight: '800', letterSpacing: -1, lineHeight: 40 },
+  h1: { color: theme.text, marginTop: 6, fontSize: 34, fontWeight: '800', letterSpacing: -1, lineHeight: 40 },
   preview: {
     marginTop: 20,
     aspectRatio: 3 / 4,

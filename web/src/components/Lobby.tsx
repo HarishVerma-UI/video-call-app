@@ -1,14 +1,16 @@
-import { generateRoomId, normalizeRoomId } from '@vca/shared';
+import { colorFor, generateRoomId, initials, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { CamIcon, CamOffIcon, MicIcon, MicOffIcon, SparkIcon } from './Icons';
 
 interface Props {
   media: LocalMedia;
+  user: AuthUser;
   initialRoom: string;
-  initialName: string;
   notice?: string | null;
-  onJoin: (roomId: string, name: string) => void;
+  onJoin: (roomId: string) => void;
+  onSignOut: () => void;
 }
 
 const PROBLEM_TEXT: Record<string, string> = {
@@ -18,8 +20,8 @@ const PROBLEM_TEXT: Record<string, string> = {
   other: 'Could not start your camera. You can still join and listen.',
 };
 
-export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props) {
-  const [name, setName] = useState(initialName);
+export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: Props) {
+  const { api } = useAuth();
   const [room, setRoom] = useState(initialRoom);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [roomInfo, setRoomInfo] = useState<string | null>(null);
@@ -34,12 +36,12 @@ export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props
     const id = normalizeRoomId(room);
     setRoomInfo(null);
     if (!id) return;
-    const ctrl = new AbortController();
+    let cancelled = false;
     const t = setTimeout(() => {
-      fetch(`/api/rooms/${id}`, { signal: ctrl.signal })
-        .then((r) => (r.ok ? r.json() : null))
+      api
+        .roomInfo(id)
         .then((info) => {
-          if (!info) return;
+          if (cancelled) return;
           if (info.full) setRoomInfo(`This room is full (${info.participants}/${info.maxPeers}).`);
           else if (info.participants > 0)
             setRoomInfo(`${info.participants} ${info.participants === 1 ? 'person is' : 'people are'} in this room.`);
@@ -48,9 +50,9 @@ export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props
     }, 300);
     return () => {
       clearTimeout(t);
-      ctrl.abort();
+      cancelled = true;
     };
-  }, [room]);
+  }, [room, api]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -59,24 +61,38 @@ export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props
       setRoomError('Use letters, numbers, - or _ (up to 64 characters).');
       return;
     }
-    if (!name.trim()) return;
-    onJoin(id, name.trim());
+    onJoin(id);
   };
 
   return (
+    <div className="lobby-wrap">
     <main className="lobby">
-      <section className="lobby__brand">
+      <header className="lobby__top">
         <div className="logo">
           <span className="logo__mark" />
           Huddle
         </div>
+        <div className="account">
+          <span className="account__avatar" style={{ background: colorFor(user.id) }}>
+            {initials(user.name)}
+          </span>
+          <span className="account__text">
+            <strong>{user.name}</strong>
+            <span>{user.email}</span>
+          </span>
+          <button className="ghost-btn" onClick={onSignOut} data-testid="sign-out">
+            Sign out
+          </button>
+        </div>
+      </header>
+      <section className="lobby__brand">
         <h1>
           Face-to-face,
           <br />
           <span className="grad">from anywhere.</span>
         </h1>
         <p className="lobby__lede">
-          Private group video calls for up to 6 people. No accounts, no installs — share a room code and you're in.
+          Private group video calls for up to 6 people. Nothing to install — share a room code and you're in.
         </p>
         <ul className="lobby__points">
           <li>Peer-to-peer, encrypted media</li>
@@ -126,10 +142,9 @@ export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props
         {notice && <p className="notice">{notice}</p>}
 
         <form className="join-form" onSubmit={submit}>
-          <label>
-            Your name
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Harish" maxLength={40} required autoFocus={!initialName} />
-          </label>
+          <p className="signed-as">
+            Joining as <strong>{user.name}</strong>
+          </p>
           <label>
             Room code
             <div className="input-row">
@@ -151,11 +166,12 @@ export function Lobby({ media, initialRoom, initialName, notice, onJoin }: Props
           </label>
           {roomError && <p className="field-error">{roomError}</p>}
           {roomInfo && <p className="field-hint">{roomInfo}</p>}
-          <button className="primary-btn" type="submit" disabled={!media.ready || !name.trim()}>
+          <button className="primary-btn" type="submit" disabled={!media.ready}>
             {room ? 'Join call' : 'Start a new call'}
           </button>
         </form>
       </section>
     </main>
+    </div>
   );
 }

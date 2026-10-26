@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "dev": "concurrently -k -n server,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "db": "docker compose up -d mongo",
     "dev:server": "npm run dev -w @vca/server",
     "dev:web": "npm run dev -w @vca/web",
     "dev:mobile": "npm run start -w @vca/mobile",

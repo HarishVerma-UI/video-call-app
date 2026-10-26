@@ -10,7 +10,7 @@ import type { MediaStream as RNMediaStream } from 'react-native-webrtc';
 import { ICE_SERVERS, SIGNALING_URL } from './config';
 
 /** Same engine as the web app; this hook just binds it to React state. */
-export function useCallClient(roomId: string, name: string, localStream: RNMediaStream | null) {
+export function useCallClient(roomId: string, auth: { token: string; name: string }, localStream: RNMediaStream | null) {
   const clientRef = useRef<CallClient | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [status, setStatus] = useState<CallStatus>('idle');
@@ -26,7 +26,7 @@ export function useCallClient(roomId: string, name: string, localStream: RNMedia
       client.on('chat', (m) => setMessages((prev) => [...prev, m])),
       client.on('error', setError),
     ];
-    client.join(roomId, name, localStream as unknown as MediaStream);
+    client.join(roomId, auth, localStream as unknown as MediaStream);
     setParticipants(client.getParticipants());
     return () => {
       offs.forEach((off) => off());
@@ -34,7 +34,7 @@ export function useCallClient(roomId: string, name: string, localStream: RNMedia
       if (clientRef.current === client) clientRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, name]);
+  }, [roomId, auth.token]);
 
   return { client: clientRef, participants, status, messages, error, clearError: () => setError(null) };
 }

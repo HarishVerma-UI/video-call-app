@@ -2,7 +2,7 @@
   "name": "@vca/server",
   "version": "1.0.0",
   "private": true,
-  "description": "Node.js signaling server for the video call app (rooms, WebRTC signaling, chat)",
+  "description": "Node.js server for the video call app: accounts (MongoDB + JWT), rooms, WebRTC signaling, chat",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "mongodb": "^6.10.0",
     "ws": "^8.18.0"
   },
   "engines": {

@@ -1,68 +1,95 @@
-# Huddle — group video calls (React · React Native · Node.js)
+# Huddle: group video calls (React · React Native · Node.js · MongoDB)
 
 Private group video calls for up to 6 people, on **web, Android and iOS**, built
-from scratch on **WebRTC**. No paid video vendor: the Node.js server only
-introduces people to each other; audio and video flow directly between devices.
+from scratch on **WebRTC**. People sign in with an account stored in **MongoDB**
+and authenticated with **JWT**. No paid video vendor is involved: the Node.js
+server only introduces people to each other, and audio and video flow directly
+between devices.
 
-![Call with chat](docs/screenshots/call-chat.png)
+![Sign in](docs/screenshots/auth-login.png)
 
-| Lobby | 4-person call | Screen share | Phone browser |
+| Create account | Lobby | Call with chat | Phone |
 |---|---|---|---|
-| ![Lobby](docs/screenshots/lobby.png) | ![Grid](docs/screenshots/call-grid.png) | ![Share](docs/screenshots/screen-share.png) | ![Mobile web](docs/screenshots/mobile-web.png) |
+| ![Register](docs/screenshots/auth-register.png) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
 
 ## Features
 
-- **Group calls** up to 6 people (adaptive grid, configurable cap)
-- **Lobby** with camera preview, mic/camera toggles, and a live "N people in this room" check
-- **Room codes and invite links** (`/r/swift-comet-482`)
-- **Mute / camera off** shown to everyone, with avatars when the camera is off
-- **Speaking indicator** (glowing ring) on web
-- **Screen sharing** on desktop web, with an automatic spotlight layout
-- **Live chat** with an unread badge
-- **Mobile app**: front/back camera flip and a native share sheet for invites
-- **Resilient**: works without a camera (audio-only fallback), reconnects automatically, retries failed connections (ICE restart), validates every message on the server, limits chat floods
+**Accounts**
+- Sign in / create account page with an animated "constellation" of participants, a sliding Sign in / Create account switch, floating labels, a show-password toggle, a Caps Lock warning and a live password-strength meter
+- Accounts in **MongoDB** (unique, case-insensitive email) with **scrypt**-hashed passwords
+- **JWT** sessions (7 days by default), sent on every API call and on joining a call. Your name in a call comes from your account and can't be spoofed.
+- Login rate limiting, identical errors for "wrong password" and "no such account" (so people can't probe which emails are registered), invite links that survive sign-in
+- Web keeps the session in localStorage. Mobile keeps it in the **OS keychain/keystore** (expo-secure-store).
+
+**Calls**
+- Group calls up to 6 people, adaptive grid, speaking indicator
+- Lobby with camera preview, mic/camera toggles, and a live "N people in this room" check
+- Room codes and invite links (`/r/swift-comet-482`)
+- Mute / camera-off shown to everyone, with avatars when the camera is off
+- Screen sharing (desktop web) with a spotlight layout, live chat with an unread badge
+- Mobile: front/back camera flip and a native share sheet for invites
+- Recovers on its own: automatic reconnect, retrying failed connections (ICE restart), audio-only fallback
 
 ## Project layout
 
 ```
 video-call-app/
-├── shared/   @vca/shared  — signaling protocol + CallClient (the WebRTC engine used by web AND mobile)
-├── server/   @vca/server  — Node.js + ws: rooms, signaling relay, chat, REST, serves the web build
+├── shared/   @vca/shared  — protocol, CallClient (WebRTC engine) and API client, used by web AND mobile
+├── server/   @vca/server  — Node.js: auth (JWT), MongoDB users, rooms, WebSocket signaling, chat
 ├── web/      @vca/web     — React 19 + Vite + TypeScript
 ├── mobile/   @vca/mobile  — React Native (Expo dev build) + react-native-webrtc
+├── docker-compose.yml     — local MongoDB
 └── docs/                  — architecture, mockups, screenshots
 ```
 
-See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for diagrams of how it all fits together.
+See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for diagrams of the system, the sign-in flow and the call flow.
 
 ## Quick start (web)
 
-Requires **Node.js 20+**.
+Requires **Node.js 20+**. For MongoDB, use Docker or a free MongoDB Atlas cluster.
 
 ```bash
 npm install
+npm run db            # starts MongoDB in Docker on localhost:27017
+```
+
+Create `server/.env` (copy `server/.env.example`) and set:
+
+```bash
+MONGODB_URI=mongodb://localhost:27017
+JWT_SECRET=<paste output of: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))">
+```
+
+Then:
+
+```bash
 npm run dev
 ```
 
-- Web app: **http://localhost:5173** (Vite, hot reload)
-- Server: **http://localhost:3001** (WebSocket at `/ws`)
+- Web app: **http://localhost:5173**. Create an account, then start a call.
+- Server: **http://localhost:3001** (`/health` shows whether MongoDB is connected).
 
-Open the web app in two browser windows (or two devices on your Wi-Fi), enter the
-same room code, and join.
+Open a second browser (or a private window), create another account, and join
+the same room code.
 
-> **Testing from another device on your network:** camera and mic only work on
-> `https://` or `localhost`. Phone browsers reaching `http://192.168.x.x:5173`
-> will join audio/video-less. Use the mobile app, or put the site behind HTTPS
-> (Step 2).
+> **No MongoDB yet?** Leave `MONGODB_URI` empty and the dev server runs with a
+> temporary in-memory store. It prints a warning, and accounts disappear when
+> the server restarts. Production refuses to start without MongoDB and a real
+> `JWT_SECRET`.
 
-### Production build
+> **Camera from another device:** browsers only allow camera/mic on `https://`
+> or `localhost`. Use the mobile app, or put the site behind HTTPS (Step 2).
+
+### Production
 
 ```bash
-npm run build      # builds web/dist
-npm start          # Node serves the web app + WebSocket on :3001
+npm run build                         # builds web/dist
+NODE_ENV=production MONGODB_URI=... JWT_SECRET=... npm start
 ```
+
+The Node server serves the web app, the API and the WebSocket on one port.
 
 ## Mobile app (Android & iOS)
 
@@ -77,20 +104,33 @@ cp .env.example .env           # set EXPO_PUBLIC_SIGNALING_URL to your computer'
 npx expo run:android           # or: npx expo run:ios   (needs Android Studio / Xcode)
 ```
 
-Then keep `npm run dev:server` running on your computer. Phone and computer must
-be on the same Wi-Fi, and the server prints the address to use. Use a **real
-device**: emulators/simulators have no real camera.
+Keep `npm run dev:server` running on your computer. Phone and computer must be
+on the same Wi-Fi, and the server prints the address to use. Use a **real
+device**: emulators/simulators have no real camera. No Android Studio or Xcode?
+Build in the cloud: `npx eas build --profile development --platform android`.
 
-No Android Studio or Xcode? Build in the cloud with EAS:
-`npx eas build --profile development --platform android`.
+## API
+
+| Method | Path | Auth | Body → Response |
+|---|---|---|---|
+| POST | `/api/auth/register` | — | `{ name, email, password }` → `201 { user, token, expiresAt }` |
+| POST | `/api/auth/login` | — | `{ email, password }` → `200 { user, token, expiresAt }` |
+| GET | `/api/auth/me` | Bearer | → `{ user }` |
+| GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, maxPeers, full }` |
+| GET | `/health` | — | → `{ ok, db, store, rooms, participants }` |
+| WS | `/ws` | token in `join` | signaling, see ARCHITECTURE.md |
+
+Errors are `{ error, code?, fields? }`. `fields` holds per-field messages for
+forms (e.g. `{ email: "Already registered…" }`).
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | server + web with hot reload |
+| `npm run db` | start MongoDB in Docker |
 | `npm run dev:server` / `dev:web` / `dev:mobile` | one at a time |
-| `npm test` | server integration tests (Node test runner) |
+| `npm test` | server tests (auth, JWT, passwords, MongoDB store, signaling) |
 | `npm run build` | production web build |
 | `npm start` | production server (serves `web/dist`) |
 
@@ -98,22 +138,30 @@ No Android Studio or Xcode? Build in the cloud with EAS:
 
 | Where | Variable | Default |
 |---|---|---|
-| server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `../web/dist` |
-| web | `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same host `/ws`, Google STUN |
+| server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
+| server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
+| server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `false`, `../web/dist` |
+| web | `VITE_API_URL`, `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same origin, same host `/ws`, Google STUN |
 | mobile | `EXPO_PUBLIC_SIGNALING_URL`, `EXPO_PUBLIC_ICE_SERVERS` | — (set your LAN IP), Google STUN |
 
 Each folder has a `.env.example`.
 
 ## What's tested
 
-- **Server**: 9 integration tests covering joining, targeted signal relay, room cap, leave, chat, media state, input validation, chat throttling and `/health`.
-- **Web, end to end**: 3 real Chromium users with fake cameras join one room and get live audio and video from each other. The test also checks mute, camera off/on, chat and the unread badge, screen share with the spotlight layout, leaving, and the "room is full" message for a 7th person.
-- **Mobile**: code is written against `react-native-webrtc` and syntax-checked. It still needs a first run on a real device.
+- **Server (23 tests):**
+  - JWT: tampering, expiry, wrong key or audience, and the `alg: none` attack are all rejected.
+  - Passwords: hashes are salted and verify correctly.
+  - Sign-up and sign-in: field validation, duplicate emails (any letter case), the same error for wrong password and unknown email, rate limiting, and forged or orphaned tokens.
+  - MongoDB user store: checked against a fake collection. Set `MONGODB_URI` to run the same test against a real database.
+  - Calls: a token is required to join and the name can't be spoofed. Room cap, signal relay, chat and mute state all work.
+- **Web, end to end in Chromium (18 checks):** sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and a live video call between two signed-in accounts.
+- **Mobile:** written against `react-native-webrtc` and `expo-secure-store`, and syntax-checked. It still needs a first run on a real device.
 
 ## Roadmap
 
 - [x] Step 1: 1-to-1 web call
-- [x] **Full app**: React web + React Native mobile + Node server, group calls (mesh, ≤6), chat, screen share
+- [x] Full app: React web + React Native mobile + Node server, group calls, chat, screen share
+- [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
 - [ ] **Step 2**: TURN server (coturn) + HTTPS/WSS, so calls work across any network
+- [ ] Forgot-password email, profile editing, refresh tokens
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)
-- [ ] **Step 4**: accounts, scheduled rooms, push notifications for incoming calls

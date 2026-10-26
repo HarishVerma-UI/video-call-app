@@ -1,78 +1,20 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import WebSocket from 'ws';
-import { createApp } from '../src/app.js';
+import { api, media, registerUser, startTestApp, wsClient } from './helpers.js';
 
-const config = {
-  port: 0,
-  host: '127.0.0.1',
-  maxPeersPerRoom: 3,
-  webDist: '/nonexistent',
-  allowedOrigins: ['*'],
-  heartbeatMs: 60000,
-  maxPayloadBytes: 64 * 1024,
-};
-
-let app;
-let base;
+let t;
+const people = {};
 
 before(async () => {
-  app = createApp(config);
-  const addr = await app.listen(0, '127.0.0.1');
-  base = `127.0.0.1:${addr.port}`;
+  t = await startTestApp();
+  for (const n of ['Asha', 'Bala', 'Chen', 'Dev']) people[n] = await registerUser(t.base, n);
 });
 after(async () => {
-  await app.close();
+  await t.app.close();
 });
 
-/** A test client that records every message and lets us wait for specific ones. */
-function client() {
-  const ws = new WebSocket(`ws://${base}/ws`);
-  const inbox = [];
-  const waiters = [];
-  ws.on('message', (raw) => {
-    const msg = JSON.parse(raw.toString());
-    inbox.push(msg);
-    for (const w of [...waiters]) {
-      if (w.match(msg)) {
-        waiters.splice(waiters.indexOf(w), 1);
-        w.resolve(msg);
-      }
-    }
-  });
-  const opened = new Promise((r) => ws.once('open', r));
-  return {
-    ws,
-    inbox,
-    send: async (m) => {
-      await opened;
-      ws.send(typeof m === 'string' ? m : JSON.stringify(m));
-    },
-    next(type, pred = () => true, timeout = 2000) {
-      const found = inbox.find((m) => m.type === type && pred(m));
-      if (found) {
-        inbox.splice(inbox.indexOf(found), 1);
-        return Promise.resolve(found);
-      }
-      return new Promise((resolve, reject) => {
-        const w = {
-          match: (m) => m.type === type && pred(m),
-          resolve: (m) => {
-            clearTimeout(t);
-            inbox.splice(inbox.indexOf(m), 1);
-            resolve(m);
-          },
-        };
-        const t = setTimeout(() => reject(new Error(`timed out waiting for ${type}`)), timeout);
-        waiters.push(w);
-      });
-    },
-    close: () => ws.close(),
-  };
-}
-
-const media = { audio: true, video: true, screen: false };
-const join = (c, roomId, name) => c.send({ type: 'join', roomId, name, media });
+const client = () => wsClient(t.base);
+const join = (c, roomId, who) => c.send({ type: 'join', roomId, token: people[who].token, media });
 
 test('first joiner gets an empty peer list; later joiners see everyone', async () => {
   const a = client();
@@ -88,6 +30,7 @@ test('first joiner gets an empty peer list; later joiners see everyone', async (
   assert.equal(wb.peers.length, 1);
   assert.equal(wb.peers[0].name, 'Asha');
   assert.equal(wb.peers[0].id, wa.selfId);
+  assert.equal(wb.peers[0].userId, people.Asha.user.id);
 
   const pj = await a.next('peer-joined');
   assert.equal(pj.peer.id, wb.selfId);
@@ -96,15 +39,37 @@ test('first joiner gets an empty peer list; later joiners see everyone', async (
   b.close();
 });
 
+test('joining requires a valid token, and the name comes from the account', async () => {
+  const a = client();
+  await a.send({ type: 'join', roomId: 'secure', media });
+  assert.equal((await a.next('error')).code, 'bad-request', 'missing token');
+  await a.send({ type: 'join', roomId: 'secure', token: 'not.a.jwt', media });
+  assert.equal((await a.next('error')).code, 'unauthorized');
+  const tampered = people.Asha.token.slice(0, -2) + (people.Asha.token.endsWith('A') ? 'BB' : 'AA');
+  await a.send({ type: 'join', roomId: 'secure', token: tampered, media });
+  assert.equal((await a.next('error')).code, 'unauthorized');
+
+  // A client can't pretend to be someone else by sending a name.
+  await a.send({ type: 'join', roomId: 'secure', token: people.Chen.token, name: 'Mallory', media });
+  const w = await a.next('welcome');
+  const b = client();
+  await join(b, 'secure', 'Dev');
+  const wb = await b.next('welcome');
+  assert.equal(wb.peers[0].name, 'Chen');
+  assert.equal(w.roomId, 'secure');
+  a.close();
+  b.close();
+});
+
 test('signals are delivered only to the addressed peer', async () => {
   const a = client();
   const b = client();
   const c = client();
-  await join(a, 'room-2', 'A');
+  await join(a, 'room-2', 'Asha');
   const wa = await a.next('welcome');
-  await join(b, 'room-2', 'B');
+  await join(b, 'room-2', 'Bala');
   const wb = await b.next('welcome');
-  await join(c, 'room-2', 'C');
+  await join(c, 'room-2', 'Chen');
   await c.next('welcome');
 
   const offer = { sdp: { type: 'offer', sdp: 'v=0\r\nfake' } };
@@ -115,59 +80,60 @@ test('signals are delivered only to the addressed peer', async () => {
 
   const cand = { candidate: { candidate: 'candidate:1 1 udp 1 1.2.3.4 5 typ host', sdpMid: '0', sdpMLineIndex: 0 } };
   await a.send({ type: 'signal', to: wb.selfId, data: cand });
-  const gotCand = await b.next('signal');
-  assert.deepEqual(gotCand.data, cand);
+  assert.deepEqual((await b.next('signal')).data, cand);
 
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(c.inbox.filter((m) => m.type === 'signal').length, 0, 'C must not see A↔B signals');
-  a.close();
-  b.close();
-  c.close();
+  [a, b, c].forEach((x) => x.close());
 });
 
 test('room cap is enforced', async () => {
   const cs = [client(), client(), client(), client()];
-  for (const [i, c] of cs.slice(0, 3).entries()) {
-    await join(c, 'room-3', `P${i}`);
-    await c.next('welcome');
+  const who = ['Asha', 'Bala', 'Chen', 'Dev'];
+  for (let i = 0; i < 3; i++) {
+    await join(cs[i], 'room-3', who[i]);
+    await cs[i].next('welcome');
   }
-  await join(cs[3], 'room-3', 'P3');
-  const err = await cs[3].next('error');
-  assert.equal(err.code, 'room-full');
+  await join(cs[3], 'room-3', 'Dev');
+  assert.equal((await cs[3].next('error')).code, 'room-full');
   cs.forEach((c) => c.close());
 });
 
 test('leaving notifies the others and frees the slot', async () => {
   const a = client();
   const b = client();
-  await join(a, 'room-4', 'A');
+  await join(a, 'room-4', 'Asha');
   await a.next('welcome');
-  await join(b, 'room-4', 'B');
+  await join(b, 'room-4', 'Bala');
   const wb = await b.next('welcome');
   await a.next('peer-joined');
 
   b.close();
-  const left = await a.next('peer-left');
-  assert.equal(left.id, wb.selfId);
+  assert.equal((await a.next('peer-left')).id, wb.selfId);
 
-  const res = await fetch(`http://${base}/api/rooms/room-4`).then((r) => r.json());
-  assert.equal(res.participants, 1);
+  const res = await api(t.base, 'GET', '/api/rooms/room-4', null, people.Asha.token);
+  assert.equal(res.body.participants, 1);
   a.close();
+});
+
+test('room lookup requires sign-in', async () => {
+  const res = await api(t.base, 'GET', '/api/rooms/room-4');
+  assert.equal(res.status, 401);
 });
 
 test('chat is broadcast to everyone including the sender', async () => {
   const a = client();
   const b = client();
-  await join(a, 'room-5', 'A');
+  await join(a, 'room-5', 'Asha');
   await a.next('welcome');
-  await join(b, 'room-5', 'B');
+  await join(b, 'room-5', 'Bala');
   await b.next('welcome');
 
   await a.send({ type: 'chat', text: '  hello there  ' });
   const ma = await a.next('chat');
   const mb = await b.next('chat');
   assert.equal(ma.message.text, 'hello there');
-  assert.equal(mb.message.name, 'A');
+  assert.equal(mb.message.name, 'Asha');
   assert.equal(ma.message.id, mb.message.id);
   a.close();
   b.close();
@@ -176,9 +142,9 @@ test('chat is broadcast to everyone including the sender', async () => {
 test('media state changes reach the other peers', async () => {
   const a = client();
   const b = client();
-  await join(a, 'room-6', 'A');
+  await join(a, 'room-6', 'Asha');
   const wa = await a.next('welcome');
-  await join(b, 'room-6', 'B');
+  await join(b, 'room-6', 'Bala');
   await b.next('welcome');
 
   await a.send({ type: 'media-state', media: { audio: false, video: true, screen: true } });
@@ -193,23 +159,21 @@ test('invalid input is rejected without crashing the server', async () => {
   const a = client();
   await a.send('not json');
   assert.equal((await a.next('error')).code, 'bad-request');
-  await a.send({ type: 'join', roomId: '../../etc', name: 'x', media });
-  assert.equal((await a.next('error')).code, 'bad-request');
-  await a.send({ type: 'join', roomId: 'ok-room', name: '   ', media });
+  await a.send({ type: 'join', roomId: '../../etc', token: people.Asha.token, media });
   assert.equal((await a.next('error')).code, 'bad-request');
   await a.send({ type: 'chat', text: 'hi' });
   assert.equal((await a.next('error')).code, 'not-joined');
 
-  await join(a, 'ok-room', 'Fine');
+  await join(a, 'ok-room', 'Asha');
   await a.next('welcome');
-  await join(a, 'ok-room', 'Again');
+  await join(a, 'ok-room', 'Asha');
   assert.equal((await a.next('error')).code, 'already-joined');
   a.close();
 });
 
 test('chat flood is throttled', async () => {
   const a = client();
-  await join(a, 'room-7', 'A');
+  await join(a, 'room-7', 'Asha');
   await a.next('welcome');
   for (let i = 0; i < 12; i++) await a.send({ type: 'chat', text: `m${i}` });
   await new Promise((r) => setTimeout(r, 200));
@@ -217,8 +181,9 @@ test('chat flood is throttled', async () => {
   a.close();
 });
 
-test('health endpoint reports live counts', async () => {
-  const res = await fetch(`http://${base}/health`).then((r) => r.json());
-  assert.equal(res.ok, true);
-  assert.equal(typeof res.rooms, 'number');
+test('health endpoint reports store and live counts', async () => {
+  const res = await api(t.base, 'GET', '/health');
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.store, 'memory');
+  assert.equal(typeof res.body.rooms, 'number');
 });

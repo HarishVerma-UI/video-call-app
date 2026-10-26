@@ -15,7 +15,10 @@ export interface MediaState {
 
 /** A participant as described by the server. */
 export interface PeerInfo {
+  /** Connection id (one per device/tab). */
   id: string;
+  /** Account id from the database. */
+  userId: string;
   name: string;
   media: MediaState;
 }
@@ -27,7 +30,7 @@ export type SignalData =
 
 // ---- client → server -------------------------------------------------------
 export type ClientMessage =
-  | { type: 'join'; roomId: string; name: string; media: MediaState }
+  | { type: 'join'; roomId: string; token: string; media: MediaState }
   | { type: 'signal'; to: string; data: SignalData }
   | { type: 'chat'; text: string }
   | { type: 'media-state'; media: MediaState }
@@ -42,7 +45,7 @@ export interface ChatMessage {
   ts: number;
 }
 
-export type ErrorCode = 'room-full' | 'bad-request' | 'not-joined' | 'already-joined';
+export type ErrorCode = 'room-full' | 'bad-request' | 'not-joined' | 'already-joined' | 'unauthorized';
 
 export type ServerMessage =
   | { type: 'welcome'; selfId: string; roomId: string; peers: PeerInfo[]; maxPeers: number }

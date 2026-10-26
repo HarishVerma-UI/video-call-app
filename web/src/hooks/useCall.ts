@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ICE_SERVERS, SIGNALING_URL } from '../config';
 
 /** React binding for the shared CallClient: one client per mounted call. */
-export function useCall(roomId: string, name: string, localStream: MediaStream | null) {
+export function useCall(roomId: string, auth: { token: string; name: string }, localStream: MediaStream | null) {
   const clientRef = useRef<CallClient | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [status, setStatus] = useState<CallStatus>('idle');
@@ -26,7 +26,7 @@ export function useCall(roomId: string, name: string, localStream: MediaStream |
       client.on('error', setError),
     ];
     setMessages([]);
-    client.join(roomId, name, localStream);
+    client.join(roomId, auth, localStream);
     setParticipants(client.getParticipants());
 
     // Expose for debugging and automated tests.
@@ -39,7 +39,7 @@ export function useCall(roomId: string, name: string, localStream: MediaStream |
     };
     // The stream is chosen in the lobby and stays the same for the whole call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, name]);
+  }, [roomId, auth.token]);
 
   return { client: clientRef, participants, status, messages, error, clearError: () => setError(null) };
 }

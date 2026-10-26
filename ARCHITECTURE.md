@@ -1,9 +1,9 @@
-# Architecture: how WebSocket, Node.js and WebRTC work together
+# Architecture: how WebSocket, Node.js, MongoDB and WebRTC work together
 
-This document explains the moving parts of Huddle: the Node.js server, the
-WebSocket signaling protocol, the shared call engine used by both React and
-React Native, and how a group of devices ends up streaming video directly to
-each other.
+This document explains the moving parts of Huddle: accounts (MongoDB + JWT),
+the Node.js server, the WebSocket signaling protocol, the shared call engine
+used by both React and React Native, and how a group of devices ends up
+streaming video directly to each other.
 
 > **The one idea to hold onto:** the Node server is only a *matchmaker*. It helps
 > devices find each other and exchange connection details. Once they're
@@ -35,21 +35,28 @@ flowchart TB
   MHOOK --> SHARED
 
   subgraph Server["🖥️ Node.js · @vca/server"]
+    AUTH["Auth<br/>/api/auth/register · login · me<br/>JWT (HS256) · scrypt"]
     HTTP["HTTP<br/>/health · /api/rooms/:id · static web build"]
-    WSS["WebSocket /ws (ws library)<br/>validate → route"]
+    WSS["WebSocket /ws (ws library)<br/>validate → verify token → route"]
     ROOMS["rooms<br/>Map&lt;roomId, Map&lt;clientId, client&gt;&gt;"]
     WSS --- ROOMS
+    WSS -. "token → user" .-> AUTH
   end
+  DB[("🍃 MongoDB<br/>users collection")]
+  AUTH <--> DB
 
   SHARED <-->|"signaling JSON over WebSocket"| WSS
+  SHARED -.->|"HTTPS + Bearer JWT"| AUTH
   SHARED -.->|"HTTP"| HTTP
   STUN["STUN (Google) · TURN later"]
   SHARED -.->|"discover public address"| STUN
 
   classDef server fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
   classDef shared fill:#2a1f3d,stroke:#8b5cf6,color:#e6e8ec;
-  class HTTP,WSS,ROOMS server;
+  classDef db fill:#13301f,stroke:#35c47a,color:#e6e8ec;
+  class AUTH,HTTP,WSS,ROOMS server;
   class SHARED shared;
+  class DB db;
 ```
 
 And the media itself, for a 3-person call:
@@ -77,7 +84,68 @@ removes that limit.
 
 ---
 
-## 2. The shared call engine (`shared/src/CallClient.ts`)
+## 2. Accounts and sign-in (MongoDB + JWT)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Web / mobile app
+  participant S as Node server
+  participant DB as MongoDB
+
+  Note over U,DB: Create an account
+  U->>S: POST /api/auth/register { name, email, password }
+  S->>S: validate · hash password with scrypt (random salt)
+  S->>DB: insertOne({ name, email, passwordHash, createdAt })
+  DB-->>S: _id  (unique index on email → 409 if taken)
+  S->>S: sign JWT { sub: _id, name, exp: +7d }
+  S-->>U: 201 { user, token, expiresAt }
+  U->>U: save token (localStorage · iOS Keychain / Android Keystore)
+
+  Note over U,DB: Every later request
+  U->>S: GET /api/auth/me   Authorization: Bearer <JWT>
+  S->>S: verify signature, expiry, issuer, audience
+  S->>DB: findOne({ _id: sub })  (deleted users lose access)
+  S-->>U: { user }
+
+  Note over U,DB: Joining a call
+  U->>S: WS join { roomId, token, media }
+  S->>S: same token check · name taken from the account
+  S-->>U: welcome …   (or error "unauthorized" → app shows sign-in)
+```
+
+**The `users` collection**
+
+```js
+{
+  _id: ObjectId,            // becomes the JWT "sub" and PeerInfo.userId
+  name: "Asha Verma",
+  email: "asha@example.com", // stored lower-cased; unique index "email_unique"
+  passwordHash: "scrypt$16384$8$1$<salt>$<hash>",
+  createdAt: Date, updatedAt: Date, lastLoginAt: Date | null
+}
+```
+
+**Why these choices**
+
+| Decision | Reason |
+|---|---|
+| **scrypt** (Node built-in) for passwords | memory-hard like bcrypt/argon2, no native module to compile on Windows/macOS; parameters are stored with each hash so they can be raised later |
+| **JWT (HS256)** with fixed algorithm | stateless: the WebSocket can authenticate without a session store; pinning the algorithm rules out `alg: none` and algorithm-confusion attacks |
+| Token checked against MongoDB on use | a deleted account stops working immediately, not when its token expires |
+| Same error for wrong password and unknown email (plus a dummy hash check) | attackers can't discover which emails have accounts |
+| Rate limits: 10 logins / 15 min per email, 50 per IP, 20 sign-ups / hour per IP | slows password guessing; set `TRUST_PROXY=true` behind a proxy so the real IP is used |
+| Name comes from the token, not the client | nobody can join a call pretending to be someone else |
+| Mobile token in **expo-secure-store** | encrypted by the OS keychain/keystore instead of plain storage |
+
+**Known trade-offs:** there is no refresh token yet (sign in again after 7 days),
+and logging out deletes the token on the device but doesn't revoke it on the
+server. Both are on the roadmap. For revocation, add a `tokenVersion` field to
+users and include it in the JWT.
+
+---
+
+## 3. The shared call engine (`shared/src/CallClient.ts`)
 
 Both React apps use **the same** `CallClient`. The UI never touches WebRTC; it
 calls a small API and re-renders on events:
@@ -111,7 +179,7 @@ Key behaviors:
 
 ---
 
-## 3. What the Node.js server does
+## 4. What the Node.js server does
 
 `server/src/app.js` runs one Node process that does two jobs on one port (3001):
 
@@ -120,16 +188,20 @@ flowchart TD
   REQ["Incoming request on :3001"]
   REQ --> Q{"Upgrade: websocket<br/>to /ws ?"}
   Q -->|No| R{"Path"}
-  R -->|"/health"| H["JSON: uptime, rooms, participants"]
-  R -->|"/api/rooms/:id"| API["JSON: participants, full?"]
+  R -->|"/health"| H["JSON: db status, rooms, participants"]
+  R -->|"/api/auth/*"| AU["register · login · me<br/>(MongoDB + JWT)"]
+  R -->|"/api/rooms/:id"| API["JSON: participants, full?<br/>(requires JWT)"]
   R -->|"anything else"| ST["Static file from web/dist<br/>(unknown paths → index.html for /r/:room)"]
   Q -->|Yes| U["ws library completes the handshake"]
   U --> C["Client object<br/>{ id, roomId, name, media }"]
   C --> V["validate.js<br/>reject anything malformed"]
-  V --> ROUTE["signaling.js routes by type"]
+  V --> J{"join?"}
+  J -->|yes| TK["verify JWT → load user<br/>from MongoDB"]
+  J -->|no| ROUTE["signaling.js routes by type"]
+  TK --> ROUTE
 
   classDef s fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
-  class H,API,ST,U,C,V,ROUTE s;
+  class H,AU,API,ST,U,C,V,TK,ROUTE s;
 ```
 
 Node fits this job well because it is **single-threaded and event-driven**: one
@@ -140,7 +212,8 @@ Safety built into the server:
 
 | Concern | How it's handled |
 |---|---|
-| Malformed / hostile input | every message is parsed and checked in `validate.js` (types, lengths, room-id pattern) |
+| Who are you? | `join` must carry a valid JWT; the name shown to others comes from the account |
+| Malformed / hostile input | every message is parsed and checked in `validate.js` (types, lengths, room-id pattern); HTTP bodies are capped at 16 KB |
 | Huge messages | `maxPayload` 64 KB; SDP ≤ 32 KB; chat ≤ 1000 chars |
 | Chat spam | max 5 messages per 5 s per person, extras dropped |
 | Signals to the wrong person | relayed only to the `to` peer, and only within the same room |
@@ -169,7 +242,7 @@ messages are text frames containing JSON.
 
 ---
 
-## 4. Joining a group call
+## 5. Joining a group call
 
 What happens when Chen joins a room where Asha and Bala are already talking:
 
@@ -181,7 +254,7 @@ sequenceDiagram
   participant A as Asha
   participant B as Bala
 
-  C->>S: join { roomId, name, media }
+  C->>S: join { roomId, token, media }
   S-->>C: welcome { selfId, peers: [Asha, Bala], maxPeers }
   S-->>A: peer-joined { Chen }
   S-->>B: peer-joined { Chen }
@@ -213,16 +286,16 @@ broadcasts `peer-left`, and everyone closes that one peer connection.
 
 ---
 
-## 5. Server state
+## 6. Server state
 
-All state lives in memory, with no database:
+Call state lives in memory (only accounts are stored in MongoDB):
 
 ```mermaid
 flowchart LR
   ROOMS["rooms : Map"]
   ROOMS --> R1["'swift-comet-482' → Map"]
   ROOMS --> R2["'standup' → Map"]
-  R1 --> A["id-a → { name: Asha, media: {audio,video,screen} }"]
+  R1 --> A["id-a → { userId, name: Asha, media: {audio,video,screen} }"]
   R1 --> B["id-b → { name: Bala, … }"]
   R1 --> C["id-c → { name: Chen, … }"]
   R2 --> D["id-d → { name: Dev, … }"]
@@ -234,7 +307,7 @@ Redis (pub/sub) so instances can relay to each other.
 
 ---
 
-## 6. Signaling protocol
+## 7. Signaling protocol
 
 Defined once in `shared/src/protocol.ts` and validated by `server/src/validate.js`.
 
@@ -242,7 +315,7 @@ Defined once in `shared/src/protocol.ts` and validated by `server/src/validate.j
 
 | Message | Purpose |
 |---|---|
-| `{ type:"join", roomId, name, media }` | enter a room |
+| `{ type:"join", roomId, token, media }` | enter a room; `token` is your JWT |
 | `{ type:"signal", to, data }` | send `data` (SDP offer/answer or ICE candidate) to one peer |
 | `{ type:"chat", text }` | message everyone in the room |
 | `{ type:"media-state", media }` | announce mic / camera / screen-share state |
@@ -258,17 +331,30 @@ Defined once in `shared/src/protocol.ts` and validated by `server/src/validate.j
 | `{ type:"signal", from, data }` | WebRTC data from a peer |
 | `{ type:"chat", message }` | chat message (sent to the sender too, as confirmation) |
 | `{ type:"media-state", id, media }` | someone muted / turned the camera off / started sharing |
-| `{ type:"error", code, message }` | `room-full`, `bad-request`, `not-joined`, `already-joined` |
+| `{ type:"error", code, message }` | `unauthorized`, `room-full`, `bad-request`, `not-joined`, `already-joined` |
 
-`media` is `{ audio: boolean, video: boolean, screen: boolean }`.
+`media` is `{ audio: boolean, video: boolean, screen: boolean }`. A peer is
+`{ id, userId, name, media }`: `id` identifies the connection (one per tab or
+device) and `userId` identifies the account.
 
 ---
 
-## 7. UI design
+## 8. UI design
 
 The web app implements a dark **Midnight + Aurora** direction: a violet→cyan
 gradient accent, frosted-glass control dock, and a cyan ring around whoever is
-speaking. Screenshots of the real app are in [README.md](./README.md).
+speaking.
+
+The **sign-in page** pairs that with a "step into the room" scene: participant
+bubbles orbit a glowing room on two counter-rotating rings, with dashed signal
+lines flowing toward the center, a floating chat bubble and a speaking-waveform
+card. The form card has a sliding Sign in / Create account switch, floating
+labels and a live password-strength meter. All animation stops under
+`prefers-reduced-motion`.
+
+![Sign in](docs/screenshots/auth-login.png)
+
+Screenshots of the rest of the app are in [README.md](./README.md).
 
 The four design directions explored before building:
 
@@ -293,12 +379,13 @@ A portrait in-call screen with a self-view, plus a home screen with
 
 ---
 
-## 8. Known limits and what's next
+## 9. Known limits and what's next
 
 | Limit | Why | Fix |
 |---|---|---|
 | Calls can fail on strict corporate / mobile-carrier networks | only STUN is configured; direct paths are sometimes blocked | **Step 2:** TURN server (coturn) |
 | Camera/mic need HTTPS off `localhost` | browser security rule | **Step 2:** HTTPS + WSS (e.g. Caddy / nginx + Let's Encrypt) |
 | Max 6 per room | mesh upload cost grows with each person | **Step 3:** SFU (mediasoup) |
-| One server instance | room state is in memory | Redis pub/sub when scaling out |
+| One server instance | room state and rate limits are in memory | Redis pub/sub when scaling out |
+| No refresh tokens / server-side logout | JWTs are stateless | refresh tokens + `tokenVersion` on the user |
 | Mobile audio uses the OS default route | no audio-route manager yet | add `react-native-incall-manager` for speaker/earpiece/Bluetooth |

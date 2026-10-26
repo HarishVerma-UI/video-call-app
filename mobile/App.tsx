@@ -1,51 +1,84 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from './src/auth';
 import { theme } from './src/config';
+import { AuthScreen } from './src/screens/AuthScreen';
 import { CallScreen } from './src/screens/CallScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { useLocalStream } from './src/useLocalStream';
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <View style={styles.root}>
+          <Gate />
+        </View>
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function Gate() {
+  const { status } = useAuth();
+  if (status === 'checking') {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={theme.violet} size="large" />
+      </View>
+    );
+  }
+  if (status === 'signed-out') {
+    return (
+      <SafeAreaView style={{ flex: 1 }}>
+        <AuthScreen />
+      </SafeAreaView>
+    );
+  }
+  return <SignedIn />;
+}
+
+/** Camera and mic are only requested once you're signed in. */
+function SignedIn() {
+  const { user, token, logout } = useAuth();
   const media = useLocalStream();
-  const [call, setCall] = useState<{ roomId: string; name: string } | null>(null);
-  const [lastName, setLastName] = useState('');
+  const [call, setCall] = useState<{ roomId: string } | null>(null);
   const [lastRoom, setLastRoom] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  const leave = useCallback((reason?: string) => {
-    setCall(null);
-    setNotice(reason ?? 'You left the call.');
-  }, []);
+  const leave = useCallback(
+    (reason?: string, code?: string) => {
+      setCall(null);
+      if (code === 'unauthorized') void logout('Your session expired. Please sign in again.');
+      else setNotice(reason ?? 'You left the call.');
+    },
+    [logout],
+  );
 
+  if (!user || !token) return null;
+  if (call) return <CallScreen roomId={call.roomId} auth={{ token, name: user.name }} media={media} onLeave={leave} />;
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <View style={styles.root}>
-        {call ? (
-          <CallScreen roomId={call.roomId} name={call.name} media={media} onLeave={leave} />
-        ) : (
-          <SafeAreaView style={{ flex: 1 }}>
-            <HomeScreen
-              media={media}
-              initialName={lastName}
-              initialRoom={lastRoom}
-              notice={notice}
-              onJoin={(roomId, name) => {
-                setLastName(name);
-                setLastRoom(roomId);
-                setNotice(null);
-                setCall({ roomId, name });
-              }}
-            />
-          </SafeAreaView>
-        )}
-      </View>
-    </SafeAreaProvider>
+    <SafeAreaView style={{ flex: 1 }}>
+      <HomeScreen
+        media={media}
+        user={user}
+        initialRoom={lastRoom}
+        notice={notice}
+        onSignOut={() => void logout()}
+        onJoin={(roomId) => {
+          setLastRoom(roomId);
+          setNotice(null);
+          setCall({ roomId });
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

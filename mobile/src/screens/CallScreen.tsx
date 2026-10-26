@@ -10,13 +10,13 @@ import type { LocalStream } from '../useLocalStream';
 
 interface Props {
   roomId: string;
-  name: string;
+  auth: { token: string; name: string };
   media: LocalStream;
-  onLeave: (reason?: string) => void;
+  onLeave: (reason?: string, code?: string) => void;
 }
 
-export function CallScreen({ roomId, name, media, onLeave }: Props) {
-  const { client, participants, status, messages, error, clearError } = useCallClient(roomId, name, media.stream);
+export function CallScreen({ roomId, auth, media, onLeave }: Props) {
+  const { client, participants, status, messages, error, clearError } = useCallClient(roomId, auth, media.stream);
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -37,7 +37,8 @@ export function CallScreen({ roomId, name, media, onLeave }: Props) {
 
   useEffect(() => {
     if (!error) return;
-    if (error.code === 'room-full' || (error.code === 'signaling' && status === 'error')) onLeave(error.message);
+    if (error.code === 'room-full' || error.code === 'unauthorized' || (error.code === 'signaling' && status === 'error'))
+      onLeave(error.message, error.code);
     else {
       setToast(error.message);
       clearError();
