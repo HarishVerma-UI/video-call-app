@@ -2,7 +2,9 @@ import { colorFor, generateRoomId, initials, normalizeRoomId, type AuthUser } fr
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
+import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
+import { FilmPicker } from './FilmPicker';
 import { CamIcon, CamOffIcon, MicIcon, MicOffIcon, SparkIcon } from './Icons';
 
 interface Props {
@@ -67,7 +69,8 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
 
   const first = user.name.trim().split(/\s+/)[0];
   // The preview sits behind an iris: wide open with the camera on, shut when it's off.
-  const lensOpen = !media.ready ? 0.22 : media.videoOn ? 1 : 0;
+  const shutter = useShutter();
+  const lensOpen = shutter ? 0 : !media.ready ? 0.22 : media.videoOn ? 1 : 0;
 
   return (
     <div className="lobby-wrap">
@@ -77,6 +80,7 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
             <Aperture open={0.42} className="mark" />
             Huddle
           </div>
+          <FilmPicker className="lobby__films" />
           <div className="account">
             <span className="account__avatar" style={{ background: colorFor(user.id) }}>
               {initials(user.name)}

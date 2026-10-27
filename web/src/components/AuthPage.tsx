@@ -1,7 +1,9 @@
 import { ApiError, initials, passwordStrength } from '@vca/shared';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
+import { FilmPicker } from './FilmPicker';
 
 type Mode = 'login' | 'register';
 type Field = 'name' | 'email' | 'password';
@@ -25,21 +27,23 @@ function validate(mode: Mode, v: Record<Field, string>): Partial<Record<Field, s
 
 /* ---------- what you see through the lens ---------- */
 
+// Portrait colours come from the active film stock, so the lens re-tints with it.
+const mix = (a: string, pct: number, b: string) => `color-mix(in oklab, ${a} ${pct}%, ${b})`;
 const CAST = [
-  { name: 'Meera', bg: ['#FFB48F', '#E8735A'], tone: '#5B2A3A' },
-  { name: 'Arjun', bg: ['#8EE6C9', '#3E9C8C'], tone: '#163C3C' },
-  { name: 'Priya', bg: ['#FFD27A', '#E39A3B'], tone: '#4D2E14' },
-  { name: 'Dev', bg: ['#C7B6FF', '#7D63D1'], tone: '#2A1D55' },
+  { name: 'Meera', bg: ['var(--accent)', mix('var(--accent)', 70, 'var(--hot)')], tone: mix('var(--accent)', 22, 'var(--tone-base)') },
+  { name: 'Arjun', bg: ['var(--cool)', mix('var(--cool)', 62, 'black')], tone: mix('var(--cool)', 16, 'var(--tone-base)') },
+  { name: 'Priya', bg: ['var(--hot)', mix('var(--hot)', 68, 'black')], tone: mix('var(--hot)', 20, 'var(--tone-base)') },
+  { name: 'Dev', bg: ['var(--amber)', mix('var(--amber)', 66, 'var(--hot)')], tone: mix('var(--amber)', 18, 'var(--tone-base)') },
 ];
 
 function Portrait({ name, bg, tone, mine }: { name: string; bg: string[]; tone: string; mine?: boolean }) {
   return (
     <div className="portrait" style={{ background: `radial-gradient(120% 90% at 35% 25%, ${bg[0]}, ${bg[1]})` }}>
       <svg viewBox="-100 -100 200 200" className="portrait__figure" aria-hidden="true">
-        <circle cx="0" cy="-12" r="34" fill={tone} />
-        <path d="M -78 100 C -74 44 -40 30 0 30 C 40 30 74 44 78 100 Z" fill={tone} />
+        <circle cx="0" cy="-12" r="34" style={{ fill: tone }} />
+        <path d="M -78 100 C -74 44 -40 30 0 30 C 40 30 74 44 78 100 Z" style={{ fill: tone }} />
         {mine && (
-          <text x="0" y="-1" textAnchor="middle" className="portrait__initials" fill={bg[0]}>
+          <text x="0" y="-1" textAnchor="middle" className="portrait__initials" style={{ fill: mix('var(--accent)', 45, 'white') }}>
             {initials(name)}
           </text>
         )}
@@ -66,7 +70,8 @@ function LensScene({ myName }: { myName: string }) {
     return () => clearInterval(t);
   }, [myName]);
 
-  if (myName.trim()) return <Portrait name={myName} bg={['#FFB48F', '#FF6A55']} tone="#2A1D45" mine />;
+  if (myName.trim())
+    return <Portrait name={myName} bg={['var(--accent)', mix('var(--accent)', 55, 'var(--hot)')]} tone="rgb(var(--overlay-rgb))" mine />;
   return (
     <>
       {CAST.map((c, n) => (
@@ -235,7 +240,9 @@ export function AuthPage() {
     }
   };
 
-  const open = LENS_OPEN[lens];
+  // Changing film stock closes the shutter while the colours swap.
+  const shutter = useShutter();
+  const open = shutter ? 0 : LENS_OPEN[lens];
   const copy = COPY[mode];
 
   return (
@@ -246,6 +253,7 @@ export function AuthPage() {
         <Aperture open={0.42} className="mark" />
         <span>Huddle</span>
       </header>
+      <FilmPicker className="studio__films" />
 
       <div className="lens" data-lens={lens}>
         <FStopRing open={open} />

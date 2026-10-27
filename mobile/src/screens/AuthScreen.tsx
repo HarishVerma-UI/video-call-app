@@ -26,10 +26,10 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const LENS_OPEN: Record<Lens, number> = { shut: 0, open: 0.62, peek: 0.1, blink: 0, wide: 1 };
 
 const CAST = [
-  { name: 'Meera', bg: '#F09372', tone: '#5B2A3A' },
-  { name: 'Arjun', bg: '#6CC7B0', tone: '#163C3C' },
-  { name: 'Priya', bg: '#F2B85A', tone: '#4D2E14' },
-  { name: 'Dev', bg: '#A893EE', tone: '#2A1D55' },
+  { name: 'Meera', bg: '#ffc93c', tone: '#3d2a05' },
+  { name: 'Arjun', bg: '#5ce1e6', tone: '#0d3a40' },
+  { name: 'Priya', bg: '#f2542d', tone: '#4a130a' },
+  { name: 'Dev', bg: '#ffe08a', tone: '#3d3305' },
 ];
 
 const COPY = {
@@ -68,7 +68,7 @@ function LensScene({ size, myName }: { size: number; myName: string }) {
     return () => clearInterval(t);
   }, [myName, fade]);
 
-  if (myName.trim()) return <Portrait size={size} name={myName} bg="#F7A07F" tone="#2A1D45" mine />;
+  if (myName.trim()) return <Portrait size={size} name={myName} bg={theme.accent} tone="#071824" mine />;
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { opacity: fade }]}>
       <Portrait size={size} {...CAST[i]} />
@@ -302,11 +302,11 @@ const styles = StyleSheet.create({
   markDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: theme.peach },
   brandText: { color: theme.text, fontSize: 20, fontFamily: fonts.bold },
   lensWrap: { alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 10 },
-  glow: { position: 'absolute', backgroundColor: 'rgba(255,180,143,0.10)' },
-  barrel: { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg2, borderWidth: 1, borderColor: 'rgba(255,180,143,0.18)' },
+  glow: { position: 'absolute', backgroundColor: 'rgba(255,201,60,0.10)' },
+  barrel: { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg2, borderWidth: 1, borderColor: 'rgba(255,201,60,0.2)' },
   caption: { color: theme.muted, fontSize: 13, marginTop: 10, fontFamily: fonts.regular },
   portraitInitials: { fontFamily: fonts.bold },
-  tag: { position: 'absolute', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: 'rgba(21,15,38,0.72)' },
+  tag: { position: 'absolute', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: theme.overlay },
   tagText: { color: theme.text, fontSize: 13, fontFamily: fonts.bold },
   title: { color: theme.text, fontSize: 44, lineHeight: 44, letterSpacing: -2, fontFamily: fonts.bold },
   sub: { color: theme.muted, fontSize: 16, lineHeight: 23, marginTop: 10, marginBottom: 22, fontFamily: fonts.regular },
@@ -314,17 +314,17 @@ const styles = StyleSheet.create({
   switchBtn: { paddingBottom: 0 },
   switchText: { color: theme.muted, fontSize: 16, paddingBottom: 10, fontFamily: fonts.bold },
   switchBar: { height: 3, borderRadius: 3, marginBottom: -1, backgroundColor: 'transparent' },
-  message: { color: '#ffd0c8', fontSize: 15, lineHeight: 21, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: theme.coral, marginBottom: 18, fontFamily: fonts.regular },
+  message: { color: '#ffb4a2', fontSize: 15, lineHeight: 21, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: theme.coral, marginBottom: 18, fontFamily: fonts.regular },
   lineLabel: { color: theme.muted, fontSize: 14, marginBottom: 4, fontFamily: fonts.regular },
   lineRow: { flexDirection: 'row', alignItems: 'center' },
   lineInput: { flex: 1, color: theme.text, fontSize: 20, paddingVertical: 8, fontFamily: fonts.regular },
   toggle: { color: theme.muted, fontSize: 14, paddingLeft: 12, fontFamily: fonts.bold },
-  rule: { height: 1, backgroundColor: 'rgba(246,239,231,0.22)' },
+  rule: { height: 1, backgroundColor: 'rgba(253,246,227,0.22)' },
   ruleFocus: { height: 2, backgroundColor: theme.peach },
   ruleError: { backgroundColor: theme.coral },
-  error: { color: '#ffb1a5', fontSize: 14, marginTop: 6, fontFamily: fonts.regular },
+  error: { color: '#ffb4a2', fontSize: 14, marginTop: 6, fontFamily: fonts.regular },
   meter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  meterTrack: { flex: 1, height: 4, borderRadius: 4, backgroundColor: 'rgba(246,239,231,0.12)', overflow: 'hidden' },
+  meterTrack: { flex: 1, height: 4, borderRadius: 4, backgroundColor: 'rgba(253,246,227,0.12)', overflow: 'hidden' },
   meterLabel: { color: theme.muted, fontSize: 13, minWidth: 70, textAlign: 'right', fontFamily: fonts.bold },
   shutter: {
     marginTop: 28,

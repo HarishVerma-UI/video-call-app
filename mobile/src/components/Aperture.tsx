@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { theme } from '../config';
 
 /**
  * Six-blade camera iris, the same idea as the web version, built from plain
@@ -49,7 +50,7 @@ export function Aperture({ size, open, children }: { size: number; open: number;
                 top: R - 2.4 * R,
                 width: 2.8 * R,
                 height: 2.4 * R,
-                backgroundColor: i % 2 ? '#33275a' : '#2c2150',
+                backgroundColor: i % 2 ? theme.bladeA : theme.bladeB,
                 transform: [{ translateY: slide }],
               },
             ]}
@@ -62,13 +63,13 @@ export function Aperture({ size, open, children }: { size: number; open: number;
 }
 
 const styles = StyleSheet.create({
-  lens: { overflow: 'hidden', backgroundColor: '#120c20' },
+  lens: { overflow: 'hidden', backgroundColor: '#081c28' },
   blade: {
     position: 'absolute',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,180,143,0.55)',
+    borderBottomColor: 'rgba(255,201,60,0.55)',
     borderLeftWidth: 1,
     borderLeftColor: 'rgba(8,4,16,0.45)',
   },
-  rim: { borderWidth: 1.5, borderColor: 'rgba(255,180,143,0.55)' },
+  rim: { borderWidth: 1.5, borderColor: 'rgba(255,201,60,0.55)' },
 });

@@ -6,11 +6,11 @@ and authenticated with **JWT**. No paid video vendor is involved: the Node.js
 server only introduces people to each other, and audio and video flow directly
 between devices.
 
-![Sign in](docs/screenshots/auth-login.png)
+![Sign in](docs/screenshots/auth-login.jpg)
 
 | Your name appears in the lens | Lens shuts for your password | Lobby | Call with chat | Phone |
 |---|---|---|---|---|
-| ![Register](docs/screenshots/auth-register.png) | ![Password](docs/screenshots/auth-password.png) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
+| ![Register](docs/screenshots/auth-register.jpg) | ![Password](docs/screenshots/auth-password.jpg) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
 
 ## Design: "the lens opens"
 
@@ -27,9 +27,30 @@ respond to what you do instead of looping for decoration:
 | sign in | opens wide, and the lobby appears through an expanding circle |
 | turn your camera off in the lobby | closes over your preview |
 | are in a call with your camera off | your tile shows a shut iris behind your initials |
+| pick a different film stock | closes, the colours swap behind it, and it opens again |
 
-**Palette ("darkroom"):** aubergine `#1C1530`, lens-flare peach `#FFB48F`,
-signal coral `#FF6A55`, glass mint `#8EE6C9`, warm paper `#F6EFE7`.
+### Film stocks: four colour palettes
+
+The colours come from four palettes named after real photographic processes.
+Pick one with the round swatches in the top corner of the sign-in page or the
+lobby header (arrow keys work too). Your choice is remembered on that device.
+
+| Film | Feel | Colours |
+|---|---|---|
+| **Kodachrome** (default) | warm, confident 1970s colour film | teal-blue `#0F2C3F` · sunflower `#FFC93C` · tomato `#F2542D` · aqua `#5CE1E6` · cream `#FDF6E3` |
+| **Cyanotype** (light) | a blueprint print | paper `#EEF2FB` · Prussian blue `#1F4FD1` · ink navy `#112250` |
+| **Velvia** | bold, saturated slide film | forest `#0E2A20` · magenta `#FF3D8B` · lime `#B6F24A` · orange `#FF7A1A` |
+| **Darkroom** | moody | aubergine `#1C1530` · lens-flare peach `#FFB48F` · coral `#FF6A55` · mint `#8EE6C9` |
+
+![All four film stocks](docs/screenshots/films-sign-in.jpg)
+![A call in each film stock](docs/screenshots/films-call.png)
+
+Every palette passes WCAG AA contrast for body text, muted text, button labels
+and error messages (checked numerically, from 4.4:1 up to 15:1).
+Each palette defines the same colour roles (background, surface, text,
+accent, "hot" for live and leave, "cool" for connected and speaking, and so on)
+in `web/src/styles.css`, so a new film stock is one CSS block.
+
 **Type:** TeX Gyre Adventor, a free revival of the geometric face used in 1970s
 broadcast design, shipped with the app under the GUST Font License (`web/public/fonts`).
 All motion stops when the system "reduce motion" setting is on.

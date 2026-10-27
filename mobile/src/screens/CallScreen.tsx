@@ -143,8 +143,8 @@ const styles = StyleSheet.create({
   invite: { color: theme.text, fontFamily: fonts.bold, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
   grid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 8, alignContent: 'flex-start' },
   waiting: { position: 'absolute', left: 16, right: 16, bottom: 120, padding: 14, borderRadius: 14, backgroundColor: 'rgba(17,22,34,0.92)', borderWidth: 1, borderColor: theme.border },
-  waitingText: { fontFamily: fonts.regular, color: '#cdd3de', fontSize: 13, textAlign: 'center' },
+  waitingText: { fontFamily: fonts.regular, color: theme.text, fontSize: 13, textAlign: 'center' },
   dock: { flexDirection: 'row', justifyContent: 'center', gap: 10, paddingTop: 12, paddingHorizontal: 12 },
-  toast: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#f8fafc' },
+  toast: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: theme.text },
   toastText: { fontFamily: fonts.regular, color: theme.bg },
 });

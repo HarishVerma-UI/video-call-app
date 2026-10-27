@@ -23,25 +23,32 @@ export const ICE_SERVERS: RTCIceServer[] = (() => {
   }
 })();
 
-// "Darkroom" palette, shared with the web app.
+// "Kodachrome" film stock, the default palette shared with the web app
+// (the web app also offers Cyanotype, Velvia and Darkroom).
 export const theme = {
-  bg: '#1c1530',
-  bg2: '#150f26',
-  surface: '#2a2046',
-  surface2: '#362a5a',
-  border: 'rgba(246,239,231,0.10)',
-  text: '#f6efe7',
-  muted: '#b4a9c9',
-  peach: '#ffb48f',
-  coral: '#ff6a55',
-  mint: '#8ee6c9',
-  amber: '#ffd27a',
-  ink: '#1c1530',
-  // legacy names used by older components
-  violet: '#ffb48f',
-  cyan: '#8ee6c9',
-  green: '#8ee6c9',
-  red: '#ff6a55',
+  bg: '#0f2c3f',
+  bg2: '#0b2232',
+  surface: '#17405a',
+  surface2: '#1f5170',
+  border: 'rgba(253,246,227,0.11)',
+  text: '#fdf6e3',
+  muted: '#a9c4cf',
+  accent: '#ffc93c',
+  hot: '#f2542d',
+  cool: '#5ce1e6',
+  amber: '#ffe08a',
+  ink: '#0f2c3f',
+  overlay: 'rgba(7,24,36,0.68)',
+  bladeA: '#215b7c',
+  bladeB: '#163f58',
+  // role aliases used across components
+  peach: '#ffc93c',
+  coral: '#f2542d',
+  mint: '#5ce1e6',
+  violet: '#ffc93c',
+  cyan: '#5ce1e6',
+  green: '#5ce1e6',
+  red: '#f2542d',
 };
 
 /** TeX Gyre Adventor, bundled in assets/fonts and loaded in App.tsx. */

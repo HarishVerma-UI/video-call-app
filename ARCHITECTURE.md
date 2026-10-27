@@ -361,11 +361,21 @@ SVG with CSS transitions; on mobile it's plain `Animated.View`s on the native
 driver. Around the sign-in lens, an engraved aperture scale (f/1.4 to f/16)
 turns to show the current opening.
 
-Tokens: aubergine `#1C1530` / `#2A2046`, peach `#FFB48F`, coral `#FF6A55`,
-mint `#8EE6C9`, paper `#F6EFE7`; type is TeX Gyre Adventor, self-hosted.
-Everything respects `prefers-reduced-motion`.
+**Colour** comes from four "film stock" palettes (`:root[data-theme='…']` in
+`web/src/styles.css`): Kodachrome (default), Cyanotype (light), Velvia and
+Darkroom. Every palette sets the same roles, `--bg`, `--surface`, `--text`,
+`--muted`, `--accent` (+ `--accent-ink`), `--hot` (live/leave), `--cool`
+(connected/speaking), `--well` (video background) and the lens blade colours,
+plus RGB triplets for translucent tints. Components never use raw colours.
 
-![Sign in](docs/screenshots/auth-login.png)
+`web/src/theme.ts` applies the saved film before first paint (no flash) and runs
+the change like a camera: `huddle:shutter-close` → swap `data-theme` inside a
+View Transition → `huddle:shutter-open`. Every lens on screen listens and blinks.
+
+Type is TeX Gyre Adventor, self-hosted. Everything respects `prefers-reduced-motion`.
+
+![Sign in](docs/screenshots/auth-login.jpg)
+![All four film stocks](docs/screenshots/films-sign-in.jpg)
 
 The four directions below were explored before the aperture concept:
 

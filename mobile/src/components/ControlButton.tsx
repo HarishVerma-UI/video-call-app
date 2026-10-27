@@ -45,8 +45,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: theme.surface2,
   },
-  off: { backgroundColor: 'rgba(244,63,94,0.22)' },
-  active: { backgroundColor: 'rgba(139,92,246,0.3)' },
+  off: { backgroundColor: 'rgba(242,84,45,0.26)' },
+  active: { backgroundColor: 'rgba(255,201,60,0.28)' },
   end: { backgroundColor: theme.red, width: 64 },
   icon: { fontSize: 22 },
   badge: {

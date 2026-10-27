@@ -72,10 +72,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 9,
-    backgroundColor: 'rgba(21,15,38,0.66)',
+    backgroundColor: theme.overlay,
   },
   nameText: { fontFamily: fonts.regular, color: theme.text, fontSize: 12 },
   muted: { fontFamily: fonts.regular, fontSize: 11 },
-  badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: 'rgba(21,15,38,0.66)' },
+  badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: theme.overlay },
   badgeText: { fontFamily: fonts.regular, color: theme.amber, fontSize: 11 },
 });
