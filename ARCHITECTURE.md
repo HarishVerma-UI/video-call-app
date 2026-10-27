@@ -361,21 +361,24 @@ SVG with CSS transitions; on mobile it's plain `Animated.View`s on the native
 driver. Around the sign-in lens, an engraved aperture scale (f/1.4 to f/16)
 turns to show the current opening.
 
-**Colour** comes from four "film stock" palettes (`:root[data-theme='…']` in
-`web/src/styles.css`): Kodachrome (default), Cyanotype (light), Velvia and
-Darkroom. Every palette sets the same roles, `--bg`, `--surface`, `--text`,
-`--muted`, `--accent` (+ `--accent-ink`), `--hot` (live/leave), `--cool`
-(connected/speaking), `--well` (video background) and the lens blade colours,
-plus RGB triplets for translucent tints. Components never use raw colours.
+**Colour** has two modes, `:root[data-theme='dark' | 'light']` in
+`web/src/styles.css`, built from one palette (teal-blue, sunflower, tomato).
+Both set the same roles: `--bg`, `--surface`, `--text`, `--muted`, `--accent`
+(+ `--accent-ink`), `--accent-text` (the accent when used for text: yellow in
+dark, tomato in light), `--hot` (live/leave), `--cool` (connected/speaking),
+`--well` (video background), `--on-overlay` (text on video) and the lens blade
+colours, plus RGB triplets for translucent tints. Components never use raw colours.
 
-`web/src/theme.ts` applies the saved film before first paint (no flash) and runs
-the change like a camera: `huddle:shutter-close` → swap `data-theme` inside a
-View Transition → `huddle:shutter-open`. Every lens on screen listens and blinks.
+An inline script in `index.html` picks the mode before first paint (saved
+choice, else the device setting). `web/src/theme.ts` keeps following the device
+until the person chooses, and runs a switch like a camera:
+`huddle:shutter-close` → swap `data-theme` inside a View Transition →
+`huddle:shutter-open`. Every lens on screen listens and blinks. Mobile reads the
+phone's setting at launch (`Appearance`) and uses the same two palettes.
 
 Type is TeX Gyre Adventor, self-hosted. Everything respects `prefers-reduced-motion`.
 
-![Sign in](docs/screenshots/auth-login.jpg)
-![All four film stocks](docs/screenshots/films-sign-in.jpg)
+![Dark and light](docs/screenshots/dark-and-light.jpg)
 
 The four directions below were explored before the aperture concept:
 

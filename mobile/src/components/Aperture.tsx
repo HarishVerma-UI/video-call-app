@@ -63,7 +63,7 @@ export function Aperture({ size, open, children }: { size: number; open: number;
 }
 
 const styles = StyleSheet.create({
-  lens: { overflow: 'hidden', backgroundColor: '#081c28' },
+  lens: { overflow: 'hidden', backgroundColor: theme.well },
   blade: {
     position: 'absolute',
     borderBottomWidth: 1,

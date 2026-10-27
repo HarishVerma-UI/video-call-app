@@ -28,14 +28,13 @@
   --border: rgba(var(--text-rgb), 0.11);
 }
 
-/* ---- Film stocks: pick one with the swatches; Kodachrome is the default. ---- */
-/* Kodachrome — teal-blue, sunflower yellow, tomato red, aqua. */
+/* ---- Two modes, one identity: teal-blue, sunflower yellow and tomato red. ----
+   Dark is the default; light is the same palette on cool white paper. The
+   choice follows the device setting until the person picks one. */
+/* Dark */
 :root,
-:root[data-theme='kodachrome'] {
+:root[data-theme='dark'] {
   color-scheme: dark;
-  --on-overlay: #fdf6e3;
-  --avatar-ink: #0f2c3f;
-  --tone-base: black;
   --bg: #0f2c3f;
   --bg-2: #0b2232;
   --surface: #17405a;
@@ -44,6 +43,7 @@
   --text: #fdf6e3;
   --muted: #a9c4cf;
   --accent: #ffc93c;
+  --accent-text: #ffc93c;
   --accent-hover: #ffd766;
   --accent-ink: #0f2c3f;
   --hot: #f2542d;
@@ -53,8 +53,12 @@
   --cool: #5ce1e6;
   --amber: #ffe08a;
   --well: #081c28;
+  --on-overlay: #fdf6e3;
+  --avatar-ink: #0f2c3f;
+  --tone-base: black;
   --blade-a: #215b7c;
   --blade-b: #0a2333;
+  --grain: 0.07;
   --text-rgb: 253, 246, 227;
   --muted-rgb: 169, 196, 207;
   --accent-rgb: 255, 201, 60;
@@ -69,121 +73,45 @@
   --shadow-strength: 0.55;
 }
 
-/* Cyanotype — Prussian-blue ink on cool white paper (light theme). */
-:root[data-theme='cyanotype'] {
+/* Light */
+:root[data-theme='light'] {
   color-scheme: light;
-  --on-overlay: #ffffff;
-  --avatar-ink: #112250;
-  --tone-base: #f4f7ff;
-  --bg: #eef2fb;
+  --bg: #f3f7f8;
   --bg-2: #ffffff;
   --surface: #ffffff;
-  --surface-2: #e3e9f7;
-  --surface-3: #d3ddf3;
-  --text: #112250;
-  --muted: #526285;
-  --accent: #1f4fd1;
-  --accent-hover: #2c5de3;
-  --accent-ink: #ffffff;
-  --hot: #d93b30;
-  --hot-hover: #e8493e;
-  --hot-soft: #b3261e;
+  --surface-2: #e4edf0;
+  --surface-3: #d3e1e6;
+  --text: #0f2c3f;
+  --muted: #4d6876;
+  --accent: #ffc93c;
+  --accent-text: #c2401c;
+  --accent-hover: #ffd45e;
+  --accent-ink: #0f2c3f;
+  --hot: #d9431f;
+  --hot-hover: #e8532e;
+  --hot-soft: #b3321a;
   --hot-ink: #ffffff;
-  --cool: #087f63;
+  --cool: #08808a;
   --amber: #8a5a00;
-  --well: #0c1a40;
-  --blade-a: #1b347a;
-  --blade-b: #0c1a40;
-  --text-rgb: 17, 34, 80;
-  --muted-rgb: 82, 98, 133;
-  --accent-rgb: 31, 79, 209;
-  --hot-rgb: 217, 59, 48;
-  --cool-rgb: 8, 127, 99;
+  --well: #0f2c3f;
+  --on-overlay: #ffffff;
+  --avatar-ink: #0f2c3f;
+  --tone-base: black;
+  --blade-a: #215b7c;
+  --blade-b: #0f2c3f;
+  --grain: 0.05;
+  --text-rgb: 15, 44, 63;
+  --muted-rgb: 77, 104, 118;
+  --accent-rgb: 255, 201, 60;
+  --hot-rgb: 217, 67, 31;
+  --cool-rgb: 8, 128, 138;
   --amber-rgb: 138, 90, 0;
   --surface-rgb: 255, 255, 255;
-  --overlay-rgb: 12, 26, 64;
-  --shadow-rgb: 27, 44, 94;
-  --glow-rgb: 31, 79, 209;
-  --glow2-rgb: 122, 162, 255;
-  --shadow-strength: 0.18;
-}
-
-/* Velvia — deep forest, magenta, lime: saturated slide film. */
-:root[data-theme='velvia'] {
-  color-scheme: dark;
-  --on-overlay: #f3fbe9;
-  --avatar-ink: #0e2a20;
-  --tone-base: black;
-  --bg: #0e2a20;
-  --bg-2: #0a2018;
-  --surface: #15392c;
-  --surface-2: #1d4a3a;
-  --surface-3: #285c49;
-  --text: #f3fbe9;
-  --muted: #a7c4b2;
-  --accent: #ff3d8b;
-  --accent-hover: #ff5c9f;
-  --accent-ink: #2a0716;
-  --hot: #ff7a1a;
-  --hot-hover: #ff8f3d;
-  --hot-soft: #ffb27a;
-  --hot-ink: #2a0716;
-  --cool: #b6f24a;
-  --amber: #ffd23f;
-  --well: #071a13;
-  --blade-a: #246b51;
-  --blade-b: #082018;
-  --text-rgb: 243, 251, 233;
-  --muted-rgb: 167, 196, 178;
-  --accent-rgb: 255, 61, 139;
-  --hot-rgb: 255, 122, 26;
-  --cool-rgb: 182, 242, 74;
-  --amber-rgb: 255, 210, 63;
-  --surface-rgb: 21, 57, 44;
-  --overlay-rgb: 6, 21, 15;
-  --shadow-rgb: 2, 11, 7;
-  --glow-rgb: 255, 61, 139;
-  --glow2-rgb: 182, 242, 74;
-  --shadow-strength: 0.55;
-}
-
-/* Darkroom — aubergine and lens-flare peach. */
-:root[data-theme='darkroom'] {
-  color-scheme: dark;
-  --on-overlay: #f6efe7;
-  --avatar-ink: #1c1530;
-  --tone-base: black;
-  --bg: #1c1530;
-  --bg-2: #150f26;
-  --surface: #2a2046;
-  --surface-2: #362a5a;
-  --surface-3: var(--surface-3);
-  --text: #f6efe7;
-  --muted: #b4a9c9;
-  --accent: #ffb48f;
-  --accent-hover: var(--accent-hover);
-  --accent-ink: #1c1530;
-  --hot: #ff6a55;
-  --hot-hover: var(--hot-hover);
-  --hot-soft: var(--hot-soft);
-  --hot-ink: #1c1530;
-  --cool: #8ee6c9;
-  --amber: #ffd27a;
-  --well: var(--well);
-  --blade-a: #3d2f6a;
-  --blade-b: #1d1535;
-  --text-rgb: 246, 239, 231;
-  --muted-rgb: 180, 169, 201;
-  --accent-rgb: 255, 180, 143;
-  --hot-rgb: 255, 106, 85;
-  --cool-rgb: 142, 230, 201;
-  --amber-rgb: 255, 210, 122;
-  --surface-rgb: 42, 32, 70;
-  --overlay-rgb: 21, 15, 38;
-  --shadow-rgb: 10, 6, 20;
-  --glow-rgb: 255, 180, 143;
-  --glow2-rgb: 255, 106, 85;
-  --shadow-strength: 0.55;
+  --overlay-rgb: 15, 44, 63;
+  --shadow-rgb: 15, 44, 63;
+  --glow-rgb: 255, 201, 60;
+  --glow2-rgb: 242, 84, 45;
+  --shadow-strength: 0.14;
 }
 
 
@@ -278,7 +206,7 @@ input {
   text-decoration: underline;
 }
 .grad {
-  color: var(--peach);
+  color: var(--accent-text);
 }
 
 /* ---------- lobby ---------- */
@@ -376,7 +304,7 @@ input {
   display: block;
 }
 .lobby__title span + span {
-  color: var(--peach);
+  color: var(--accent-text);
 }
 .lobby__lede {
   margin: 0 0 30px;
@@ -411,7 +339,7 @@ input {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .input-row input:focus {
-  border-color: var(--peach);
+  border-color: var(--accent-text);
   box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.16);
 }
 .input-row .ghost-btn {
@@ -595,6 +523,10 @@ input {
   transform: translate(-50%, -50%);
   opacity: 0.6;
 }
+/* On light paper, a half-transparent iris turns grey; draw it solid instead. */
+:root[data-theme='light'] .aperture.tile__iris {
+  opacity: 1;
+}
 .aperture.tile__iris .aperture__rim {
   stroke: rgba(var(--accent-rgb), 0.35);
 }
@@ -722,7 +654,7 @@ input {
 }
 .dock-btn--active {
   background: rgba(var(--accent-rgb), 0.25);
-  color: var(--peach);
+  color: var(--accent-text);
 }
 .dock-btn--end {
   width: 68px;
@@ -1047,7 +979,7 @@ input {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.07;
+  opacity: var(--grain);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .studio__brand {
@@ -1123,11 +1055,11 @@ input {
   transition: fill 0.3s;
 }
 .fring__label--on {
-  fill: var(--peach);
+  fill: var(--accent-text);
   font-weight: 700;
 }
 .fring__marker {
-  fill: var(--peach);
+  fill: var(--accent-text);
 }
 
 /* --- what the lens sees --- */
@@ -1229,7 +1161,7 @@ input {
   animation: title-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 .studio__title span + span {
-  color: var(--peach);
+  color: var(--accent-text);
   animation-delay: 0.08s;
 }
 @keyframes title-in {
@@ -1272,7 +1204,7 @@ input {
   height: 3px;
   width: 58px;
   border-radius: 3px;
-  background: var(--peach);
+  background: var(--accent-text);
   transition: transform 0.45s cubic-bezier(0.68, -0.3, 0.25, 1.3), width 0.45s;
 }
 .studio[data-mode='register'] .switch__bar {
@@ -1332,7 +1264,7 @@ input {
   color: var(--text);
   font-size: 21px;
   outline: none;
-  caret-color: var(--peach);
+  caret-color: var(--accent-text);
 }
 .line input::placeholder {
   color: rgba(var(--muted-rgb), 0.5);
@@ -1348,7 +1280,7 @@ input {
   position: absolute;
   inset: -1px 0 0;
   height: 2px;
-  background: var(--peach);
+  background: var(--accent-text);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1357,7 +1289,7 @@ input {
   transform: scaleX(1);
 }
 .line:focus-within label {
-  color: var(--peach);
+  color: var(--accent-text);
 }
 .line--error .line__rule {
   background: var(--coral);
@@ -1380,7 +1312,7 @@ input {
 }
 .line__toggle:hover,
 .line__toggle[aria-pressed='true'] {
-  color: var(--peach);
+  color: var(--accent-text);
 }
 .studio__hint {
   margin: -12px 0 0;
@@ -1472,7 +1404,7 @@ input {
 }
 
 :focus-visible {
-  outline: 2px solid var(--peach);
+  outline: 2px solid var(--accent-text);
   outline-offset: 3px;
 }
 
@@ -1532,55 +1464,56 @@ input {
 }
 
 
-/* ---------- film-stock picker ---------- */
-.films {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.films__row {
-  display: flex;
-  gap: 8px;
-  padding: 5px;
-  border-radius: 999px;
-  background: rgba(var(--surface-rgb), 0.55);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(8px);
-}
-.films__swatch {
-  width: 26px;
-  height: 26px;
+/* ---------- light / dark toggle ---------- */
+.mode {
+  width: 42px;
+  height: 42px;
   padding: 0;
   border-radius: 50%;
-  border: 0;
-  box-shadow: inset 0 0 0 1px rgba(var(--text-rgb), 0.25);
-  transition: transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1), box-shadow 0.2s;
+  border: 1px solid var(--border);
+  background: rgba(var(--surface-rgb), 0.6);
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s, transform 0.15s;
 }
-.films__swatch:hover {
-  transform: scale(1.12) rotate(-20deg);
+.mode:hover {
+  background: var(--surface-2);
 }
-.films__swatch[aria-checked='true'] {
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+.mode:active {
+  transform: scale(0.94);
 }
-.films__name {
-  min-width: 92px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--muted);
+/* Half sunflower, half teal; a half turn swaps which side is up. */
+.mode__disc {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #ffc93c 50%, #0f2c3f 50%);
+  box-shadow: 0 0 0 2px var(--text);
+  transform: rotate(0deg);
+  transition: transform 0.6s cubic-bezier(0.68, -0.4, 0.27, 1.4);
 }
-.studio__films {
+.mode[data-mode='light'] .mode__disc {
+  transform: rotate(180deg);
+}
+.studio__mode {
   position: absolute;
   top: 22px;
   right: 32px;
   z-index: 3;
-  flex-direction: row-reverse;
 }
-.studio__films .films__name {
-  text-align: right;
-}
-.lobby__top .films {
+.lobby__top .mode {
   margin-left: auto;
-  margin-right: 18px;
+  margin-right: 14px;
+}
+.room__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.room__actions .mode {
+  width: 38px;
+  height: 38px;
 }
 /* The colour swap itself, when the browser supports View Transitions. */
 ::view-transition-old(root),
@@ -1608,14 +1541,11 @@ input {
     justify-self: start;
     margin: 22px 20px 0;
   }
-  .studio__films {
+  .studio__mode {
     top: 18px;
     right: 16px;
   }
-  .films__name {
-    display: none;
-  }
-  .lobby__top .films {
+  .lobby__top .mode {
     margin-right: 8px;
   }
   .lens {

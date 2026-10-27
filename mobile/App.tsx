@@ -21,7 +21,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="light" />
+        <StatusBar style={theme.scheme === 'light' ? 'dark' : 'light'} />
         <View style={styles.root}>
           <Gate />
         </View>

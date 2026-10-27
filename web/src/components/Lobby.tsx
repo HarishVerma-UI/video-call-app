@@ -4,7 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
-import { FilmPicker } from './FilmPicker';
+import { ModeToggle } from './ModeToggle';
 import { CamIcon, CamOffIcon, MicIcon, MicOffIcon, SparkIcon } from './Icons';
 
 interface Props {
@@ -80,7 +80,7 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
             <Aperture open={0.42} className="mark" />
             Huddle
           </div>
-          <FilmPicker className="lobby__films" />
+          <ModeToggle className="lobby__mode" />
           <div className="account">
             <span className="account__avatar" style={{ background: colorFor(user.id) }}>
               {initials(user.name)}

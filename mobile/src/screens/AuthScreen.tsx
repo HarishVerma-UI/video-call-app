@@ -93,7 +93,7 @@ function Line(props: {
   const [focused, setFocused] = useState(false);
   return (
     <View>
-      <Text style={[styles.lineLabel, focused && { color: theme.peach }]}>{props.label}</Text>
+      <Text style={[styles.lineLabel, focused && { color: theme.accentText }]}>{props.label}</Text>
       <View style={styles.lineRow}>
         <TextInput
           value={props.value}
@@ -104,7 +104,7 @@ function Line(props: {
           autoCapitalize={props.keyboardType === 'email-address' || props.secure !== undefined ? 'none' : 'words'}
           autoCorrect={false}
           autoComplete={props.autoComplete}
-          selectionColor={theme.peach}
+          selectionColor={theme.accentText}
           onFocus={() => {
             setFocused(true);
             props.onFocus?.();
@@ -224,14 +224,14 @@ export function AuthScreen() {
         </View>
 
         <Text style={styles.title}>{copy.title[0]}</Text>
-        <Text style={[styles.title, { color: theme.peach }]}>{copy.title[1]}</Text>
+        <Text style={[styles.title, { color: theme.accentText }]}>{copy.title[1]}</Text>
         <Text style={styles.sub}>{copy.sub}</Text>
 
         <View style={styles.switch}>
           {(['login', 'register'] as const).map((m) => (
             <Pressable key={m} onPress={() => switchMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={styles.switchBtn}>
               <Text style={[styles.switchText, mode === m && { color: theme.text }]}>{m === 'login' ? 'Sign in' : 'Create account'}</Text>
-              <View style={[styles.switchBar, mode === m && { backgroundColor: theme.peach }]} />
+              <View style={[styles.switchBar, mode === m && { backgroundColor: theme.accentText }]} />
             </Pressable>
           ))}
         </View>
@@ -307,24 +307,24 @@ const styles = StyleSheet.create({
   caption: { color: theme.muted, fontSize: 13, marginTop: 10, fontFamily: fonts.regular },
   portraitInitials: { fontFamily: fonts.bold },
   tag: { position: 'absolute', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, backgroundColor: theme.overlay },
-  tagText: { color: theme.text, fontSize: 13, fontFamily: fonts.bold },
+  tagText: { color: theme.onOverlay, fontSize: 13, fontFamily: fonts.bold },
   title: { color: theme.text, fontSize: 44, lineHeight: 44, letterSpacing: -2, fontFamily: fonts.bold },
   sub: { color: theme.muted, fontSize: 16, lineHeight: 23, marginTop: 10, marginBottom: 22, fontFamily: fonts.regular },
   switch: { flexDirection: 'row', gap: 26, borderBottomWidth: 1, borderBottomColor: theme.border, marginBottom: 22 },
   switchBtn: { paddingBottom: 0 },
   switchText: { color: theme.muted, fontSize: 16, paddingBottom: 10, fontFamily: fonts.bold },
   switchBar: { height: 3, borderRadius: 3, marginBottom: -1, backgroundColor: 'transparent' },
-  message: { color: '#ffb4a2', fontSize: 15, lineHeight: 21, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: theme.coral, marginBottom: 18, fontFamily: fonts.regular },
+  message: { color: theme.hotSoft, fontSize: 15, lineHeight: 21, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: theme.coral, marginBottom: 18, fontFamily: fonts.regular },
   lineLabel: { color: theme.muted, fontSize: 14, marginBottom: 4, fontFamily: fonts.regular },
   lineRow: { flexDirection: 'row', alignItems: 'center' },
   lineInput: { flex: 1, color: theme.text, fontSize: 20, paddingVertical: 8, fontFamily: fonts.regular },
   toggle: { color: theme.muted, fontSize: 14, paddingLeft: 12, fontFamily: fonts.bold },
-  rule: { height: 1, backgroundColor: 'rgba(253,246,227,0.22)' },
-  ruleFocus: { height: 2, backgroundColor: theme.peach },
+  rule: { height: 1, backgroundColor: theme.border },
+  ruleFocus: { height: 2, backgroundColor: theme.accentText },
   ruleError: { backgroundColor: theme.coral },
-  error: { color: '#ffb4a2', fontSize: 14, marginTop: 6, fontFamily: fonts.regular },
+  error: { color: theme.hotSoft, fontSize: 14, marginTop: 6, fontFamily: fonts.regular },
   meter: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  meterTrack: { flex: 1, height: 4, borderRadius: 4, backgroundColor: 'rgba(253,246,227,0.12)', overflow: 'hidden' },
+  meterTrack: { flex: 1, height: 4, borderRadius: 4, backgroundColor: theme.surface2, overflow: 'hidden' },
   meterLabel: { color: theme.muted, fontSize: 13, minWidth: 70, textAlign: 'right', fontFamily: fonts.bold },
   shutter: {
     marginTop: 28,

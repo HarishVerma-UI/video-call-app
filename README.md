@@ -6,11 +6,13 @@ and authenticated with **JWT**. No paid video vendor is involved: the Node.js
 server only introduces people to each other, and audio and video flow directly
 between devices.
 
-![Sign in](docs/screenshots/auth-login.jpg)
+| Dark | Light |
+|---|---|
+| ![Sign in, dark](docs/screenshots/sign-in-dark.jpg) | ![Sign in, light](docs/screenshots/sign-in-light.jpg) |
 
 | Your name appears in the lens | Lens shuts for your password | Lobby | Call with chat | Phone |
 |---|---|---|---|---|
-| ![Register](docs/screenshots/auth-register.jpg) | ![Password](docs/screenshots/auth-password.jpg) | ![Lobby](docs/screenshots/lobby.png) | ![Call](docs/screenshots/call-chat.png) | ![Mobile](docs/screenshots/auth-mobile.png) |
+| ![Register](docs/screenshots/auth-register.jpg) | ![Password](docs/screenshots/auth-password.jpg) | ![Lobby](docs/screenshots/lobby-light.png) | ![Call](docs/screenshots/call-dark.png) | ![Phone](docs/screenshots/phone-light.png) |
 
 ## Design: "the lens opens"
 
@@ -27,29 +29,27 @@ respond to what you do instead of looping for decoration:
 | sign in | opens wide, and the lobby appears through an expanding circle |
 | turn your camera off in the lobby | closes over your preview |
 | are in a call with your camera off | your tile shows a shut iris behind your initials |
-| pick a different film stock | closes, the colours swap behind it, and it opens again |
+| switch between light and dark | closes, the colours swap behind it, and it opens again |
 
-### Film stocks: four colour palettes
+### Light and dark mode
 
-The colours come from four palettes named after real photographic processes.
-Pick one with the round swatches in the top corner of the sign-in page or the
-lobby header (arrow keys work too). Your choice is remembered on that device.
+One identity in two modes: **teal-blue, sunflower yellow and tomato red**.
+The app follows your device's light/dark setting until you choose; the round
+half-yellow, half-teal button in the corner (sign-in page, lobby and call)
+switches mode and spins half a turn. Your choice is remembered on that device,
+and the mode is set before the page draws, so it never flashes.
 
-| Film | Feel | Colours |
-|---|---|---|
-| **Kodachrome** (default) | warm, confident 1970s colour film | teal-blue `#0F2C3F` · sunflower `#FFC93C` · tomato `#F2542D` · aqua `#5CE1E6` · cream `#FDF6E3` |
-| **Cyanotype** (light) | a blueprint print | paper `#EEF2FB` · Prussian blue `#1F4FD1` · ink navy `#112250` |
-| **Velvia** | bold, saturated slide film | forest `#0E2A20` · magenta `#FF3D8B` · lime `#B6F24A` · orange `#FF7A1A` |
-| **Darkroom** | moody | aubergine `#1C1530` · lens-flare peach `#FFB48F` · coral `#FF6A55` · mint `#8EE6C9` |
+| | Background | Text | Accent | Accent as text | Leave / live | Connected / speaking |
+|---|---|---|---|---|---|---|
+| **Dark** | teal-blue `#0F2C3F` | cream `#FDF6E3` | sunflower `#FFC93C` | sunflower `#FFC93C` | tomato `#F2542D` | aqua `#5CE1E6` |
+| **Light** | cool white `#F3F7F8` | teal-blue `#0F2C3F` | sunflower `#FFC93C` | tomato `#C2401C` | tomato `#D9431F` | teal `#08808A` |
 
-![All four film stocks](docs/screenshots/films-sign-in.jpg)
-![A call in each film stock](docs/screenshots/films-call.png)
+Yellow stays the brand colour in both modes (buttons, the lens), but on light
+paper it can't carry text, so headings, links and focus rings switch to tomato.
+Both modes pass WCAG AA contrast for body, muted, button and error text
+(checked numerically). The colour roles live in `web/src/styles.css`.
 
-Every palette passes WCAG AA contrast for body text, muted text, button labels
-and error messages (checked numerically, from 4.4:1 up to 15:1).
-Each palette defines the same colour roles (background, surface, text,
-accent, "hot" for live and leave, "cool" for connected and speaking, and so on)
-in `web/src/styles.css`, so a new film stock is one CSS block.
+![Dark and light](docs/screenshots/dark-and-light.jpg)
 
 **Type:** TeX Gyre Adventor, a free revival of the geometric face used in 1970s
 broadcast design, shipped with the app under the GUST Font License (`web/public/fonts`).
@@ -197,6 +197,7 @@ Each folder has a `.env.example`.
   - Sign-up and sign-in: field validation, duplicate emails (any letter case), the same error for wrong password and unknown email, rate limiting, and forged or orphaned tokens.
   - MongoDB user store: checked against a fake collection. Set `MONGODB_URI` to run the same test against a real database.
   - Calls: a token is required to join and the name can't be spoofed. Room cap, signal relay, chat and mute state all work.
+- **Light & dark (11 checks):** follows the device setting, no flash before the app loads, the toggle switches and blinks the shutter, the choice is remembered and then wins over device changes.
 - **Web, end to end in Chromium (24 checks):** the lens opens on load, closes for the password, reopens, blinks on a bad submit, shows your initials and opens wide on success. Also checked: sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and live video calls between signed-in accounts (with chat and screen share in a 3-person call).
 - **Mobile:** written against `react-native-webrtc` and `expo-secure-store`, and syntax-checked. It still needs a first run on a real device.
 

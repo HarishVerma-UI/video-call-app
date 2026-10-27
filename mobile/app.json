@@ -5,8 +5,8 @@
     "scheme": "huddle",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#0b0e14",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0f2c3f",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.harishverma.huddle",

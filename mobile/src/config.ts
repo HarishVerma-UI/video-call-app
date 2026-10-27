@@ -1,3 +1,4 @@
+import { Appearance } from 'react-native';
 import { DEFAULT_ICE_SERVERS } from '@vca/shared';
 
 /**
@@ -23,9 +24,10 @@ export const ICE_SERVERS: RTCIceServer[] = (() => {
   }
 })();
 
-// "Kodachrome" film stock, the default palette shared with the web app
-// (the web app also offers Cyanotype, Velvia and Darkroom).
-export const theme = {
+// Same identity as the web app: teal-blue, sunflower yellow, tomato red.
+// The palette follows the phone's light/dark setting (read when the app starts).
+const dark = {
+  scheme: 'dark' as 'dark' | 'light',
   bg: '#0f2c3f',
   bg2: '#0b2232',
   surface: '#17405a',
@@ -34,21 +36,53 @@ export const theme = {
   text: '#fdf6e3',
   muted: '#a9c4cf',
   accent: '#ffc93c',
+  accentText: '#ffc93c',
   hot: '#f2542d',
+  hotInk: '#0f2c3f',
+  hotSoft: '#ffb4a2',
   cool: '#5ce1e6',
   amber: '#ffe08a',
   ink: '#0f2c3f',
   overlay: 'rgba(7,24,36,0.68)',
+  onOverlay: '#fdf6e3',
+  well: '#081c28',
   bladeA: '#215b7c',
   bladeB: '#163f58',
+};
+const light: typeof dark = {
+  scheme: 'light',
+  bg: '#f3f7f8',
+  bg2: '#ffffff',
+  surface: '#ffffff',
+  surface2: '#e4edf0',
+  border: 'rgba(15,44,63,0.12)',
+  text: '#0f2c3f',
+  muted: '#4d6876',
+  accent: '#ffc93c',
+  accentText: '#c2401c',
+  hot: '#d9431f',
+  hotInk: '#ffffff',
+  hotSoft: '#b3321a',
+  cool: '#08808a',
+  amber: '#8a5a00',
+  ink: '#0f2c3f',
+  overlay: 'rgba(15,44,63,0.72)',
+  onOverlay: '#ffffff',
+  well: '#0f2c3f',
+  bladeA: '#215b7c',
+  bladeB: '#163f58',
+};
+const base = Appearance.getColorScheme() === 'light' ? light : dark;
+export const theme = {
+  ...base,
   // role aliases used across components
-  peach: '#ffc93c',
-  coral: '#f2542d',
-  mint: '#5ce1e6',
-  violet: '#ffc93c',
-  cyan: '#5ce1e6',
-  green: '#5ce1e6',
-  red: '#f2542d',
+  peach: base.accent,
+  coral: base.hot,
+  mint: base.cool,
+  violet: base.accent,
+  cyan: base.cool,
+  green: base.cool,
+  red: base.hot,
 };
 
 /** TeX Gyre Adventor, bundled in assets/fonts and loaded in App.tsx. */

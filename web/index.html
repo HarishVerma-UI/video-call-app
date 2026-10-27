@@ -7,6 +7,14 @@
     <meta name="description" content="Private group video calls in your browser." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="/fonts/texgyreadventor-bold.otf" as="font" type="font/otf" crossorigin />
+    <script>
+      // Set light/dark before the page paints (saved choice, else the device setting).
+      try {
+        var m = localStorage.getItem('huddle:mode');
+        if (m !== 'light' && m !== 'dark') m = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = m;
+      } catch (e) {}
+    </script>
     <title>Huddle — video calls</title>
   </head>
   <body>

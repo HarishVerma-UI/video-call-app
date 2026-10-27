@@ -5,6 +5,7 @@ import { useCall } from '../hooks/useCall';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { ChatPanel } from './ChatPanel';
 import { CamIcon, CamOffIcon, ChatIcon, LinkIcon, MicIcon, MicOffIcon, PhoneOffIcon, ScreenIcon } from './Icons';
+import { ModeToggle } from './ModeToggle';
 import { VideoTile } from './VideoTile';
 
 interface Props {
@@ -141,9 +142,12 @@ export function CallRoom({ roomId, auth, media, onLeave }: Props) {
             {STATUS_TEXT[status] ?? `${elapsed} · ${count} ${count === 1 ? 'person' : 'people'}`}
           </span>
         </div>
-        <button className="ghost-btn" onClick={copyInvite}>
-          <LinkIcon width={18} height={18} /> Invite
-        </button>
+        <div className="room__actions">
+          <ModeToggle />
+          <button className="ghost-btn" onClick={copyInvite}>
+            <LinkIcon width={18} height={18} /> Invite
+          </button>
+        </div>
       </header>
 
       <main className="stage">

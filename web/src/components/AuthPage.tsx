@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent,
 import { useAuth } from '../auth/AuthContext';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
-import { FilmPicker } from './FilmPicker';
+import { ModeToggle } from './ModeToggle';
 
 type Mode = 'login' | 'register';
 type Field = 'name' | 'email' | 'password';
@@ -27,7 +27,7 @@ function validate(mode: Mode, v: Record<Field, string>): Partial<Record<Field, s
 
 /* ---------- what you see through the lens ---------- */
 
-// Portrait colours come from the active film stock, so the lens re-tints with it.
+// Portrait colours come from the theme tokens, so the lens re-tints with light/dark.
 const mix = (a: string, pct: number, b: string) => `color-mix(in oklab, ${a} ${pct}%, ${b})`;
 const CAST = [
   { name: 'Meera', bg: ['var(--accent)', mix('var(--accent)', 70, 'var(--hot)')], tone: mix('var(--accent)', 22, 'var(--tone-base)') },
@@ -240,7 +240,7 @@ export function AuthPage() {
     }
   };
 
-  // Changing film stock closes the shutter while the colours swap.
+  // Switching light/dark closes the shutter while the colours swap.
   const shutter = useShutter();
   const open = shutter ? 0 : LENS_OPEN[lens];
   const copy = COPY[mode];
@@ -253,7 +253,7 @@ export function AuthPage() {
         <Aperture open={0.42} className="mark" />
         <span>Huddle</span>
       </header>
-      <FilmPicker className="studio__films" />
+      <ModeToggle className="studio__mode" />
 
       <div className="lens" data-lens={lens}>
         <FStopRing open={open} />

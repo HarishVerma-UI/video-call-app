@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: theme.overlay,
   },
-  nameText: { fontFamily: fonts.regular, color: theme.text, fontSize: 12 },
+  nameText: { fontFamily: fonts.regular, color: theme.onOverlay, fontSize: 12 },
   muted: { fontFamily: fonts.regular, fontSize: 11 },
   badge: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: theme.overlay },
   badgeText: { fontFamily: fonts.regular, color: theme.amber, fontSize: 11 },

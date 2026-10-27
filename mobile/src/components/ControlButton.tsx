@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   },
   off: { backgroundColor: 'rgba(242,84,45,0.26)' },
   active: { backgroundColor: 'rgba(255,201,60,0.28)' },
-  end: { backgroundColor: theme.red, width: 64 },
+  end: { backgroundColor: theme.hot, width: 64 },
   icon: { fontSize: 22 },
   badge: {
     position: 'absolute',
