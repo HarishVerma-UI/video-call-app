@@ -49,6 +49,8 @@ interface CallEvents {
   participants: Participant[];
   status: CallStatus;
   chat: ChatMessage;
+  /** Saved messages received on joining (replaces the list; also fires after a reconnect). */
+  history: { messages: ChatMessage[]; hasMore: boolean };
   error: CallError;
 }
 
@@ -274,6 +276,9 @@ export class CallClient {
         this.selfId = msg.selfId;
         this._maxPeers = msg.maxPeers;
         this.reconnectAttempts = 0;
+        // Saved chat from before we arrived (or from before a reconnect).
+        this._chat = msg.history ?? [];
+        this.emit('history', { messages: this._chat, hasMore: !!msg.historyHasMore });
         this.setStatus('joined');
         // We're the newcomer: we call everyone who is already in the room.
         for (const info of msg.peers) {

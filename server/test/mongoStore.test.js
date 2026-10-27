@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
+import { mongoMessageStoreFromCollection } from '../src/db/messageStore.js';
 import { DuplicateEmailError, connectMongoUserStore, mongoUserStoreFromCollection } from '../src/db/userStore.js';
 
 class FakeObjectId {
@@ -22,11 +23,15 @@ class FakeObjectId {
 function fakeCollection() {
   const docs = [];
   const matches = (doc, q) =>
-    Object.entries(q).every(([k, v]) => (k === '_id' ? doc._id.toString() === v.toString() : doc[k] === v));
+    Object.entries(q).every(([k, v]) => {
+      if (k === '_id') return doc._id.toString() === v.toString();
+      if (v && typeof v === 'object' && '$lt' in v) return doc[k] < v.$lt;
+      return doc[k] === v;
+    });
   return {
     docs,
     async insertOne(doc) {
-      if (docs.some((d) => d.email === doc.email)) throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
+      if (doc.email && docs.some((d) => d.email === doc.email)) throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
       const _id = new FakeObjectId();
       docs.push({ ...doc, _id });
       return { insertedId: _id };
@@ -36,8 +41,31 @@ function fakeCollection() {
     },
     async updateOne(q, update) {
       const d = docs.find((x) => matches(x, q));
-      if (d) Object.assign(d, update.$set);
+      if (d && update.$set?.email && docs.some((x) => x !== d && x.email === update.$set.email))
+        throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
+      if (d) {
+        Object.assign(d, update.$set);
+        for (const [k, n] of Object.entries(update.$inc ?? {})) d[k] = (d[k] ?? 0) + n;
+      }
       return { matchedCount: d ? 1 : 0 };
+    },
+    find(q) {
+      let out = docs.filter((d) => matches(d, q));
+      const cursor = {
+        sort(spec) {
+          const [[k, dir]] = Object.entries(spec);
+          out = [...out].sort((a, b) => (a[k] < b[k] ? -dir : a[k] > b[k] ? dir : 0));
+          return cursor;
+        },
+        limit(n) {
+          out = out.slice(0, n);
+          return cursor;
+        },
+        async toArray() {
+          return out;
+        },
+      };
+      return cursor;
     },
   };
 }
@@ -57,14 +85,29 @@ async function exercise(store, label) {
 
   await store.recordLogin(u.id);
   assert.ok((await store.findById(u.id)).lastLoginAt instanceof Date);
+
+  // Profile edits
+  const renamed = await store.updateProfile(u.id, { name: 'New Name' });
+  assert.equal(renamed.name, 'New Name');
+  const other = await store.create({ name: 'Other', email: `other-${email}`, passwordHash: 'x' });
+  await assert.rejects(store.updateProfile(u.id, { email: other.email }), DuplicateEmailError, 'cannot take another account’s email');
+  const moved = await store.updateProfile(u.id, { email: `moved-${email}` });
+  assert.equal(moved.email, `moved-${email}`);
+  assert.equal((await store.findByEmail(`moved-${email}`)).id, u.id);
+
+  // Password change bumps tokenVersion
+  assert.equal(u.tokenVersion, 0);
+  const pw = await store.setPassword(u.id, 'scrypt$new');
+  assert.equal(pw.passwordHash, 'scrypt$new');
+  assert.equal(pw.tokenVersion, 1);
 }
 
 test('mongo user store: create / find / duplicate / recordLogin (fake collection)', async () => {
   const col = fakeCollection();
   const store = mongoUserStoreFromCollection(col, FakeObjectId);
   await exercise(store, 'fake');
-  assert.equal(col.docs.length, 1);
-  assert.deepEqual(Object.keys(col.docs[0]).sort(), ['_id', 'createdAt', 'email', 'lastLoginAt', 'name', 'passwordHash', 'updatedAt']);
+  assert.equal(col.docs.length, 2);
+  assert.deepEqual(Object.keys(col.docs[0]).sort(), ['_id', 'createdAt', 'email', 'lastLoginAt', 'name', 'passwordHash', 'tokenVersion', 'updatedAt']);
 });
 
 test('mongo user store against a real MongoDB', { skip: !process.env.MONGODB_URI && 'set MONGODB_URI to run' }, async () => {
@@ -74,4 +117,26 @@ test('mongo user store against a real MongoDB', { skip: !process.env.MONGODB_URI
   } finally {
     await store.close();
   }
+});
+
+test('mongo message store: save, newest page oldest-first, paging with before', async () => {
+  const col = fakeCollection();
+  const store = mongoMessageStoreFromCollection(col);
+  const base = Date.now() - 10_000;
+  for (let i = 0; i < 7; i++) {
+    const m = await store.add({ roomId: 'r1', userId: 'u1', name: 'Asha', text: `m${i}` });
+    col.docs[col.docs.length - 1].createdAt = new Date(base + i * 1000); // spread timestamps
+    assert.equal(m.text, `m${i}`);
+  }
+  await store.add({ roomId: 'other', userId: 'u2', name: 'Bala', text: 'elsewhere' });
+
+  const page1 = await store.recent('r1', { limit: 3 });
+  assert.deepEqual(page1.messages.map((m) => m.text), ['m4', 'm5', 'm6'], 'newest three, oldest first');
+  assert.equal(page1.hasMore, true);
+  const page2 = await store.recent('r1', { limit: 3, before: page1.messages[0].ts });
+  assert.deepEqual(page2.messages.map((m) => m.text), ['m1', 'm2', 'm3']);
+  const page3 = await store.recent('r1', { limit: 3, before: page2.messages[0].ts });
+  assert.deepEqual(page3.messages.map((m) => m.text), ['m0']);
+  assert.equal(page3.hasMore, false);
+  assert.ok(page1.messages.every((m) => typeof m.ts === 'number' && m.userId === 'u1'));
 });

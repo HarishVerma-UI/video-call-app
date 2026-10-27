@@ -1,5 +1,6 @@
 import type { Participant } from '@vca/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import { roomUrl } from '../config';
 import { useCall } from '../hooks/useCall';
 import type { LocalMedia } from '../hooks/useLocalMedia';
@@ -39,7 +40,12 @@ function useElapsed(running: boolean) {
 }
 
 export function CallRoom({ roomId, auth, media, onLeave }: Props) {
-  const { client, participants, status, messages, error, clearError } = useCall(roomId, auth, media.stream);
+  const { client, participants, status, messages, historyCount, hasMore, loadingEarlier, loadEarlier, error, clearError } = useCall(
+    roomId,
+    auth,
+    media.stream,
+  );
+  const { user } = useAuth();
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -48,19 +54,19 @@ export function CallRoom({ roomId, auth, media, onLeave }: Props) {
   const seenMessages = useRef(0);
 
   const local = participants.find((p) => p.isLocal);
-  const selfId = local?.id ?? '';
   const audioOn = local?.media.audio ?? media.audioOn;
   const videoOn = local?.media.video ?? media.videoOn;
 
-  // Unread badge for chat.
+  // Unread badge: only messages that arrive after you joined, from other people.
+  const liveFromOthers = messages.slice(historyCount).filter((m) => m.userId !== user?.id).length;
   useEffect(() => {
     if (chatOpen) {
-      seenMessages.current = messages.length;
+      seenMessages.current = liveFromOthers;
       setUnread(0);
     } else {
-      setUnread(messages.length - seenMessages.current);
+      setUnread(Math.max(0, liveFromOthers - seenMessages.current));
     }
-  }, [messages.length, chatOpen]);
+  }, [liveFromOthers, chatOpen]);
 
   // Fatal errors (room full / server gone) send you back to the lobby.
   useEffect(() => {
@@ -184,7 +190,11 @@ export function CallRoom({ roomId, auth, media, onLeave }: Props) {
       {chatOpen && (
         <ChatPanel
           messages={messages}
-          selfId={selfId}
+          selfUserId={user?.id ?? ''}
+          historyCount={historyCount}
+          hasMore={hasMore}
+          loadingEarlier={loadingEarlier}
+          onLoadEarlier={() => void loadEarlier()}
           onSend={(t) => client.current?.sendChat(t)}
           onClose={() => setChatOpen(false)}
         />

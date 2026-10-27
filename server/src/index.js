@@ -1,6 +1,7 @@
 import os from 'node:os';
 import { createApp } from './app.js';
 import { checkConfig, config } from './config.js';
+import { createMemoryMessageStore, mongoMessageStore } from './db/messageStore.js';
 import { connectMongoUserStore, createMemoryUserStore } from './db/userStore.js';
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
@@ -12,9 +13,11 @@ if (problems.length) {
 }
 
 let store;
+let messages;
 if (config.mongoUri) {
   try {
     store = await connectMongoUserStore(config.mongoUri, config.mongoDb, log);
+    messages = await mongoMessageStore(store.db, { retentionDays: config.chatRetentionDays });
   } catch (err) {
     console.error(`\n  Could not connect to MongoDB at ${config.mongoUri.replace(/\/\/[^@]*@/, '//***@')}`);
     console.error(`  ${err.message}\n  Is it running? Try:  docker compose up -d mongo\n`);
@@ -22,9 +25,10 @@ if (config.mongoUri) {
   }
 } else {
   store = createMemoryUserStore();
+  messages = createMemoryMessageStore({ retentionDays: config.chatRetentionDays });
 }
 
-const app = createApp(config, { store, log });
+const app = createApp(config, { store, messages, log });
 await app.listen();
 
 const lanIps = Object.values(os.networkInterfaces())

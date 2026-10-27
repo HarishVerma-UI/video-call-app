@@ -122,6 +122,7 @@ sequenceDiagram
   name: "Asha Verma",
   email: "asha@example.com", // stored lower-cased; unique index "email_unique"
   passwordHash: "scrypt$16384$8$1$<salt>$<hash>",
+  tokenVersion: 0,           // in every JWT as "tv"; +1 on password change
   createdAt: Date, updatedAt: Date, lastLoginAt: Date | null
 }
 ```
@@ -138,10 +139,18 @@ sequenceDiagram
 | Name comes from the token, not the client | nobody can join a call pretending to be someone else |
 | Mobile token in **expo-secure-store** | encrypted by the OS keychain/keystore instead of plain storage |
 
+**Changing your password signs out other devices.** Every token carries the
+user's `tokenVersion` as `tv`. A password change increments it and returns a
+fresh token to the device that made the change, so every older token fails the
+check on its next API call or join.
+
+Editing the profile (`PATCH /api/auth/me`) also returns a fresh token, because
+the name inside it changed. Changing the email needs the current password, so a
+borrowed unlocked laptop can't take over the account.
+
 **Known trade-offs:** there is no refresh token yet (sign in again after 7 days),
-and logging out deletes the token on the device but doesn't revoke it on the
-server. Both are on the roadmap. For revocation, add a `tokenVersion` field to
-users and include it in the JWT.
+and signing out deletes the token on the device without revoking it on the
+server (changing the password does revoke it).
 
 ---
 
@@ -288,7 +297,21 @@ broadcasts `peer-left`, and everyone closes that one peer connection.
 
 ## 6. Server state
 
-Call state lives in memory (only accounts are stored in MongoDB):
+Who is in which room lives in memory. Accounts and chat messages are stored in MongoDB:
+
+```js
+// messages collection
+{ _id, roomId: "standup", userId, name: "Asha Verma", text, createdAt: Date }
+// indexes: { roomId: 1, createdAt: -1 } for paging,
+//          TTL on createdAt (CHAT_RETENTION_DAYS, default 30) so old messages delete themselves
+```
+
+The `welcome` message carries the room's last 50 messages, and older pages come
+from `GET /api/rooms/:id/messages?before=<ts>`. A message is saved first and only
+then broadcast, so everyone sees exactly what was stored. Without `MONGODB_URI`, an
+in-memory store with the same interface is used (500 messages per room).
+
+In-memory call state:
 
 ```mermaid
 flowchart LR
@@ -325,17 +348,19 @@ Defined once in `shared/src/protocol.ts` and validated by `server/src/validate.j
 
 | Message | Purpose |
 |---|---|
-| `{ type:"welcome", selfId, roomId, peers[], maxPeers }` | you're in; here's who is already here |
+| `{ type:"welcome", selfId, roomId, peers[], maxPeers, history[], historyHasMore }` | you're in; here's who is already here and the recent chat |
 | `{ type:"peer-joined", peer }` | someone new arrived (they'll send you an offer) |
 | `{ type:"peer-left", id }` | someone left |
 | `{ type:"signal", from, data }` | WebRTC data from a peer |
 | `{ type:"chat", message }` | chat message (sent to the sender too, as confirmation) |
 | `{ type:"media-state", id, media }` | someone muted / turned the camera off / started sharing |
-| `{ type:"error", code, message }` | `unauthorized`, `room-full`, `bad-request`, `not-joined`, `already-joined` |
+| `{ type:"error", code, message }` | `unauthorized`, `room-full`, `bad-request`, `not-joined`, `already-joined`, `chat-failed` |
 
 `media` is `{ audio: boolean, video: boolean, screen: boolean }`. A peer is
 `{ id, userId, name, media }`: `id` identifies the connection (one per tab or
-device) and `userId` identifies the account.
+device) and `userId` identifies the account. A chat message is
+`{ id, userId, from, name, text, ts }`; apps use `userId` to decide which
+messages are yours, so your messages from your phone show as yours on your laptop.
 
 ---
 
@@ -411,5 +436,6 @@ A portrait in-call screen with a self-view, plus a home screen with
 | Camera/mic need HTTPS off `localhost` | browser security rule | **Step 2:** HTTPS + WSS (e.g. Caddy / nginx + Let's Encrypt) |
 | Max 6 per room | mesh upload cost grows with each person | **Step 3:** SFU (mediasoup) |
 | One server instance | room state and rate limits are in memory | Redis pub/sub when scaling out |
-| No refresh tokens / server-side logout | JWTs are stateless | refresh tokens + `tokenVersion` on the user |
+| No refresh tokens / single-device logout | JWTs are stateless | refresh tokens (`tokenVersion` already revokes all tokens on password change) |
+| A rename shows in a call only after rejoining | names are fixed when you join | broadcast a `peer-updated` message |
 | Mobile audio uses the OS default route | no audio-route manager yet | add `react-native-incall-manager` for speaker/earpiece/Bluetooth |

@@ -8,6 +8,7 @@ import { theme } from './src/config';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { CallScreen } from './src/screens/CallScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { useLocalStream } from './src/useLocalStream';
 
 export default function App() {
@@ -56,6 +57,7 @@ function SignedIn() {
   const [call, setCall] = useState<{ roomId: string } | null>(null);
   const [lastRoom, setLastRoom] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const leave = useCallback(
     (reason?: string, code?: string) => {
@@ -68,6 +70,13 @@ function SignedIn() {
 
   if (!user || !token) return null;
   if (call) return <CallScreen roomId={call.roomId} auth={{ token, name: user.name }} media={media} onLeave={leave} />;
+  if (profileOpen) {
+    return (
+      <SafeAreaView style={{ flex: 1 }}>
+        <ProfileScreen onBack={() => setProfileOpen(false)} />
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <HomeScreen
@@ -75,7 +84,7 @@ function SignedIn() {
         user={user}
         initialRoom={lastRoom}
         notice={notice}
-        onSignOut={() => void logout()}
+        onOpenProfile={() => setProfileOpen(true)}
         onJoin={(roomId) => {
           setLastRoom(roomId);
           setNotice(null);

@@ -9,6 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { parseClientMessage } from './validate.js';
 
+/** Message as sent to clients. `from` is the live connection id when known. */
+const toWire = (m) => ({ id: m.id, userId: m.userId, from: '', name: m.name, text: m.text, ts: m.ts });
+
 const CHAT_BURST = 5; // messages
 const CHAT_WINDOW_MS = 5000;
 
@@ -118,12 +121,22 @@ export function attachSignaling(httpServer, options) {
         client.media = msg.media;
         room.set(client.id, client);
 
+        // Saved chat so late joiners can catch up.
+        let history = { messages: [], hasMore: false };
+        try {
+          history = await options.messages.recent(msg.roomId, { limit: options.chatHistoryOnJoin ?? 50 });
+        } catch (err) {
+          log('chat history failed', err);
+        }
+        if (ws.readyState !== ws.OPEN || client.roomId !== msg.roomId) return; // left meanwhile
         send(client, {
           type: 'welcome',
           selfId: client.id,
           roomId: msg.roomId,
           peers: existing,
           maxPeers: options.maxPeersPerRoom,
+          history: history.messages.map(toWire),
+          historyHasMore: history.hasMore,
         });
         broadcast(msg.roomId, { type: 'peer-joined', peer: peerInfo(client) }, client.id);
         log(`join   room=${msg.roomId} id=${client.id.slice(0, 8)} name="${client.name}" size=${room.size}`);
@@ -147,8 +160,17 @@ export function attachSignaling(httpServer, options) {
           client.chatTimes = client.chatTimes.filter((t) => now - t < CHAT_WINDOW_MS);
           if (client.chatTimes.length >= CHAT_BURST) return; // silently drop floods
           client.chatTimes.push(now);
-          const message = { id: randomUUID(), from: client.id, name: client.name, text: msg.text, ts: now };
-          broadcast(client.roomId, { type: 'chat', message }); // includes sender, as confirmation
+          const roomId = client.roomId;
+          let saved;
+          try {
+            saved = await options.messages.add({ roomId, userId: client.userId, name: client.name, text: msg.text });
+          } catch (err) {
+            log('chat save failed', err);
+            send(client, { type: 'error', code: 'chat-failed', message: 'Your message couldn’t be sent. Try again.' });
+            return;
+          }
+          // Sent to everyone in the room, sender included as confirmation.
+          broadcast(roomId, { type: 'chat', message: { ...toWire(saved), from: client.id } });
           return;
         }
         case 'media-state': {

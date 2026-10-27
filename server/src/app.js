@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { createAuth } from './auth/auth.js';
+import { createMemoryMessageStore } from './db/messageStore.js';
 import { HttpError, sendJson } from './http.js';
 import { attachSignaling } from './signaling.js';
 
@@ -46,9 +47,9 @@ function serveStatic(res, webDist, urlPath) {
 /**
  * Create (but don't start) the HTTP + WebSocket server.
  * @param {object} config see config.js
- * @param {{ store: object, log?: Function }} deps  store = user store (MongoDB or memory)
+ * @param {{ store: object, messages?: object, log?: Function }} deps  user + chat stores (MongoDB or memory)
  */
-export function createApp(config, { store, log = () => {} }) {
+export function createApp(config, { store, messages = createMemoryMessageStore(), log = () => {} }) {
   const startedAt = Date.now();
   const auth = createAuth({
     store,
@@ -73,7 +74,7 @@ export function createApp(config, { store, log = () => {} }) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         ...cors(req),
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type',
         'Access-Control-Max-Age': '600',
       });
@@ -97,6 +98,17 @@ export function createApp(config, { store, log = () => {} }) {
       return;
     }
     if (await auth.handle(req, res, path)) return;
+
+    // Saved chat, page by page: GET /api/rooms/:id/messages?before=<ms>&limit=<n>
+    const msgMatch = path.match(/^\/api\/rooms\/([a-zA-Z0-9_-]{1,64})\/messages$/);
+    if (msgMatch && req.method === 'GET') {
+      await auth.requireUser(req);
+      const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : undefined;
+      if (before !== undefined && !Number.isFinite(before)) throw new HttpError(400, 'Invalid "before".');
+      const limit = Number(url.searchParams.get('limit') ?? 50) || 50;
+      sendJson(res, 200, await messages.recent(msgMatch[1].toLowerCase(), { before, limit }));
+      return;
+    }
 
     const roomMatch = path.match(/^\/api\/rooms\/([a-zA-Z0-9_-]{1,64})$/);
     if (roomMatch && req.method === 'GET') {
@@ -129,7 +141,7 @@ export function createApp(config, { store, log = () => {} }) {
     });
   });
 
-  signaling = attachSignaling(server, { ...config, log, userFromToken: auth.userFromToken });
+  signaling = attachSignaling(server, { ...config, log, userFromToken: auth.userFromToken, messages });
 
   return {
     server,

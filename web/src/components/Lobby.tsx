@@ -5,6 +5,7 @@ import type { LocalMedia } from '../hooks/useLocalMedia';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
 import { ModeToggle } from './ModeToggle';
+import { ProfilePanel } from './ProfilePanel';
 import { CamIcon, CamOffIcon, MicIcon, MicOffIcon, SparkIcon } from './Icons';
 
 interface Props {
@@ -25,6 +26,7 @@ const PROBLEM_TEXT: Record<string, string> = {
 
 export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: Props) {
   const { api } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
   const [room, setRoom] = useState(initialRoom);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [roomInfo, setRoomInfo] = useState<string | null>(null);
@@ -82,13 +84,15 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
           </div>
           <ModeToggle className="lobby__mode" />
           <div className="account">
-            <span className="account__avatar" style={{ background: colorFor(user.id) }}>
-              {initials(user.name)}
-            </span>
-            <span className="account__text">
-              <strong>{user.name}</strong>
-              <span>{user.email}</span>
-            </span>
+            <button className="account__open" onClick={() => setProfileOpen(true)} data-testid="open-profile" aria-label="Edit your profile">
+              <span className="account__avatar" style={{ background: colorFor(user.id) }}>
+                {initials(user.name)}
+              </span>
+              <span className="account__text">
+                <strong>{user.name}</strong>
+                <span>{user.email}</span>
+              </span>
+            </button>
             <button className="ghost-btn" onClick={onSignOut} data-testid="sign-out">
               Sign out
             </button>
@@ -176,6 +180,7 @@ export function Lobby({ media, user, initialRoom, notice, onJoin, onSignOut }: P
           </form>
         </section>
       </main>
+      {profileOpen && <ProfilePanel onClose={() => setProfileOpen(false)} />}
     </div>
   );
 }

@@ -14,6 +14,10 @@ between devices.
 |---|---|---|---|---|
 | ![Register](docs/screenshots/auth-register.jpg) | ![Password](docs/screenshots/auth-password.jpg) | ![Lobby](docs/screenshots/lobby-light.png) | ![Call](docs/screenshots/call-dark.png) | ![Phone](docs/screenshots/phone-light.png) |
 
+| Edit your profile | Saved chat: catch up on what you missed |
+|---|---|
+| ![Profile](docs/screenshots/profile.png) | ![Chat history](docs/screenshots/chat-history.png) |
+
 ## Design: "the lens opens"
 
 The whole app is built around one object from the world of video: a **camera
@@ -65,13 +69,15 @@ All motion stops when the system "reduce motion" setting is on.
 - **JWT** sessions (7 days by default), sent on every API call and on joining a call. Your name in a call comes from your account and can't be spoofed.
 - Login rate limiting, identical errors for "wrong password" and "no such account" (so people can't probe which emails are registered), invite links that survive sign-in
 - Web keeps the session in localStorage. Mobile keeps it in the **OS keychain/keystore** (expo-secure-store).
+- **Profile**: change your name, change your email (needs your current password), change your password (needs the current one and signs you out on every other device)
 
 **Calls**
 - Group calls up to 6 people, adaptive grid, speaking indicator
 - Lobby with camera preview, mic/camera toggles, and a live "N people in this room" check
 - Room codes and invite links (`/r/swift-comet-482`)
 - Mute / camera-off shown to everyone, with avatars when the camera is off
-- Screen sharing (desktop web) with a spotlight layout, live chat with an unread badge
+- Screen sharing (desktop web) with a spotlight layout
+- **Saved chat**: messages are stored per room in MongoDB for 30 days. When you join you see the last 50 with a "You joined" marker, and can load earlier ones. Day dividers, an unread badge for new messages, and your messages from any device show as yours.
 - Mobile: front/back camera flip and a native share sheet for invites
 - Recovers on its own: automatic reconnect, retrying failed connections (ICE restart), audio-only fallback
 
@@ -159,7 +165,10 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | POST | `/api/auth/register` | — | `{ name, email, password }` → `201 { user, token, expiresAt }` |
 | POST | `/api/auth/login` | — | `{ email, password }` → `200 { user, token, expiresAt }` |
 | GET | `/api/auth/me` | Bearer | → `{ user }` |
+| PATCH | `/api/auth/me` | Bearer | `{ name?, email?, currentPassword? }` → `{ user, token, expiresAt }` (email change needs `currentPassword`) |
+| POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working |
 | GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, maxPeers, full }` |
+| GET | `/api/rooms/:id/messages?before=<ts>&limit=50` | Bearer | → `{ messages, hasMore }` (oldest first; for "Load earlier") |
 | GET | `/health` | — | → `{ ok, db, store, rooms, participants }` |
 | WS | `/ws` | token in `join` | signaling, see ARCHITECTURE.md |
 
@@ -183,6 +192,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 |---|---|---|
 | server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
+| server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `false`, `../web/dist` |
 | web | `VITE_API_URL`, `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same origin, same host `/ws`, Google STUN |
 | mobile | `EXPO_PUBLIC_SIGNALING_URL`, `EXPO_PUBLIC_ICE_SERVERS` | — (set your LAN IP), Google STUN |
@@ -191,14 +201,17 @@ Each folder has a `.env.example`.
 
 ## What's tested
 
-- **Server (23 tests):**
+- **Server (32 tests):**
   - JWT: tampering, expiry, wrong key or audience, and the `alg: none` attack are all rejected.
   - Passwords: hashes are salted and verify correctly.
   - Sign-up and sign-in: field validation, duplicate emails (any letter case), the same error for wrong password and unknown email, rate limiting, and forged or orphaned tokens.
   - MongoDB user store: checked against a fake collection. Set `MONGODB_URI` to run the same test against a real database.
   - Calls: a token is required to join and the name can't be spoofed. Room cap, signal relay, chat and mute state all work.
+  - Profile: rename, email change (needs the password, rejects duplicates), password change signs out older tokens.
+  - Saved chat: history arrives on join, paging with `before`, retention, and room isolation (against memory and a fake MongoDB collection).
 - **Light & dark (11 checks):** follows the device setting, no flash before the app loads, the toggle switches and blinks the shutter, the choice is remembered and then wins over device changes.
 - **Web, end to end in Chromium (24 checks):** the lens opens on load, closes for the password, reopens, blinks on a bad submit, shows your initials and opens wide on success. Also checked: sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and live video calls between signed-in accounts (with chat and screen share in a 3-person call).
+- **Profile and saved chat, end to end (25 checks):** open the profile, rename (the lobby updates at once), email change with and without the password, duplicate email, password change keeps this tab signed in but signs out another device, the old password stops working; then a 3-person room where a late joiner sees the history, the "You joined" marker, "Load earlier", day dividers, and an unread badge that ignores old messages.
 - **Mobile:** written against `react-native-webrtc` and `expo-secure-store`, and syntax-checked. It still needs a first run on a real device.
 
 ## Roadmap
@@ -207,5 +220,6 @@ Each folder has a `.env.example`.
 - [x] Full app: React web + React Native mobile + Node server, group calls, chat, screen share
 - [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
 - [ ] **Step 2**: TURN server (coturn) + HTTPS/WSS, so calls work across any network
-- [ ] Forgot-password email, profile editing, refresh tokens
+- [x] Profile editing and saved call chat (web + mobile)
+- [ ] Forgot-password email, refresh tokens, direct messages
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)

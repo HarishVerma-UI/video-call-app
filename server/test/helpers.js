@@ -1,11 +1,13 @@
 import WebSocket from 'ws';
 import { createApp } from '../src/app.js';
+import { createMemoryMessageStore } from '../src/db/messageStore.js';
 import { createMemoryUserStore } from '../src/db/userStore.js';
 
 export const TEST_SECRET = 'test-secret-0123456789-abcdefghijklmnopqrstuvwxyz';
 
 export async function startTestApp(overrides = {}) {
   const store = overrides.store ?? createMemoryUserStore();
+  const messages = overrides.messages ?? createMemoryMessageStore();
   const config = {
     port: 0,
     host: '127.0.0.1',
@@ -19,10 +21,10 @@ export async function startTestApp(overrides = {}) {
     jwtExpiresInSec: 3600,
     ...overrides.config,
   };
-  const app = createApp(config, { store });
+  const app = createApp(config, { store, messages });
   const addr = await app.listen(0, '127.0.0.1');
   const base = `127.0.0.1:${addr.port}`;
-  return { app, store, base, http: `http://${base}`, config };
+  return { app, store, messages, base, http: `http://${base}`, config };
 }
 
 export async function api(base, method, path, body, token) {

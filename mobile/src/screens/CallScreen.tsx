@@ -5,6 +5,7 @@ import { ChatSheet } from '../components/ChatSheet';
 import { ControlButton } from '../components/ControlButton';
 import { ParticipantTile } from '../components/ParticipantTile';
 import { API_BASE, fonts, theme } from '../config';
+import { useAuth } from '../auth';
 import { useCallClient } from '../useCallClient';
 import type { LocalStream } from '../useLocalStream';
 
@@ -16,7 +17,12 @@ interface Props {
 }
 
 export function CallScreen({ roomId, auth, media, onLeave }: Props) {
-  const { client, participants, status, messages, error, clearError } = useCallClient(roomId, auth, media.stream);
+  const { client, participants, status, messages, historyCount, hasMore, loadingEarlier, loadEarlier, error, clearError } = useCallClient(
+    roomId,
+    auth,
+    media.stream,
+  );
+  const { user } = useAuth();
   const [chatOpen, setChatOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -28,12 +34,14 @@ export function CallScreen({ roomId, auth, media, onLeave }: Props) {
   const audioOn = local?.media.audio ?? media.audioOn;
   const videoOn = local?.media.video ?? media.videoOn;
 
+  // Unread: only messages that arrive after you joined, from other people.
+  const liveFromOthers = messages.slice(historyCount).filter((m) => m.userId !== user?.id).length;
   useEffect(() => {
     if (chatOpen) {
-      seen.current = messages.length;
+      seen.current = liveFromOthers;
       setUnread(0);
-    } else setUnread(messages.length - seen.current);
-  }, [messages.length, chatOpen]);
+    } else setUnread(Math.max(0, liveFromOthers - seen.current));
+  }, [liveFromOthers, chatOpen]);
 
   useEffect(() => {
     if (!error) return;
@@ -118,7 +126,11 @@ export function CallScreen({ roomId, auth, media, onLeave }: Props) {
       <ChatSheet
         visible={chatOpen}
         messages={messages}
-        selfId={local?.id ?? ''}
+        selfUserId={user?.id ?? ''}
+        historyCount={historyCount}
+        hasMore={hasMore}
+        loadingEarlier={loadingEarlier}
+        onLoadEarlier={() => void loadEarlier()}
         onSend={(t) => client.current?.sendChat(t)}
         onClose={() => setChatOpen(false)}
       />

@@ -1,3 +1,5 @@
+import type { ChatMessage } from './protocol';
+
 // Tiny typed client for the server's REST API, shared by web and mobile.
 
 export interface AuthUser {
@@ -39,7 +41,13 @@ export interface ApiClient {
   register(input: { name: string; email: string; password: string }): Promise<AuthResponse>;
   login(input: { email: string; password: string }): Promise<AuthResponse>;
   me(): Promise<{ user: AuthUser }>;
+  /** Change name and/or email (email needs currentPassword). Returns a fresh token. */
+  updateProfile(input: { name?: string; email?: string; currentPassword?: string }): Promise<AuthResponse>;
+  /** Change password. Returns a fresh token; other devices are signed out. */
+  changePassword(input: { currentPassword: string; newPassword: string }): Promise<AuthResponse>;
   roomInfo(roomId: string): Promise<RoomInfo>;
+  /** Saved chat, newest page first in time order; pass `before` (a message ts) for older pages. */
+  roomMessages(roomId: string, opts?: { before?: number; limit?: number }): Promise<{ messages: ChatMessage[]; hasMore: boolean }>;
 }
 
 /**
@@ -77,7 +85,16 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     register: (input) => request('POST', '/api/auth/register', input),
     login: (input) => request('POST', '/api/auth/login', input),
     me: () => request('GET', '/api/auth/me'),
+    updateProfile: (input) => request('PATCH', '/api/auth/me', input),
+    changePassword: (input) => request('POST', '/api/auth/password', input),
     roomInfo: (roomId) => request('GET', `/api/rooms/${encodeURIComponent(roomId)}`),
+    roomMessages: (roomId, opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.before !== undefined) q.set('before', String(opts.before));
+      if (opts.limit !== undefined) q.set('limit', String(opts.limit));
+      const qs = q.toString();
+      return request('GET', `/api/rooms/${encodeURIComponent(roomId)}/messages${qs ? `?${qs}` : ''}`);
+    },
   };
 }
 

@@ -9,6 +9,17 @@ import { createRateLimiter } from './rateLimit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+const cleanName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
+const cleanEmail = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+const nameError = (name) => (name.length < 2 || name.length > 40 ? 'Name must be 2–40 characters.' : null);
+const emailError = (email) => (!EMAIL.test(email) || email.length > 254 ? 'Enter a valid email address.' : null);
+function passwordError(password) {
+  if (password.length < 8) return 'Use at least 8 characters.';
+  if (password.length > 128) return 'Use at most 128 characters.';
+  if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) return 'Include at least one letter and one number.';
+  return null;
+}
+
 function validateRegistration(body) {
   const errors = {};
   const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';
@@ -34,7 +45,10 @@ export function createAuth(opts) {
   const registerByIp = createRateLimiter({ limit: 20, windowMs: 60 * 60_000 });
 
   const issue = (user) => {
-    const token = signToken({ sub: user.id, name: user.name }, { ...tokenOpts, expiresInSec: opts.jwtExpiresInSec });
+    const token = signToken(
+      { sub: user.id, name: user.name, tv: user.tokenVersion ?? 0 },
+      { ...tokenOpts, expiresInSec: opts.jwtExpiresInSec },
+    );
     return {
       user: publicUser(user),
       token,
@@ -52,8 +66,11 @@ export function createAuth(opts) {
       if (err instanceof TokenError) return null;
       throw err;
     }
-    // Look the user up so deleted accounts lose access immediately.
-    return opts.store.findById(claims.sub);
+    // Look the user up so deleted accounts lose access immediately, and so a
+    // password change (which bumps tokenVersion) ends every older session.
+    const user = await opts.store.findById(claims.sub);
+    if (!user || (claims.tv ?? 0) !== (user.tokenVersion ?? 0)) return null;
+    return user;
   }
 
   async function requireUser(req) {
@@ -114,6 +131,72 @@ export function createAuth(opts) {
     sendJson(res, 200, { user: publicUser(user) });
   }
 
+  /** PATCH /api/auth/me — change name and/or email. Email changes need the current password. */
+  async function updateMe(req, res) {
+    const user = await requireUser(req);
+    const body = await readJson(req);
+    const fields = {};
+    const patch = {};
+    if (body.name !== undefined) {
+      const name = cleanName(body.name);
+      const err = nameError(name);
+      if (err) fields.name = err;
+      else if (name !== user.name) patch.name = name;
+    }
+    if (body.email !== undefined) {
+      const email = cleanEmail(body.email);
+      const err = emailError(email);
+      if (err) fields.email = err;
+      else if (email !== user.email) patch.email = email;
+    }
+    if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
+
+    if (patch.email) {
+      const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+      if (!current) throw new HttpError(400, 'Enter your current password to change your email.', { fields: { currentPassword: 'Required to change your email.' } });
+      if (!(await verifyPassword(current, user.passwordHash)))
+        throw new HttpError(403, 'Your current password is incorrect.', { fields: { currentPassword: 'That password is incorrect.' } });
+    }
+    if (!Object.keys(patch).length) {
+      sendJson(res, 200, issue(user));
+      return;
+    }
+    let updated;
+    try {
+      updated = await opts.store.updateProfile(user.id, patch);
+    } catch (err) {
+      if (err instanceof DuplicateEmailError)
+        throw new HttpError(409, 'An account with this email already exists.', { fields: { email: 'Already used by another account.' } });
+      throw err;
+    }
+    opts.log?.(`auth   profile updated ${updated.email}`);
+    sendJson(res, 200, issue(updated));
+  }
+
+  /** POST /api/auth/password — change password; signs out every other session. */
+  async function changePassword(req, res) {
+    const user = await requireUser(req);
+    const body = await readJson(req);
+    const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+    const next = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+    const limited = loginByEmail.hit(`pw:${user.id}`);
+    if (!limited.ok) throw new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.', { retryAfterSec: limited.retryAfterSec });
+
+    const err = passwordError(next);
+    if (err) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { newPassword: err } });
+    if (!(await verifyPassword(current, user.passwordHash)))
+      throw new HttpError(403, 'Your current password is incorrect.', { fields: { currentPassword: 'That password is incorrect.' } });
+    if (await verifyPassword(next, user.passwordHash))
+      throw new HttpError(400, 'Choose a password you haven’t used here.', { fields: { newPassword: 'That’s your current password.' } });
+
+    const updated = await opts.store.setPassword(user.id, await hashPassword(next));
+    loginByEmail.reset(`pw:${user.id}`);
+    opts.log?.(`auth   password changed ${updated.email}`);
+    // A fresh token for this device; tokens on other devices no longer work.
+    sendJson(res, 200, issue(updated));
+  }
+
   /** Returns true if the request was an auth route (and has been answered). */
   async function handle(req, res, pathname) {
     if (!pathname.startsWith('/api/auth/')) return false;
@@ -121,6 +204,8 @@ export function createAuth(opts) {
     if (route === 'POST /api/auth/register') await register(req, res);
     else if (route === 'POST /api/auth/login') await login(req, res);
     else if (route === 'GET /api/auth/me') await me(req, res);
+    else if (route === 'PATCH /api/auth/me') await updateMe(req, res);
+    else if (route === 'POST /api/auth/password') await changePassword(req, res);
     else throw new HttpError(404, 'Not found');
     return true;
   }

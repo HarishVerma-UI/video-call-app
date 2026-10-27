@@ -39,16 +39,29 @@ export type ClientMessage =
 // ---- server → client -------------------------------------------------------
 export interface ChatMessage {
   id: string;
+  /** Account that sent it: use this to tell your own messages apart. */
+  userId: string;
+  /** Live connection id of the sender, or '' for saved history. */
   from: string;
   name: string;
   text: string;
   ts: number;
 }
 
-export type ErrorCode = 'room-full' | 'bad-request' | 'not-joined' | 'already-joined' | 'unauthorized';
+export type ErrorCode = 'room-full' | 'bad-request' | 'not-joined' | 'already-joined' | 'unauthorized' | 'chat-failed';
 
 export type ServerMessage =
-  | { type: 'welcome'; selfId: string; roomId: string; peers: PeerInfo[]; maxPeers: number }
+  | {
+      type: 'welcome';
+      selfId: string;
+      roomId: string;
+      peers: PeerInfo[];
+      maxPeers: number;
+      /** Recent saved chat, oldest first. */
+      history: ChatMessage[];
+      /** True if older messages can be loaded from /api/rooms/:id/messages. */
+      historyHasMore: boolean;
+    }
   | { type: 'peer-joined'; peer: PeerInfo }
   | { type: 'peer-left'; id: string }
   | { type: 'signal'; from: string; data: SignalData }

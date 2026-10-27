@@ -24,6 +24,10 @@ interface AuthValue {
   login: (email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   register: (name: string, email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   logout: (reason?: string) => Promise<void>;
+  /** Change name/email; keeps you signed in with the fresh token. */
+  updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
+  /** Change password; this phone stays signed in, other devices are signed out. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const Ctx = createContext<AuthValue | null>(null);
@@ -101,6 +105,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.register({ name, email, password });
       await beforeEnter?.();
       await accept(r);
+    },
+    updateProfile: async (input) => {
+      const r = await api.updateProfile(input);
+      await accept(r);
+      return r.user;
+    },
+    changePassword: async (currentPassword, newPassword) => {
+      await accept(await api.changePassword({ currentPassword, newPassword }));
     },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

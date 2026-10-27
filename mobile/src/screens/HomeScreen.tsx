@@ -21,10 +21,10 @@ interface Props {
   initialRoom: string;
   notice: string | null;
   onJoin: (roomId: string) => void;
-  onSignOut: () => void;
+  onOpenProfile: () => void;
 }
 
-export function HomeScreen({ media, user, initialRoom, notice, onJoin, onSignOut }: Props) {
+export function HomeScreen({ media, user, initialRoom, notice, onJoin, onOpenProfile }: Props) {
   const { api } = useAuth();
   const [room, setRoom] = useState(initialRoom);
   const [roomError, setRoomError] = useState<string | null>(null);
@@ -70,11 +70,11 @@ export function HomeScreen({ media, user, initialRoom, notice, onJoin, onSignOut
             <View style={styles.logoMark} />
             <Text style={styles.logo}>Huddle</Text>
           </View>
-          <Pressable style={styles.account} onPress={onSignOut} accessibilityLabel="Sign out">
+          <Pressable style={styles.account} onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Your profile">
             <View style={[styles.avatar, { backgroundColor: colorFor(user.id) }]}>
               <Text style={styles.avatarText}>{initials(user.name)}</Text>
             </View>
-            <Text style={styles.signOut}>Sign out</Text>
+            <Text style={styles.signOut} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
           </Pressable>
         </View>
         <Text style={styles.h1}>Face-to-face,</Text>

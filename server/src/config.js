@@ -61,6 +61,11 @@ export const config = {
   mongoUri: process.env.MONGODB_URI || '',
   mongoDb: process.env.MONGODB_DB ?? 'huddle',
 
+  /** How long saved call chat is kept. */
+  chatRetentionDays: Number(process.env.CHAT_RETENTION_DAYS ?? 30),
+  /** Messages sent to someone when they join a room. */
+  chatHistoryOnJoin: 50,
+
   // --- auth ---
   jwtSecret: process.env.JWT_SECRET || (isProd ? '' : DEV_SECRET),
   jwtExpiresInSec: parseDuration(process.env.JWT_EXPIRES_IN, 7 * 86400),

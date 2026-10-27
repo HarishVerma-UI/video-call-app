@@ -1,8 +1,9 @@
 import { ApiError, initials, passwordStrength } from '@vca/shared';
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
+import { Line } from './Line';
 import { ModeToggle } from './ModeToggle';
 
 type Mode = 'login' | 'register';
@@ -113,47 +114,6 @@ function FStopRing({ open }: { open: number }) {
         <path d="M -4 -99 L 4 -99 L 0 -94 Z" className="fring__marker" />
       </g>
     </svg>
-  );
-}
-
-/* ---------- form field ---------- */
-
-function Line(props: {
-  label: string;
-  type: string;
-  name: string;
-  value: string;
-  autoComplete: string;
-  error?: string;
-  onChange: (v: string) => void;
-  onFocus?: () => void;
-  onBlur?: () => void;
-  onKeyUp?: (e: KeyboardEvent<HTMLInputElement>) => void;
-  trailing?: ReactNode;
-  autoFocus?: boolean;
-}) {
-  const id = useId();
-  const { label, error, onChange, trailing, ...rest } = props;
-  return (
-    <div className={`line${error ? ' line--error' : ''}`}>
-      <label htmlFor={id}>{label}</label>
-      <div className="line__row">
-        <input
-          id={id}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${id}-e` : undefined}
-          onChange={(e) => onChange(e.target.value)}
-          {...rest}
-        />
-        {trailing}
-      </div>
-      <span className="line__rule" />
-      {error && (
-        <p className="line__error" id={`${id}-e`}>
-          {error}
-        </p>
-      )}
-    </div>
   );
 }
 

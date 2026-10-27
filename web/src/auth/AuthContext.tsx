@@ -21,6 +21,10 @@ interface AuthValue {
   login: (email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   register: (name: string, email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   logout: (reason?: string) => void;
+  /** Change name/email; keeps you signed in with the fresh token. */
+  updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
+  /** Change password; this device stays signed in, other devices are signed out. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Message to show on the sign-in page (e.g. "session expired"). */
   notice: string | null;
 }
@@ -128,6 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.register({ name, email, password });
       await beforeEnter?.();
       accept(r);
+    },
+    updateProfile: async (input) => {
+      const r = await api.updateProfile(input);
+      accept(r);
+      return r.user;
+    },
+    changePassword: async (currentPassword, newPassword) => {
+      accept(await api.changePassword({ currentPassword, newPassword }));
     },
   };
 

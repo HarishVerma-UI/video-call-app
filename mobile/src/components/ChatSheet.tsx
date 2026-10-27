@@ -17,7 +17,12 @@ import { fonts, theme } from '../config';
 interface Props {
   visible: boolean;
   messages: ChatMessage[];
-  selfId: string;
+  /** Your account id: messages from any of your devices count as yours. */
+  selfUserId: string;
+  historyCount: number;
+  hasMore: boolean;
+  loadingEarlier: boolean;
+  onLoadEarlier: () => void;
   onSend: (text: string) => void;
   onClose: () => void;
 }
@@ -27,7 +32,7 @@ const time = (ts: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-export function ChatSheet({ visible, messages, selfId, onSend, onClose }: Props) {
+export function ChatSheet({ visible, messages, selfUserId, historyCount, hasMore, loadingEarlier, onLoadEarlier, onSend, onClose }: Props) {
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const insets = useSafeAreaInsets();
@@ -59,13 +64,28 @@ export function ChatSheet({ visible, messages, selfId, onSend, onClose }: Props)
             data={messages}
             keyExtractor={(m) => m.id}
             contentContainerStyle={{ padding: 14, gap: 10, flexGrow: 1 }}
-            ListEmptyComponent={<Text style={styles.empty}>Messages are only visible to people in this call.</Text>}
-            renderItem={({ item }) => {
-              const mine = item.from === selfId;
+            ListEmptyComponent={<Text style={styles.empty}>Say hello. Messages are saved in this room, so people who join later can catch up.</Text>}
+            ListHeaderComponent={
+              hasMore ? (
+                <Pressable onPress={onLoadEarlier} disabled={loadingEarlier} style={styles.earlier}>
+                  <Text style={styles.earlierText}>{loadingEarlier ? 'Loading…' : 'Load earlier messages'}</Text>
+                </Pressable>
+              ) : null
+            }
+            renderItem={({ item, index }) => {
+              const mine = item.userId === selfUserId;
+              const joinedHere = index === historyCount && historyCount > 0;
               return (
                 <View style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
+                  {joinedHere && (
+                    <View style={styles.joined}>
+                      <View style={styles.joinedLine} />
+                      <Text style={styles.joinedText}>You joined</Text>
+                      <View style={styles.joinedLine} />
+                    </View>
+                  )}
                   <View style={styles.meta}>
-                    <View style={[styles.dot, { backgroundColor: colorFor(item.from) }]} />
+                    <View style={[styles.dot, { backgroundColor: colorFor(item.userId) }]} />
                     <Text style={styles.metaName}>{mine ? 'You' : item.name}</Text>
                     <Text style={styles.metaTime}>{time(item.ts)}</Text>
                   </View>
@@ -112,6 +132,11 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
   title: { color: theme.text, fontSize: 16, fontFamily: fonts.bold },
   close: { color: theme.cyan, fontFamily: fonts.bold, fontSize: 15 },
+  earlier: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, backgroundColor: theme.surface2, marginBottom: 6 },
+  earlierText: { color: theme.text, fontSize: 13, fontFamily: fonts.bold },
+  joined: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', marginVertical: 6 },
+  joinedLine: { flex: 1, height: 1, backgroundColor: theme.accentText, opacity: 0.45 },
+  joinedText: { color: theme.accentText, fontSize: 12, fontFamily: fonts.bold },
   empty: { fontFamily: fonts.regular, color: theme.muted, textAlign: 'center', marginTop: 40, fontSize: 13 },
   meta: { fontFamily: fonts.regular, flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
