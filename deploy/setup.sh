@@ -79,7 +79,8 @@ if iptables -S INPUT 2>/dev/null | grep -q -- "-j REJECT"; then
   say "Opening the same ports in iptables (Oracle Cloud image)"
   for rule in "tcp 80" "tcp 443" "udp 443" "tcp 3478" "udp 3478" "tcp 5349" "udp 5349" "udp 49160:49250"; do
     set -- $rule
-    iptables -C INPUT -p "$1" --dport "$2" -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p "$1" --dport "$2" -j ACCEPT
+    pos="$(iptables -L INPUT --line-numbers -n | awk '$2=="REJECT"{print $1; exit}')"
+    iptables -C INPUT -p "$1" --dport "$2" -j ACCEPT 2>/dev/null || iptables -I INPUT "${pos:-1}" -p "$1" --dport "$2" -j ACCEPT
   done
   command -v netfilter-persistent >/dev/null && netfilter-persistent save >/dev/null
 fi
