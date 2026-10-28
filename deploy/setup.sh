@@ -73,7 +73,17 @@ if command -v ufw >/dev/null; then
   ufw allow 49160:49250/udp >/dev/null
   ufw --force enable >/dev/null
 fi
-echo "Cloud firewall (DigitalOcean / Lightsail / Hetzner panel): allow the same ports there too."
+# Oracle Cloud's Ubuntu images ship iptables rules that reject everything except SSH,
+# and they sit in front of ufw. Allow our ports there too and save them.
+if iptables -S INPUT 2>/dev/null | grep -q -- "-j REJECT"; then
+  say "Opening the same ports in iptables (Oracle Cloud image)"
+  for rule in "tcp 80" "tcp 443" "udp 443" "tcp 3478" "udp 3478" "tcp 5349" "udp 5349" "udp 49160:49250"; do
+    set -- $rule
+    iptables -C INPUT -p "$1" --dport "$2" -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p "$1" --dport "$2" -j ACCEPT
+  done
+  command -v netfilter-persistent >/dev/null && netfilter-persistent save >/dev/null
+fi
+echo "Cloud firewall (Oracle security list / Lightsail / DigitalOcean panel): allow the same ports there too."
 
 # ---------- 4. start ----------
 mkdir -p data/mongo data/caddy data/caddy-config data/turn-certs backups

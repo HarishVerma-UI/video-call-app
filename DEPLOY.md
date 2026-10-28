@@ -14,7 +14,7 @@ different networks.
 | **coturn** | TURN relay, so calls work on office Wi-Fi and mobile data, not only at home |
 | **Backups** | a copy of the database every night, the last 7 kept |
 
-**Cost:** a server for about ₹400–1,000 a month. The domain (DuckDNS),
+**Cost:** free on Oracle Cloud's Always Free tier, or about ₹400–1,000 a month elsewhere. The domain (DuckDNS),
 HTTPS certificate and all the software are free.
 
 **Time:** about 30 minutes the first time.
@@ -28,9 +28,25 @@ Bangalore or Singapore).
 
 | Provider | Plan | About |
 |---|---|---|
+| [Oracle Cloud](https://www.oracle.com/cloud/free/) | Always Free, Ampere A1 (2 OCPU, 12 GB) | **free** (see below) |
 | [DigitalOcean](https://www.digitalocean.com) | Basic Droplet, 1 GB RAM (2 GB better) | $6–12 / month |
 | [AWS Lightsail](https://aws.amazon.com/lightsail/) | 1 GB or 2 GB | $5–10 / month |
 | [Hetzner](https://www.hetzner.com/cloud) | CX22 (4 GB) | ~€4 / month (no India region) |
+
+**Free option: Oracle Cloud "Always Free"**
+([oracle.com/cloud/free](https://www.oracle.com/cloud/free/)). Choose
+**India West (Mumbai)** or **India South (Hyderabad)** as your home region (it
+can't be changed later). Create an instance with image **Canonical Ubuntu 24.04**
+and shape **VM.Standard.A1.Flex** (Ampere ARM), 2 OCPU and 12 GB memory. Then, in
+the instance's subnet, open **Security List → Add Ingress Rules** for the ports
+in the box below (source `0.0.0.0/0`). Notes:
+- Sign-up asks for a card to verify you; Always Free resources aren't charged.
+- If it says "Out of host capacity", try again later or pick another availability domain.
+- Oracle may reclaim Always Free instances that sit almost idle for a week. Upgrading
+  the account to Pay As You Go (still free inside the limits) avoids that; set a
+  budget alert if you do.
+- Everything in Huddle runs on ARM, and `setup.sh` also opens Oracle's built-in
+  iptables firewall for you.
 
 Choose **Ubuntu 24.04** (or 22.04). Add your SSH key (or note the root
 password). When it's created, copy its **public IPv4 address**, e.g. `203.0.113.10`.
