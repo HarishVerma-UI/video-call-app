@@ -10,7 +10,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ICE_SERVERS, SIGNALING_URL } from '../config';
 
 /** React binding for the shared CallClient: one client per mounted call. */
-export function useCall(roomId: string, auth: { token: string; name: string }, localStream: MediaStream | null) {
+export function useCall(roomId: string, auth: { token: string; name: string; userId?: string }, localStream: MediaStream | null) {
   const clientRef = useRef<CallClient | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [status, setStatus] = useState<CallStatus>('idle');

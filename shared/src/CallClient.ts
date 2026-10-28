@@ -33,6 +33,8 @@ export type PeerConnectionState =
 
 export interface Participant {
   id: string;
+  /** Account id (same on every device); '' if unknown. */
+  userId: string;
   name: string;
   isLocal: boolean;
   stream: MediaStream | null;
@@ -90,6 +92,7 @@ export class CallClient {
 
   private _status: CallStatus = 'idle';
   private selfId = '';
+  private userId = '';
   private roomId = '';
   private name = '';
   private token = '';
@@ -141,7 +144,8 @@ export class CallClient {
    * Join a room with an already-acquired local stream (may be null for receive-only).
    * `auth.token` is the JWT from sign-in; the server takes your name from it.
    */
-  join(roomId: string, auth: { token: string; name: string }, localStream: MediaStream | null): void {
+  join(roomId: string, auth: { token: string; name: string; userId?: string }, localStream: MediaStream | null): void {
+    this.userId = auth.userId ?? '';
     if (this._status === 'connecting' || this._status === 'joined') return;
     this.roomId = roomId;
     this.name = auth.name;
@@ -205,6 +209,7 @@ export class CallClient {
   getParticipants(): Participant[] {
     const local: Participant = {
       id: this.selfId || 'local',
+      userId: this.userId,
       name: this.name,
       isLocal: true,
       stream: this.localStream,
@@ -213,6 +218,7 @@ export class CallClient {
     };
     const remotes = [...this.peers.values()].map<Participant>((p) => ({
       id: p.info.id,
+      userId: p.info.userId ?? '',
       name: p.info.name,
       isLocal: false,
       stream: p.stream,

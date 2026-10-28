@@ -5,6 +5,7 @@ import { HttpError, bearerToken, clientIp, readJson, sendJson } from '../http.js
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
 import { TokenError, signToken, verifyToken } from './jwt.js';
 import { dummyVerify, hashPassword, verifyPassword } from './password.js';
+import { createFaceAuth } from './faceAuth.js';
 import { createRateLimiter } from './rateLimit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -35,8 +36,19 @@ function validateRegistration(body) {
   return { name, email, password, errors };
 }
 
+function validateNewAccount(body) {
+  const name = cleanName(body?.name);
+  const email = cleanEmail(body?.email);
+  const errors = {};
+  const n = nameError(name);
+  const e = emailError(email);
+  if (n) errors.name = n;
+  if (e) errors.email = e;
+  return { name, email, errors };
+}
+
 /**
- * @param {{ store: any, jwtSecret: string, jwtExpiresInSec: number, trustProxy: boolean, log?: Function }} opts
+ * @param {{ store: any, credentials: any, webauthn?: object, allowedOrigins?: string[], jwtSecret: string, jwtExpiresInSec: number, trustProxy: boolean, log?: Function }} opts
  */
 export function createAuth(opts) {
   const tokenOpts = { secret: opts.jwtSecret, issuer: 'huddle', audience: 'huddle-app' };
@@ -116,8 +128,8 @@ export function createAuth(opts) {
     }
 
     const user = await opts.store.findByEmail(email);
-    // Same message and similar timing whether the email exists or not.
-    const ok = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
+    // Same message and similar timing whether the email exists, or has no password (face-only account).
+    const ok = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password);
     if (!user || !ok) throw new HttpError(401, 'Email or password is incorrect.', { code: 'invalid-credentials' });
 
     loginByEmail.reset(email);
@@ -151,7 +163,9 @@ export function createAuth(opts) {
     }
     if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
 
-    if (patch.email) {
+    // Accounts with a password confirm it to change email; face-only accounts are already
+    // verified by the face sign-in that created this session.
+    if (patch.email && user.passwordHash) {
       const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
       if (!current) throw new HttpError(400, 'Enter your current password to change your email.', { fields: { currentPassword: 'Required to change your email.' } });
       if (!(await verifyPassword(current, user.passwordHash)))
@@ -185,6 +199,14 @@ export function createAuth(opts) {
 
     const err = passwordError(next);
     if (err) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { newPassword: err } });
+    if (!user.passwordHash) {
+      // Face-only account adding a backup password: nothing to confirm, and no need to sign out other devices.
+      const updated = await opts.store.setPassword(user.id, await hashPassword(next), { revokeSessions: false });
+      loginByEmail.reset(`pw:${user.id}`);
+      opts.log?.(`auth   password set ${updated.email}`);
+      sendJson(res, 200, issue(updated));
+      return;
+    }
     if (!(await verifyPassword(current, user.passwordHash)))
       throw new HttpError(403, 'Your current password is incorrect.', { fields: { currentPassword: 'That password is incorrect.' } });
     if (await verifyPassword(next, user.passwordHash))
@@ -197,6 +219,19 @@ export function createAuth(opts) {
     sendJson(res, 200, issue(updated));
   }
 
+  const face = createFaceAuth({
+    store: opts.store,
+    credentials: opts.credentials,
+    issue,
+    requireUser,
+    validateNewAccount,
+    trustProxy: opts.trustProxy,
+    allowedOrigins: opts.allowedOrigins ?? ['*'],
+    webauthn: opts.webauthn,
+    limits: opts.faceLimits,
+    log: opts.log,
+  });
+
   /** Returns true if the request was an auth route (and has been answered). */
   async function handle(req, res, pathname) {
     if (!pathname.startsWith('/api/auth/')) return false;
@@ -206,7 +241,7 @@ export function createAuth(opts) {
     else if (route === 'GET /api/auth/me') await me(req, res);
     else if (route === 'PATCH /api/auth/me') await updateMe(req, res);
     else if (route === 'POST /api/auth/password') await changePassword(req, res);
-    else throw new HttpError(404, 'Not found');
+    else if (!(await face.handle(req, res, pathname))) throw new HttpError(404, 'Not found');
     return true;
   }
 
@@ -218,6 +253,7 @@ export function createAuth(opts) {
       loginByIp.close();
       loginByEmail.close();
       registerByIp.close();
+      face.close();
     },
   };
 }

@@ -1,315 +1,267 @@
-import { ApiError, initials, passwordStrength } from '@vca/shared';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { ApiError, passwordStrength } from '@vca/shared';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { useShutter } from '../theme';
+import { PasskeyCancelled, hasBuiltInUnlock, passkeysSupported, unlockName } from '../auth/passkey';
 import { Aperture } from './Aperture';
+import { CheckIcon, FaceIdIcon } from './Icons';
 import { Line } from './Line';
 import { ModeToggle } from './ModeToggle';
 
-type Mode = 'login' | 'register';
-type Field = 'name' | 'email' | 'password';
-type Lens = 'shut' | 'open' | 'peek' | 'blink' | 'wide';
+type Tab = 'login' | 'register';
+type Face = 'idle' | 'asking' | 'waiting' | 'done';
+type Fields = Partial<Record<'name' | 'email' | 'password', string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const LENS_OPEN: Record<Lens, number> = { shut: 0, open: 0.62, peek: 0.1, blink: 0, wide: 1 };
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, reducedMotion() ? 0 : ms));
 
-function validate(mode: Mode, v: Record<Field, string>): Partial<Record<Field, string>> {
-  const e: Partial<Record<Field, string>> = {};
-  if (mode === 'register' && v.name.trim().length < 2) e.name = 'Add your name, at least 2 characters.';
-  if (!EMAIL.test(v.email.trim())) e.email = 'Enter an email like name@example.com.';
-  if (mode === 'register') {
-    if (v.password.length < 8) e.password = 'Use at least 8 characters.';
-    else if (!/[a-zA-Z]/.test(v.password) || !/\d/.test(v.password)) e.password = 'Mix in at least one letter and one number.';
-  } else if (!v.password) e.password = 'Enter your password.';
-  return e;
+function pathTab(): Tab {
+  return location.pathname === '/register' ? 'register' : 'login';
 }
 
-/* ---------- what you see through the lens ---------- */
-
-// Portrait colours come from the theme tokens, so the lens re-tints with light/dark.
-const mix = (a: string, pct: number, b: string) => `color-mix(in oklab, ${a} ${pct}%, ${b})`;
-const CAST = [
-  { name: 'Meera', bg: ['var(--accent)', mix('var(--accent)', 70, 'var(--hot)')], tone: mix('var(--accent)', 22, 'var(--tone-base)') },
-  { name: 'Arjun', bg: ['var(--cool)', mix('var(--cool)', 62, 'black')], tone: mix('var(--cool)', 16, 'var(--tone-base)') },
-  { name: 'Priya', bg: ['var(--hot)', mix('var(--hot)', 68, 'black')], tone: mix('var(--hot)', 20, 'var(--tone-base)') },
-  { name: 'Dev', bg: ['var(--amber)', mix('var(--amber)', 66, 'var(--hot)')], tone: mix('var(--amber)', 18, 'var(--tone-base)') },
-];
-
-function Portrait({ name, bg, tone, mine }: { name: string; bg: string[]; tone: string; mine?: boolean }) {
+/** The big "use your face" button, with a scan animation while the device checks. */
+function FaceButton({ state, label, hint, disabled, onClick }: { state: Face; label: string; hint: string; disabled?: boolean; onClick: () => void }) {
+  const busy = state === 'asking' || state === 'waiting';
   return (
-    <div className="portrait" style={{ background: `radial-gradient(120% 90% at 35% 25%, ${bg[0]}, ${bg[1]})` }}>
-      <svg viewBox="-100 -100 200 200" className="portrait__figure" aria-hidden="true">
-        <circle cx="0" cy="-12" r="34" style={{ fill: tone }} />
-        <path d="M -78 100 C -74 44 -40 30 0 30 C 40 30 74 44 78 100 Z" style={{ fill: tone }} />
-        {mine && (
-          <text x="0" y="-1" textAnchor="middle" className="portrait__initials" style={{ fill: mix('var(--accent)', 45, 'white') }}>
-            {initials(name)}
-          </text>
-        )}
-      </svg>
-      <span className="portrait__tag">
-        {!mine && (
-          <span className="portrait__wave" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-        )}
-        {mine ? `${name.trim().split(/\s+/)[0]} (you)` : name}
+    <button
+      type="button"
+      className={`face-btn face-btn--${state}`}
+      onClick={onClick}
+      disabled={disabled || busy || state === 'done'}
+      aria-busy={busy}
+      data-testid="face-btn"
+    >
+      <span className="face-btn__icon" aria-hidden="true">
+        {state === 'done' ? <CheckIcon width={26} height={26} /> : <FaceIdIcon width={28} height={28} />}
+        <i className="face-btn__scan" />
       </span>
-    </div>
+      <span className="face-btn__text">
+        <strong>{state === 'waiting' ? `Look at your camera…` : state === 'asking' ? 'Getting ready…' : state === 'done' ? 'Verified' : label}</strong>
+        <span>{state === 'waiting' ? `Finish the ${unlockName()} prompt on your device.` : hint}</span>
+      </span>
+    </button>
   );
 }
-
-function LensScene({ myName }: { myName: string }) {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    if (myName || reducedMotion()) return;
-    const t = setInterval(() => setI((n) => (n + 1) % CAST.length), 3400);
-    return () => clearInterval(t);
-  }, [myName]);
-
-  if (myName.trim())
-    return <Portrait name={myName} bg={['var(--accent)', mix('var(--accent)', 55, 'var(--hot)')]} tone="rgb(var(--overlay-rgb))" mine />;
-  return (
-    <>
-      {CAST.map((c, n) => (
-        <div key={c.name} className={`scene-slide${n === i ? ' scene-slide--on' : ''}`}>
-          <Portrait {...c} />
-        </div>
-      ))}
-    </>
-  );
-}
-
-/* ---------- the lens barrel's aperture scale ---------- */
-
-const STOPS = ['1.4', '2', '2.8', '4', '5.6', '8', '11', '16'];
-const STEP = 13; // degrees between stops
-
-function FStopRing({ open }: { open: number }) {
-  // fully open → f/1.4, nearly shut → f/16
-  const k = Math.max(0, Math.min(STOPS.length - 1, ((1 - open) / 0.9) * (STOPS.length - 1)));
-  return (
-    <svg className="fring" viewBox="-120 -120 240 240" aria-hidden="true">
-      {/* stops run anticlockwise up the left of the barrel, clear of the heading */}
-      <g style={{ transform: 'rotate(-36deg)' }}>
-      <g className="fring__scale" style={{ transform: `rotate(${k * STEP}deg)` }}>
-        {STOPS.map((s, n) => (
-          <g key={s} transform={`rotate(${-n * STEP})`}>
-            <line x1="0" y1="-108" x2="0" y2="-103" className="fring__tick" />
-            <text x="0" y="-111" textAnchor="middle" className={`fring__label${Math.round(k) === n ? ' fring__label--on' : ''}`}>
-              {s}
-            </text>
-          </g>
-        ))}
-        {Array.from({ length: 60 }, (_, n) => (
-          <line key={n} x1="0" y1="-104" x2="0" y2="-102" transform={`rotate(${n * 6})`} className="fring__minor" />
-        ))}
-      </g>
-      </g>
-      <g transform="rotate(-36)">
-        <path d="M -4 -99 L 4 -99 L 0 -94 Z" className="fring__marker" />
-      </g>
-    </svg>
-  );
-}
-
-/* ---------- page ---------- */
-
-const COPY = {
-  login: { title: ['Back in', 'focus.'], sub: 'Sign in to start a call or join one.', cta: 'Sign in' },
-  register: { title: ['Get in', 'the picture.'], sub: 'One account for web, Android and iOS. Calls hold up to six people.', cta: 'Create account' },
-};
 
 export function AuthPage() {
-  const { login, register, notice } = useAuth();
-  const [mode, setMode] = useState<Mode>(() => (location.pathname.startsWith('/register') ? 'register' : 'login'));
-  const [v, setV] = useState<Record<Field, string>>({ name: '', email: '', password: '' });
-  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
-  const [serverErrors, setServerErrors] = useState<Partial<Record<Field, string>>>({});
+  const { login, register, loginWithFace, registerWithFace, notice } = useAuth();
+  const [tab, setTabState] = useState<Tab>(pathTab);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<Fields>({});
   const [message, setMessage] = useState<string | null>(notice);
+  const [face, setFace] = useState<Face>('idle');
   const [busy, setBusy] = useState(false);
-  const [showPw, setShowPw] = useState(false);
-  const [caps, setCaps] = useState(false);
-  const [lens, setLens] = useState<Lens>('shut');
-  const [leaving, setLeaving] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [usePassword, setUsePassword] = useState(!passkeysSupported());
+  const [builtIn, setBuiltIn] = useState(true);
+  const canFace = passkeysSupported();
+  const strength = passwordStrength(password);
 
-  // The one orchestrated moment on arrival: the iris opens.
   useEffect(() => {
-    const t = setTimeout(() => setLens('open'), reducedMotion() ? 0 : 250);
-    return () => clearTimeout(t);
+    void hasBuiltInUnlock().then(setBuiltIn);
   }, []);
   useEffect(() => setMessage(notice), [notice]);
 
-  useEffect(() => {
-    if (location.pathname.startsWith('/r/')) return; // keep invite links intact
-    const path = mode === 'register' ? '/register' : '/login';
-    if (location.pathname !== path) history.replaceState(null, '', path + location.search);
-  }, [mode]);
-
-  const errors = validate(mode, v);
-  const errorFor = (f: Field) => serverErrors[f] ?? (touched[f] ? errors[f] : undefined);
-  const strength = passwordStrength(v.password);
-  const set = (f: Field) => (val: string) => {
-    setV((s) => ({ ...s, [f]: val }));
-    setServerErrors((s) => ({ ...s, [f]: undefined }));
-  };
-
-  const blink = async () => {
-    setLens('blink');
-    await wait(380);
-    setLens(document.activeElement?.getAttribute('name') === 'password' ? 'peek' : 'open');
-  };
-
-  const switchMode = (m: Mode) => {
-    if (m === mode) return;
-    setMode(m);
-    setTouched({});
-    setServerErrors({});
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    setErrors({});
     setMessage(null);
+    setFace('idle');
+    const path = t === 'register' ? '/register' : '/login';
+    if (!location.pathname.startsWith('/r/') && location.pathname !== path) history.replaceState(null, '', path);
   };
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setTouched({ name: true, email: true, password: true });
-    if (Object.keys(errors).length) {
-      void blink();
-      formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
-      return;
-    }
-    setBusy(true);
+  const hint = builtIn ? `Uses ${unlockName()} on this device. Your face never leaves it.` : 'Use your phone or a security key to confirm it’s you.';
+  const celebrate = async () => {
+    setFace('done');
+    await wait(650);
+  };
+  const fail = (err: unknown) => {
+    setFace('idle');
+    if (err instanceof PasskeyCancelled) setMessage('Face sign-in was cancelled. Try again, or use your email and password.');
+    else if (err instanceof ApiError) {
+      setErrors(err.fields as Fields);
+      setMessage(err.message);
+    } else setMessage((err as Error)?.message ?? 'Something went wrong. Please try again.');
+  };
+
+  const faceLogin = async () => {
     setMessage(null);
-    const enter = async () => {
-      setLens('wide');
-      setLeaving(true);
-      await wait(720);
-    };
+    setFace('asking');
     try {
-      if (mode === 'register') await register(v.name.trim(), v.email.trim(), v.password, enter);
-      else await login(v.email.trim(), v.password, enter);
+      await loginWithFace(celebrate, () => setFace('waiting'));
     } catch (err) {
-      const apiErr = err instanceof ApiError ? err : null;
-      setServerErrors((apiErr?.fields ?? {}) as Partial<Record<Field, string>>);
-      setMessage(apiErr?.message ?? 'That didn’t go through. Check your connection and try again.');
-      setBusy(false);
-      void blink();
+      fail(err);
     }
   };
 
-  // Switching light/dark closes the shutter while the colours swap.
-  const shutter = useShutter();
-  const open = shutter ? 0 : LENS_OPEN[lens];
-  const copy = COPY[mode];
+  const checkNameEmail = (): Fields => {
+    const e: Fields = {};
+    if (name.trim().length < 2) e.name = 'Add your name, at least 2 characters.';
+    if (!EMAIL.test(email.trim())) e.email = 'Enter an email like name@example.com.';
+    return e;
+  };
+
+  const faceRegister = async () => {
+    setMessage(null);
+    const e = checkNameEmail();
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    setFace('asking');
+    try {
+      await registerWithFace(name.trim(), email.trim(), celebrate, () => setFace('waiting'));
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const submitPassword = async (ev: FormEvent) => {
+    ev.preventDefault();
+    setMessage(null);
+    const e: Fields = tab === 'register' ? checkNameEmail() : {};
+    if (tab === 'login' && !EMAIL.test(email.trim())) e.email = 'Enter an email like name@example.com.';
+    if (tab === 'login' && !password) e.password = 'Enter your password.';
+    if (tab === 'register') {
+      if (password.length < 8) e.password = 'Use at least 8 characters.';
+      else if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) e.password = 'Mix in at least one letter and one number.';
+    }
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    setBusy(true);
+    try {
+      if (tab === 'login') await login(email.trim(), password);
+      else await register(name.trim(), email.trim(), password);
+    } catch (err) {
+      setBusy(false);
+      fail(err);
+      if (err instanceof ApiError && err.status === 401) setPassword('');
+    }
+  };
+
+  const lensOpen = face === 'waiting' ? 0.18 : face === 'asking' ? 0.4 : face === 'done' ? 1 : 0.62;
 
   return (
-    <div className={`studio${leaving ? ' studio--leaving' : ''}`} data-mode={mode}>
-      <div className="studio__grain" aria-hidden="true" />
-
-      <header className="studio__brand">
-        <Aperture open={0.42} className="mark" />
-        <span>Huddle</span>
-      </header>
-      <ModeToggle className="studio__mode" />
-
-      <div className="lens" data-lens={lens}>
-        <FStopRing open={open} />
-        <Aperture open={open} className="lens__iris" label={`Preview of a call. The lens is ${lens === 'peek' ? 'closed while you type your password' : 'open'}.`}>
-          <LensScene myName={mode === 'register' ? v.name : ''} />
-        </Aperture>
-        <p className="lens__caption" aria-live="polite">
-          {lens === 'peek' ? 'Lens closed while you type your password.' : ' '}
-        </p>
-      </div>
-
-      <main className="studio__panel">
-        <h1 key={mode} className="studio__title">
-          <span>{copy.title[0]}</span>
-          <span>{copy.title[1]}</span>
-        </h1>
-        <p className="studio__sub">{copy.sub}</p>
-
-        <div className="switch" role="tablist" aria-label="Sign in or create an account">
-          <button role="tab" type="button" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>
-            Sign in
-          </button>
-          <button role="tab" type="button" aria-selected={mode === 'register'} onClick={() => switchMode('register')}>
-            Create account
-          </button>
-          <span className="switch__bar" aria-hidden="true" />
+    <div className="auth">
+      <aside className="auth__brand" aria-hidden="true">
+        <div className="auth__logo">
+          <Aperture open={0.42} className="mark" />
+          Huddle
         </div>
-
-        {message && (
-          <p className="studio__message" role="alert">
-            {message}
-          </p>
-        )}
-
-        <form ref={formRef} className="studio__form" onSubmit={submit} noValidate>
-          <div className={`reveal${mode === 'register' ? ' reveal--open' : ''}`} aria-hidden={mode !== 'register'}>
-            <div>
-              <Line
-                name="name"
-                label="Your name"
-                type="text"
-                autoComplete="name"
-                value={v.name}
-                onChange={set('name')}
-                onBlur={() => v.name && setTouched((t) => ({ ...t, name: true }))}
-                error={mode === 'register' ? errorFor('name') : undefined}
-              />
+        <div className="auth__scene">
+          <div className="scene-window">
+            <div className="scene-window__bar">
+              <i />
+              <i />
+              <i />
+              <span>Design review · 12:04</span>
+            </div>
+            <div className="scene-window__grid">
+              {['MK', 'AR', 'PS', 'DV'].map((ini, i) => (
+                <div key={ini} className={`scene-tile scene-tile--${i}`}>
+                  <span>{ini}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <Line
-            name="email"
-            label="Email"
-            type="email"
-            autoComplete="email"
-            value={v.email}
-            onChange={set('email')}
-            onBlur={() => v.email && setTouched((t) => ({ ...t, email: true }))}
-            error={errorFor('email')}
-            autoFocus
-          />
-          <Line
-            name="password"
-            label="Password"
-            type={showPw ? 'text' : 'password'}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            value={v.password}
-            onChange={set('password')}
-            onFocus={() => setLens('peek')}
-            onBlur={() => {
-              if (v.password) setTouched((t) => ({ ...t, password: true }));
-              setLens((l) => (l === 'peek' ? 'open' : l));
-            }}
-            onKeyUp={(e) => setCaps(e.getModifierState?.('CapsLock') ?? false)}
-            error={errorFor('password')}
-            trailing={
-              <button type="button" className="line__toggle" onClick={() => setShowPw((s) => !s)} aria-pressed={showPw}>
-                {showPw ? 'Hide' : 'Show'}
-              </button>
-            }
-          />
-          {caps && <p className="studio__hint">Caps Lock is on.</p>}
-
-          {mode === 'register' && v.password && (
-            <div className={`meter meter--${strength.score}`} aria-live="polite">
-              <div className="meter__track">
-                <span style={{ width: `${strength.score * 25}%` }} />
+          <div className={`scene-lens scene-lens--${face}`}>
+            <Aperture open={lensOpen} className="scene-lens__iris">
+              <div className="scene-lens__face">
+                <FaceIdIcon width={64} height={64} />
               </div>
-              <span className="meter__label">{strength.label}</span>
-            </div>
+            </Aperture>
+            <i className="scene-lens__sweep" />
+          </div>
+        </div>
+        <div className="auth__pitch">
+          <h2>Meet face to face.</h2>
+          <p>And sign in the same way. Huddle uses your device’s face unlock, so there’s no password to type or forget.</p>
+        </div>
+      </aside>
+
+      <main className="auth__panel">
+        <ModeToggle className="auth__mode" />
+        <div className="auth__card">
+          <div className="seg" role="tablist" aria-label="Account">
+            <button role="tab" aria-selected={tab === 'login'} className={tab === 'login' ? 'is-on' : ''} onClick={() => setTab('login')} data-testid="tab-login">
+              Sign in
+            </button>
+            <button role="tab" aria-selected={tab === 'register'} className={tab === 'register' ? 'is-on' : ''} onClick={() => setTab('register')} data-testid="tab-register">
+              Create account
+            </button>
+            <i className="seg__thumb" style={{ transform: `translateX(${tab === 'login' ? 0 : 100}%)` }} />
+          </div>
+
+          <h1 className="auth__title">{tab === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+          <p className="auth__lede">
+            {tab === 'login' ? 'Sign in with your face. No email or password needed.' : 'Your face unlocks your account. You can add a password later as a backup.'}
+          </p>
+
+          {message && (
+            <p className="auth__msg" role="alert" data-testid="auth-message">
+              {message}
+            </p>
           )}
 
-          <button className="shutter" type="submit" disabled={busy}>
-            <span className="shutter__dot" aria-hidden="true" />
-            {busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : copy.cta}
-          </button>
-        </form>
+          {tab === 'login' ? (
+            <>
+              {canFace && <FaceButton state={face} label="Sign in with your face" hint={hint} onClick={() => void faceLogin()} />}
+              <div className="or">
+                <span>{canFace ? 'or use your email' : 'Sign in with your email'}</span>
+              </div>
+              <form className="auth__form" onSubmit={submitPassword} noValidate>
+                <Line name="email" label="Email" type="email" autoComplete="username webauthn" value={email} onChange={setEmail} error={errors.email} />
+                <Line name="password" label="Password" type="password" autoComplete="current-password" value={password} onChange={setPassword} error={errors.password} />
+                <button className="btn btn--secondary btn--wide" type="submit" disabled={busy || face !== 'idle'} data-testid="password-submit">
+                  {busy ? 'Signing in…' : 'Sign in with password'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <form className="auth__form" onSubmit={submitPassword} noValidate>
+              <Line name="name" label="Your name" type="text" autoComplete="name" value={name} onChange={setName} error={errors.name} />
+              <Line name="email" label="Email" type="email" autoComplete="email" value={email} onChange={setEmail} error={errors.email} />
+              {!usePassword ? (
+                <>
+                  <FaceButton state={face} label="Create with face sign-in" hint={hint} onClick={() => void faceRegister()} />
+                  <button type="button" className="link-btn auth__alt" onClick={() => setUsePassword(true)} data-testid="use-password">
+                    Use a password instead
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Line
+                    name="password"
+                    label="Password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={setPassword}
+                    error={errors.password}
+                  />
+                  {password && (
+                    <div className={`meter meter--${strength.score}`} aria-live="polite">
+                      <div className="meter__track">
+                        <span style={{ width: `${strength.score * 25}%` }} />
+                      </div>
+                      <span className="meter__label">{strength.label}</span>
+                    </div>
+                  )}
+                  <button className="btn btn--primary btn--wide" type="submit" disabled={busy} data-testid="password-submit">
+                    {busy ? 'Creating…' : 'Create account'}
+                  </button>
+                  {canFace && (
+                    <button type="button" className="link-btn auth__alt" onClick={() => setUsePassword(false)}>
+                      Use face sign-in instead
+                    </button>
+                  )}
+                </>
+              )}
+            </form>
+          )}
+          {!canFace && <p className="auth__fine">This browser can’t do face sign-in, so we’re using a password.</p>}
+        </div>
+        <p className="auth__foot">Private group video calls · up to 6 people</p>
       </main>
     </div>
   );

@@ -6,13 +6,14 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#0f2c3f",
+    "backgroundColor": "#13121a",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.harishverma.huddle",
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["audio", "voip"]
+        "UIBackgroundModes": ["audio", "voip"],
+        "NSFaceIDUsageDescription": "Huddle uses Face ID so you can sign in with your face instead of a password."
       }
     },
     "android": {
@@ -22,10 +23,19 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.USE_BIOMETRIC"
       ]
     },
     "plugins": [
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "Huddle uses Face ID so you can sign in with your face instead of a password." }
+      ],
+      [
+        "expo-secure-store",
+        { "faceIDPermission": "Huddle uses Face ID to unlock your sign-in key." }
+      ],
       [
         "@config-plugins/react-native-webrtc",
         {

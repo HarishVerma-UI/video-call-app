@@ -66,6 +66,12 @@ export const config = {
   /** Messages sent to someone when they join a room. */
   chatHistoryOnJoin: 50,
 
+  // --- face sign-in (passkeys) ---
+  /** The site's domain, e.g. huddle.example.com. Unset in dev: the page's own host is used. */
+  webauthnRpId: process.env.WEBAUTHN_RP_ID || '',
+  /** Full origins allowed to use passkeys, e.g. https://huddle.example.com (comma-separated). */
+  webauthnOrigins: (process.env.WEBAUTHN_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+
   // --- auth ---
   jwtSecret: process.env.JWT_SECRET || (isProd ? '' : DEV_SECRET),
   jwtExpiresInSec: parseDuration(process.env.JWT_EXPIRES_IN, 7 * 86400),
@@ -78,5 +84,6 @@ export function checkConfig(c = config) {
   if (c.isProd && !c.mongoUri) problems.push('MONGODB_URI is required in production.');
   if (!c.jwtSecret || c.jwtSecret.length < 32) problems.push('JWT_SECRET must be set to at least 32 random characters.');
   if (c.isProd && c.jwtSecret === DEV_SECRET) problems.push('JWT_SECRET must not be the development default.');
+  if (c.isProd && !c.webauthnRpId) problems.push('WEBAUTHN_RP_ID is required in production (your domain, e.g. huddle.example.com).');
   return problems;
 }

@@ -154,6 +154,62 @@ server (changing the password does revoke it).
 
 ---
 
+### Face sign-in (passkeys / WebAuthn)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant D as Device (Face ID · Windows Hello · face unlock)
+  participant B as Browser (web app)
+  participant S as Node server
+  participant DB as MongoDB
+
+  Note over D,DB: Register with your face
+  B->>S: POST /api/auth/passkey/register/options { name, email }
+  S-->>B: random challenge (single-use, 5 min) + rp id + user handle
+  B->>D: navigator.credentials.create()
+  D->>D: checks your face → creates a key pair in the secure chip
+  D-->>B: public key + signed attestation (private key never leaves)
+  B->>S: POST …/register/verify { credential }
+  S->>S: challenge · origin · site hash · user-verified flag
+  S->>DB: users.insertOne({ name, email, passwordHash: null })
+  S->>DB: credentials.insertOne({ _id: credentialId, publicKey, signCount })
+  S-->>B: 201 { user, token }
+
+  Note over D,DB: Sign in with your face (no email typed)
+  B->>S: POST /api/auth/passkey/login/options
+  S-->>B: random challenge
+  B->>D: navigator.credentials.get()
+  D->>D: checks your face → signs (authenticatorData + hash(clientData))
+  D-->>B: credential id + signature
+  B->>S: POST …/login/verify { credential }
+  S->>DB: credentials.findOne({ _id })
+  S->>S: verify signature with the stored public key · counter only moves forward
+  S-->>B: { user, token }
+```
+
+The face itself is never seen by the app or the server: the device's own
+biometric check unlocks its private key. The verifier is
+`server/src/auth/webauthn.js` (CBOR + COSE parsing and ES256 / EdDSA / RS256
+signature checks with `node:crypto`), and the routes are in
+`server/src/auth/faceAuth.js`.
+
+The **mobile app** uses a simpler scheme that needs no website domain: the
+server issues the phone a random key (`POST /api/auth/device/register`), the app
+stores it in the Keychain / Keystore with `requireAuthentication`, and the OS
+releases it only after Face ID / face unlock / fingerprint. The server keeps a
+SHA-256 of it and compares in constant time on `POST /api/auth/device/login`.
+
+```js
+// credentials collection (one per device)
+{ _id: "<credential id>", userId, kind: "passkey" | "device", name: "Chrome on Windows",
+  publicKey: { kty: "EC", crv: "P-256", x, y }, alg: -7, signCount, userHandle, transports, synced,   // passkeys
+  secretHash,                                                                                      // app keys
+  createdAt, lastUsedAt }
+```
+
+---
+
 ## 3. The shared call engine (`shared/src/CallClient.ts`)
 
 Both React apps use **the same** `CallClient`. The UI never touches WebRTC; it
@@ -306,6 +362,15 @@ Who is in which room lives in memory. Accounts and chat messages are stored in M
 //          TTL on createdAt (CHAT_RETENTION_DAYS, default 30) so old messages delete themselves
 ```
 
+Two more collections feed the Teams-style tabs:
+
+```js
+// calls: written when you leave a meeting (Calls tab), deleted after 90 days
+{ userId, roomId, startedAt, endedAt, with: ["Bala Krishnan", "Chen Li"] }
+// room_members: rooms you joined or wrote in (Chat tab, "Happening now")
+{ userId, roomId, lastActiveAt }   // unique on (userId, roomId)
+```
+
 The `welcome` message carries the room's last 50 messages, and older pages come
 from `GET /api/rooms/:id/messages?before=<ts>`. A message is saved first and only
 then broadcast, so everyone sees exactly what was stored. Without `MONGODB_URI`, an
@@ -366,65 +431,23 @@ messages are yours, so your messages from your phone show as yours on your lapto
 
 ## 8. UI design
 
-The app is built around one signature element, a **camera aperture** (`web/src/components/Aperture.tsx`,
-`mobile/src/components/Aperture.tsx`). It's six blades over whatever the lens is showing:
+A Teams-style workspace with a camera-lens twist (see the README for screenshots):
 
-```mermaid
-flowchart LR
-  shut(["shut · open=0"]) -- page load --> open(["open · 0.62"])
-  open -- focus password --> peek(["peek · 0.1"])
-  peek -- leave password --> open
-  open -- bad submit / wrong password --> blink(["blink · 0 → back"])
-  blink --> open
-  open -- signed in --> wide(["wide · 1 → lobby irises in"])
+```
+┌──────────────────────────── title bar: logo · "go to a room" search · mode · you ┐
+│ rail │ list pane (320px)          │ stage                                          │
+│ Meet │ Start a meeting · code     │ pre-join: camera preview, switches, Join now   │
+│ Chat │ Happening now · Recent     │ or the chat conversation                       │
+│ Calls│ chats with last message    │ or the call history / profile page             │
+│  …   │                            │                                                │
+│ (you)│                            │                                                │
+└──────┴────────────────────────────┴────────────────────────────────────────────────┘
 ```
 
-How it's drawn: each blade is a half-plane rotated 60° from the last and pushed
-`open × 118` units out from the centre, so the gap between them is a hexagon.
-Closing also twists the blades up to 34°, like a real iris. On the web it's one
-SVG with CSS transitions; on mobile it's plain `Animated.View`s on the native
-driver. Around the sign-in lens, an engraved aperture scale (f/1.4 to f/16)
-turns to show the current opening.
-
-**Colour** has two modes, `:root[data-theme='dark' | 'light']` in
-`web/src/styles.css`, built from one palette (teal-blue, sunflower, tomato).
-Both set the same roles: `--bg`, `--surface`, `--text`, `--muted`, `--accent`
-(+ `--accent-ink`), `--accent-text` (the accent when used for text: yellow in
-dark, tomato in light), `--hot` (live/leave), `--cool` (connected/speaking),
-`--well` (video background), `--on-overlay` (text on video) and the lens blade
-colours, plus RGB triplets for translucent tints. Components never use raw colours.
-
-An inline script in `index.html` picks the mode before first paint (saved
-choice, else the device setting). `web/src/theme.ts` keeps following the device
-until the person chooses, and runs a switch like a camera:
-`huddle:shutter-close` → swap `data-theme` inside a View Transition →
-`huddle:shutter-open`. Every lens on screen listens and blinks. Mobile reads the
-phone's setting at launch (`Appearance`) and uses the same two palettes.
-
-Type is TeX Gyre Adventor, self-hosted. Everything respects `prefers-reduced-motion`.
-
-![Dark and light](docs/screenshots/dark-and-light.jpg)
-
-The four directions below were explored before the aperture concept:
-
-### 01 · Midnight: focused 1-to-1
-Dark, calm, two equal tiles. The active speaker gets an outline.
-![Midnight mockup](docs/mockups/01-midnight.svg)
-
-### 02 · Aurora: immersive
-The remote person fills the screen over a gradient, your camera floats as a
-picture-in-picture, and controls sit in a frosted-glass dock.
-![Aurora mockup](docs/mockups/02-aurora.svg)
-
-### 03 · Paper: group calls
-A warm light theme with a 6-person grid, speaking indicator, mute badges and a
-side chat panel.
-![Paper mockup](docs/mockups/03-paper-grid.svg)
-
-### 04 · Mobile
-A portrait in-call screen with a self-view, plus a home screen with
-"join with room code".
-![Mobile mockup](docs/mockups/04-mobile.svg)
+- In a meeting: a top bar (Chat, People, Camera, Mic, Share, **Leave**) over the video grid; chat and people open as a side panel (a bottom sheet on phones).
+- Colour: indigo `#5B5FC7` for actions, amber `#FFB547` "spark" for live / active / speaking, in dark and light modes (`web/src/styles.css`, `mobile/src/config.ts`).
+- Phones: the rail becomes a bottom tab bar (web) and native bottom tabs (app).
+- Routes: `/` Meet, `/r/:room` Meet with that room picked (invite links), `/chat/:room`, `/calls`, `/profile`.
 
 ---
 
@@ -436,6 +459,8 @@ A portrait in-call screen with a self-view, plus a home screen with
 | Camera/mic need HTTPS off `localhost` | browser security rule | **Step 2:** HTTPS + WSS (e.g. Caddy / nginx + Let's Encrypt) |
 | Max 6 per room | mesh upload cost grows with each person | **Step 3:** SFU (mediasoup) |
 | One server instance | room state and rate limits are in memory | Redis pub/sub when scaling out |
+| Passkeys need HTTPS and a fixed domain | WebAuthn binds keys to a site | set `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` when deploying (Step 2) |
+| Challenges are kept in memory | single server instance | move to Redis with the rest when scaling out |
 | No refresh tokens / single-device logout | JWTs are stateless | refresh tokens (`tokenVersion` already revokes all tokens on password change) |
 | A rename shows in a call only after rejoining | names are fixed when you join | broadcast a `peer-updated` message |
 | Mobile audio uses the OS default route | no audio-route manager yet | add `react-native-incall-manager` for speaker/earpiece/Bluetooth |

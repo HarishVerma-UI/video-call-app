@@ -1,6 +1,7 @@
 import { createApi, type ApiClient, type AuthResponse, type AuthUser } from '@vca/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { API_BASE } from '../config';
+import { createPasskey, getPasskey } from './passkey';
 
 const KEY = 'huddle:session';
 
@@ -23,8 +24,16 @@ interface AuthValue {
   logout: (reason?: string) => void;
   /** Change name/email; keeps you signed in with the fresh token. */
   updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
-  /** Change password; this device stays signed in, other devices are signed out. */
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** Change password (currentPassword null = set a first one); this device stays signed in, other devices are signed out. */
+  changePassword: (currentPassword: string | null, newPassword: string) => Promise<void>;
+  /** Sign in with the device's face unlock (passkey). No email needed. */
+  loginWithFace: (beforeEnter?: () => Promise<void>, onPrompt?: () => void) => Promise<void>;
+  /** Create an account secured by face unlock (no password). */
+  registerWithFace: (name: string, email: string, beforeEnter?: () => Promise<void>, onPrompt?: () => void) => Promise<void>;
+  /** Turn on face sign-in for this device on the signed-in account. */
+  addFaceToAccount: () => Promise<void>;
+  /** Re-read the user (e.g. after removing devices). */
+  refreshUser: () => Promise<void>;
   /** Message to show on the sign-in page (e.g. "session expired"). */
   notice: string | null;
 }
@@ -139,7 +148,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return r.user;
     },
     changePassword: async (currentPassword, newPassword) => {
-      accept(await api.changePassword({ currentPassword, newPassword }));
+      accept(await api.changePassword(currentPassword === null ? { newPassword } : { currentPassword, newPassword }));
+    },
+    loginWithFace: async (beforeEnter, onPrompt) => {
+      const options = await api.passkeyLoginOptions();
+      onPrompt?.();
+      const credential = await getPasskey(options);
+      const r = await api.passkeyLoginVerify(credential);
+      await beforeEnter?.();
+      accept(r);
+    },
+    registerWithFace: async (name, email, beforeEnter, onPrompt) => {
+      const options = await api.passkeyRegisterOptions({ name, email });
+      onPrompt?.();
+      const credential = await createPasskey(options);
+      const r = await api.passkeyRegisterVerify(credential);
+      await beforeEnter?.();
+      accept(r);
+    },
+    addFaceToAccount: async () => {
+      const options = await api.passkeyRegisterOptions();
+      await api.passkeyRegisterVerify(await createPasskey(options));
+    },
+    refreshUser: async () => {
+      const { user } = await api.me();
+      setSession((s) => {
+        const next = s ? { ...s, user } : s;
+        save(next);
+        return next;
+      });
     },
   };
 

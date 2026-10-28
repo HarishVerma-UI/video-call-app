@@ -1,85 +1,102 @@
-# Huddle: group video calls (React · React Native · Node.js · MongoDB)
+# Huddle: meetings, chat and face sign-in (React · React Native · Node.js · MongoDB)
 
-Private group video calls for up to 6 people, on **web, Android and iOS**, built
-from scratch on **WebRTC**. People sign in with an account stored in **MongoDB**
-and authenticated with **JWT**. No paid video vendor is involved: the Node.js
-server only introduces people to each other, and audio and video flow directly
-between devices.
+Private group video meetings for up to 6 people, on **web, Android and iOS**,
+built from scratch on **WebRTC**. The app is laid out like **Microsoft Teams**
+(a left app rail with Meet, Chat, Calls and Profile), with a camera-lens twist.
+You **sign in and register with your face**: Face ID, Windows Hello, Android
+face unlock or a fingerprint. Email and password stay available as a backup.
+No paid video vendor is involved: the Node.js server only introduces people to
+each other, and audio and video flow directly between devices.
 
-| Dark | Light |
+| Sign in with your face | Create an account with your face |
 |---|---|
-| ![Sign in, dark](docs/screenshots/sign-in-dark.jpg) | ![Sign in, light](docs/screenshots/sign-in-light.jpg) |
+| ![Face sign-in](docs/screenshots/face-sign-in.png) | ![Face register](docs/screenshots/face-register.png) |
 
-| Your name appears in the lens | Lens shuts for your password | Lobby | Call with chat | Phone |
-|---|---|---|---|---|
-| ![Register](docs/screenshots/auth-register.jpg) | ![Password](docs/screenshots/auth-password.jpg) | ![Lobby](docs/screenshots/lobby-light.png) | ![Call](docs/screenshots/call-dark.png) | ![Phone](docs/screenshots/phone-light.png) |
-
-| Edit your profile | Saved chat: catch up on what you missed |
+| Meet (dark) | Meet (light) |
 |---|---|
-| ![Profile](docs/screenshots/profile.png) | ![Chat history](docs/screenshots/chat-history.png) |
+| ![Meet](docs/screenshots/meet.png) | ![Meet light](docs/screenshots/meet-light.png) |
 
-## Design: "the lens opens"
-
-The whole app is built around one object from the world of video: a **camera
-aperture**. Its six blades open, close and twist like a real iris, and they
-respond to what you do instead of looping for decoration:
-
-| When you… | The lens… |
+| In a meeting, with chat | Screen share |
 |---|---|
-| open the sign-in page | opens from shut, and the aperture scale on the barrel turns to match (f/16 → f/4) |
-| click into the password field | **closes**, so the lens never peeks while you type it |
-| type your name when signing up | shows your initials inside, the way others will see you before your camera starts |
-| make a mistake | blinks shut and open, like a shutter |
-| sign in | opens wide, and the lobby appears through an expanding circle |
-| turn your camera off in the lobby | closes over your preview |
-| are in a call with your camera off | your tile shows a shut iris behind your initials |
-| switch between light and dark | closes, the colours swap behind it, and it opens again |
+| ![Meeting](docs/screenshots/meeting.png) | ![Share](docs/screenshots/meeting-share.png) |
 
-### Light and dark mode
-
-One identity in two modes: **teal-blue, sunflower yellow and tomato red**.
-The app follows your device's light/dark setting until you choose; the round
-half-yellow, half-teal button in the corner (sign-in page, lobby and call)
-switches mode and spins half a turn. Your choice is remembered on that device,
-and the mode is set before the page draws, so it never flashes.
-
-| | Background | Text | Accent | Accent as text | Leave / live | Connected / speaking |
-|---|---|---|---|---|---|---|
-| **Dark** | teal-blue `#0F2C3F` | cream `#FDF6E3` | sunflower `#FFC93C` | sunflower `#FFC93C` | tomato `#F2542D` | aqua `#5CE1E6` |
-| **Light** | cool white `#F3F7F8` | teal-blue `#0F2C3F` | sunflower `#FFC93C` | tomato `#C2401C` | tomato `#D9431F` | teal `#08808A` |
-
-Yellow stays the brand colour in both modes (buttons, the lens), but on light
-paper it can't carry text, so headings, links and focus rings switch to tomato.
-Both modes pass WCAG AA contrast for body, muted, button and error text
-(checked numerically). The colour roles live in `web/src/styles.css`.
-
-![Dark and light](docs/screenshots/dark-and-light.jpg)
-
-**Type:** TeX Gyre Adventor, a free revival of the geometric face used in 1970s
-broadcast design, shipped with the app under the GUST Font License (`web/public/fonts`).
-All motion stops when the system "reduce motion" setting is on.
+| Chat tab | Calls tab | Profile & face sign-in devices | Phone |
+|---|---|---|---|
+| ![Chat](docs/screenshots/chat-tab.png) | ![Calls](docs/screenshots/calls-tab.png) | ![Profile](docs/screenshots/profile-face.png) | ![Phone](docs/screenshots/phone-chat.png) |
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
+
+## How face sign-in works
+
+Your face is **never sent anywhere**. The phone or computer checks it with its
+own face unlock, the same way it unlocks itself, and only then signs a
+one-time challenge from the server.
+
+- **Web: passkeys (WebAuthn).** When you register, the browser asks the
+  device's face unlock to create a key pair. The private key stays in the
+  device's secure chip; the server stores only the public key. Signing in, the
+  server sends a random challenge, the device checks your face and signs it,
+  and the server verifies the signature. No email needed: the device offers
+  your Huddle passkey. Synced passkeys (iCloud Keychain, Google Password
+  Manager) also work on your other devices, and a phone can sign you in on a
+  computer by scanning a QR code.
+- **Mobile app: a key behind Face ID.** The server gives the phone a random
+  key, kept in the iOS Keychain / Android Keystore with
+  `requireAuthentication`, so the OS releases it only after Face ID, face
+  unlock or fingerprint succeeds.
+- **Password as a backup.** A face-only account can add a password in Profile.
+  An account made with a password is offered "Sign in with your face next
+  time" once. You can't remove your last way in.
+- The server checks every passkey response itself (`server/src/auth/webauthn.js`,
+  no third-party library): the challenge is single-use and expires in 5
+  minutes, the page origin and site must match, user verification (face,
+  fingerprint or PIN) is required, the signature is checked, and a counter
+  that goes backwards (a cloned key) is rejected.
+
+**Honest limits:** the device decides what counts as "verified". Most phones
+and laptops use face or fingerprint, but some fall back to the device PIN. And
+passkeys need **HTTPS** (or `localhost` while developing), so set
+`WEBAUTHN_RP_ID` to your domain when you deploy.
+
+## Design: Teams, with a lens
+
+- **Layout like Teams:** title bar with a room search, a left **app rail**
+  (Meet, Chat, Calls, Profile), a list pane, and the main stage. On phones the
+  rail becomes a bottom tab bar.
+- **Meetings like Teams:** a top bar with Chat, People, Camera, Mic, Share and a
+  red **Leave** button; chat and people open as side panels.
+- **The creative part:** a calm **indigo** for actions and a warm **amber
+  "spark"** for anything live or selected (the active rail marker, the
+  speaking ring around a video tile, the "You joined" line). The six-blade
+  **camera aperture** is the logo; it closes over your preview when your
+  camera is off, and on the sign-in page a scan line sweeps the lens while
+  your device checks your face.
+- **Dark and light mode:** follows your device until you pick one with the
+  half-amber, half-indigo toggle. Headings use TeX Gyre Adventor; body text
+  uses Segoe UI (like Teams) or the system font.
 
 ## Features
 
 **Accounts**
-- Sign in / create account page built around the animated aperture (above), with a sliding Sign in / Create account switch, a show-password toggle, a Caps Lock warning and a live password-strength meter
-- Accounts in **MongoDB** (unique, case-insensitive email) with **scrypt**-hashed passwords
-- **JWT** sessions (7 days by default), sent on every API call and on joining a call. Your name in a call comes from your account and can't be spoofed.
-- Login rate limiting, identical errors for "wrong password" and "no such account" (so people can't probe which emails are registered), invite links that survive sign-in
-- Web keeps the session in localStorage. Mobile keeps it in the **OS keychain/keystore** (expo-secure-store).
-- **Profile**: change your name, change your email (needs your current password), change your password (needs the current one and signs you out on every other device)
+- Register and sign in **with your face** (web passkeys; Face ID / face unlock in the mobile app), or with email and password
+- Face sign-in devices listed in Profile, each removable; add a backup password to a face-only account
+- Accounts in **MongoDB** with **scrypt**-hashed passwords; **JWT** sessions (7 days by default)
+- Rate limiting, identical errors for "wrong password" and "no such account", invite links that survive sign-in
+- **Profile**: change your name, email and password (changing the password signs out your other devices)
+
+**Meet**
+- Pre-join stage with camera preview and camera/mic switches, shows who is already in the meeting
+- "Start a meeting now", join with a code, **Happening now** (your rooms with people in them), recent rooms
+- Group meetings up to 6 people, speaking indicator, mute / camera-off shown to everyone
+- Screen sharing (desktop web) with a spotlight layout, People panel with the invite link
+- Recovers on its own: automatic reconnect, ICE restart, audio-only fallback
+
+**Chat**
+- Every room has a chat saved for 30 days. Read it and reply **from the Chat tab without joining the meeting**; people in the meeting see your message live
+- In the meeting: "You joined" marker, load earlier messages, day dividers, unread badge
 
 **Calls**
-- Group calls up to 6 people, adaptive grid, speaking indicator
-- Lobby with camera preview, mic/camera toggles, and a live "N people in this room" check
-- Room codes and invite links (`/r/swift-comet-482`)
-- Mute / camera-off shown to everyone, with avatars when the camera is off
-- Screen sharing (desktop web) with a spotlight layout
-- **Saved chat**: messages are stored per room in MongoDB for 30 days. When you join you see the last 50 with a "You joined" marker, and can load earlier ones. Day dividers, an unread badge for new messages, and your messages from any device show as yours.
-- Mobile: front/back camera flip and a native share sheet for invites
-- Recovers on its own: automatic reconnect, retrying failed connections (ICE restart), audio-only fallback
+- Your call history: room, who was there, when, how long, and **Call again**
 
 ## Project layout
 
@@ -90,7 +107,7 @@ video-call-app/
 ├── web/      @vca/web     — React 19 + Vite + TypeScript
 ├── mobile/   @vca/mobile  — React Native (Expo dev build) + react-native-webrtc
 ├── docker-compose.yml     — local MongoDB
-└── docs/                  — architecture, mockups, screenshots
+└── docs/                  — screenshots
 ```
 
 See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for diagrams of the system, the sign-in flow and the call flow.
@@ -117,7 +134,7 @@ Then:
 npm run dev
 ```
 
-- Web app: **http://localhost:5173**. Create an account, then start a call.
+- Web app: **http://localhost:5173**. Create an account with your face (or a password), then start a meeting.
 - Server: **http://localhost:3001** (`/health` shows whether MongoDB is connected).
 
 Open a second browser (or a private window), create another account, and join
@@ -153,6 +170,10 @@ cp .env.example .env           # set EXPO_PUBLIC_SIGNALING_URL to your computer'
 npx expo run:android           # or: npx expo run:ios   (needs Android Studio / Xcode)
 ```
 
+Face sign-in in the app uses the phone's own Face ID / face unlock / fingerprint
+(`expo-local-authentication` + `expo-secure-store`); turn it on when you create
+an account, or later in Profile.
+
 Keep `npm run dev:server` running on your computer. Phone and computer must be
 on the same Wi-Fi, and the server prints the address to use. Use a **real
 device**: emulators/simulators have no real camera. No Android Studio or Xcode?
@@ -166,8 +187,19 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | POST | `/api/auth/login` | — | `{ email, password }` → `200 { user, token, expiresAt }` |
 | GET | `/api/auth/me` | Bearer | → `{ user }` |
 | PATCH | `/api/auth/me` | Bearer | `{ name?, email?, currentPassword? }` → `{ user, token, expiresAt }` (email change needs `currentPassword`) |
-| POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working |
-| GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, maxPeers, full }` |
+| POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working. Face-only accounts send just `newPassword` to add a backup password |
+| POST | `/api/auth/passkey/register/options` | — or Bearer | `{ name, email }` (new account) → WebAuthn creation options; with Bearer: add this device |
+| POST | `/api/auth/passkey/register/verify` | — or Bearer | `{ credential }` → `201 { user, token, expiresAt }` (new) / `{ credentials }` (added) |
+| POST | `/api/auth/passkey/login/options` | — | → WebAuthn request options (single-use challenge) |
+| POST | `/api/auth/passkey/login/verify` | — | `{ credential }` → `{ user, token, expiresAt }` |
+| POST | `/api/auth/device/register` | — or Bearer | `{ name, email, deviceName }` → `{ user, token, device: { id, secret } }` (mobile app) |
+| POST | `/api/auth/device/login` | — | `{ deviceId, secret }` → `{ user, token, expiresAt }` |
+| GET | `/api/auth/credentials` | Bearer | → `{ credentials }` (your face sign-in devices) |
+| DELETE | `/api/auth/credentials/:id` | Bearer | → `{ credentials }`; `409` if it's your only way in |
+| GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, people, maxPeers, full }` |
+| POST | `/api/rooms/:id/messages` | Bearer | `{ text }` → `201 { message }`; also sent live to people in the meeting |
+| GET | `/api/chats` | Bearer | → `{ chats }`: your rooms, last message, who's in the meeting now |
+| GET | `/api/calls` | Bearer | → `{ calls }`: room, with whom, start, end, duration |
 | GET | `/api/rooms/:id/messages?before=<ts>&limit=50` | Bearer | → `{ messages, hasMore }` (oldest first; for "Load earlier") |
 | GET | `/health` | — | → `{ ok, db, store, rooms, participants }` |
 | WS | `/ws` | token in `join` | signaling, see ARCHITECTURE.md |
@@ -182,7 +214,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 | `npm run dev` | server + web with hot reload |
 | `npm run db` | start MongoDB in Docker |
 | `npm run dev:server` / `dev:web` / `dev:mobile` | one at a time |
-| `npm test` | server tests (auth, JWT, passwords, MongoDB store, signaling) |
+| `npm test` | server tests (auth, face sign-in, JWT, passwords, MongoDB stores, signaling, chat, calls) |
 | `npm run build` | production web build |
 | `npm start` | production server (serves `web/dist`) |
 
@@ -192,6 +224,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 |---|---|---|
 | server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
+| server | `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGINS` | the page's own host in dev; **required in prod** (your domain, e.g. `huddle.example.com`, and `https://huddle.example.com`) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `false`, `../web/dist` |
 | web | `VITE_API_URL`, `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same origin, same host `/ws`, Google STUN |
@@ -201,18 +234,15 @@ Each folder has a `.env.example`.
 
 ## What's tested
 
-- **Server (32 tests):**
-  - JWT: tampering, expiry, wrong key or audience, and the `alg: none` attack are all rejected.
-  - Passwords: hashes are salted and verify correctly.
-  - Sign-up and sign-in: field validation, duplicate emails (any letter case), the same error for wrong password and unknown email, rate limiting, and forged or orphaned tokens.
-  - MongoDB user store: checked against a fake collection. Set `MONGODB_URI` to run the same test against a real database.
-  - Calls: a token is required to join and the name can't be spoofed. Room cap, signal relay, chat and mute state all work.
-  - Profile: rename, email change (needs the password, rejects duplicates), password change signs out older tokens.
-  - Saved chat: history arrives on join, paging with `before`, retention, and room isolation (against memory and a fake MongoDB collection).
-- **Light & dark (11 checks):** follows the device setting, no flash before the app loads, the toggle switches and blinks the shutter, the choice is remembered and then wins over device changes.
-- **Web, end to end in Chromium (24 checks):** the lens opens on load, closes for the password, reopens, blinks on a bad submit, shows your initials and opens wide on success. Also checked: sign-up validation and strength meter, register, refresh to stay signed in, sign out, wrong password, correct password, duplicate email, an invite link opened while signed out, rejection of a forged stored token, and live video calls between signed-in accounts (with chat and screen share in a 3-person call).
-- **Profile and saved chat, end to end (25 checks):** open the profile, rename (the lobby updates at once), email change with and without the password, duplicate email, password change keeps this tab signed in but signs out another device, the old password stops working; then a 3-person room where a late joiner sees the history, the "You joined" marker, "Load earlier", day dividers, and an unread badge that ignores old messages.
-- **Mobile:** written against `react-native-webrtc` and `expo-secure-store`, and syntax-checked. It still needs a first run on a real device.
+- **Server (46 tests):**
+  - **Face sign-in:** a software authenticator makes real P-256 passkeys and signatures. Checked: register a face-only account, sign in without an email, a response can't be replayed, and rejection of a missing face/PIN check, a wrong site or origin, a forged signature and a cloned key (counter going backwards). Fuzzing with 20,000 corrupted responses gives clean errors, never a crash. Also: adding a passkey to a password account (and nobody else can finish it), the last way in can't be removed, a backup password can be added, and mobile device keys (wrong or removed keys stop working; secrets are never stored or listed).
+  - JWT tampering, expiry, wrong key or audience, and `alg: none`; salted password hashes; sign-up/sign-in validation, duplicate emails, rate limits.
+  - Meetings: a token is required, names can't be spoofed, room cap, relay, chat, mute state.
+  - Profile changes; saved chat (history, paging, retention); Chat and Calls tabs (last message, who's in the meeting, sending from outside a meeting reaches people inside, call history with names).
+  - MongoDB stores (users, chat, face sign-in devices, calls) against fake collections. Set `MONGODB_URI` to run against a real database.
+- **Web, end to end in Chromium (30 checks)** with Chrome's virtual authenticator standing in for face unlock: register with face, sign out and back in with face, a failed face check, a device with no passkey, adding a backup password and signing in with it, a password account turning on face sign-in from the banner, then a two-person meeting (pre-join shows who's there, unread badge, People panel), the Chat tab (live marker, message from the tab reaches the meeting), the Calls tab, the dark/light toggle, and the phone layout (bottom tabs, no sideways scrolling).
+- **3-person meeting (3 checks):** everyone sees everyone, chat, screen-share spotlight.
+- **Mobile:** written against `react-native-webrtc`, `expo-secure-store` and `expo-local-authentication`, and syntax-checked. It still needs a first run on a real phone (Face ID needs a device, not a simulator).
 
 ## Roadmap
 
@@ -221,5 +251,6 @@ Each folder has a `.env.example`.
 - [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
 - [ ] **Step 2**: TURN server (coturn) + HTTPS/WSS, so calls work across any network
 - [x] Profile editing and saved call chat (web + mobile)
+- [x] **Face sign-in** (passkeys + Face ID / face unlock) and a Teams-style layout with Chat and Calls tabs
 - [ ] Forgot-password email, refresh tokens, direct messages
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)

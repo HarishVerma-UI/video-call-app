@@ -2,6 +2,8 @@ import { createApi, type ApiClient, type AuthResponse, type AuthUser } from '@vc
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { API_BASE } from './config';
+import { ApiError } from '@vca/shared';
+import { clearFaceKey, confirmFace, deviceName, faceMeta, faceSupport, saveFaceKey, unlockFaceKey, type FaceMeta } from './faceUnlock';
 
 // The JWT lives in the OS keychain (iOS) / Keystore-backed storage (Android),
 // not in plain AsyncStorage.
@@ -26,8 +28,17 @@ interface AuthValue {
   logout: (reason?: string) => Promise<void>;
   /** Change name/email; keeps you signed in with the fresh token. */
   updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
-  /** Change password; this phone stays signed in, other devices are signed out. */
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** Change password (null = add a first one); this phone stays signed in, other devices are signed out. */
+  changePassword: (currentPassword: string | null, newPassword: string) => Promise<void>;
+  /** Face sign-in on this phone: who it's set up for, and what the phone calls it. */
+  face: { available: boolean; label: string; meta: FaceMeta | null };
+  loginWithFace: (beforeEnter?: () => Promise<void>) => Promise<void>;
+  /** New account protected by face unlock, no password. */
+  registerWithFace: (name: string, email: string, beforeEnter?: () => Promise<void>) => Promise<void>;
+  /** Turn face sign-in on/off for this phone (signed in). */
+  enableFace: () => Promise<void>;
+  disableFace: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthValue | null>(null);
@@ -36,7 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<Status>('checking');
   const [notice, setNotice] = useState<string | null>(null);
+  const [face, setFace] = useState<AuthValue['face']>({ available: false, label: 'face unlock', meta: null });
   const tokenRef = useRef<string | null>(null);
+  const reloadFace = useCallback(async () => {
+    const [support, meta] = await Promise.all([faceSupport(), faceMeta()]);
+    setFace({ ...support, meta });
+  }, []);
+  useEffect(() => {
+    void reloadFace();
+  }, [reloadFace]);
   tokenRef.current = session?.token ?? null;
 
   const logout = useCallback(async (reason?: string) => {
@@ -112,7 +131,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return r.user;
     },
     changePassword: async (currentPassword, newPassword) => {
-      await accept(await api.changePassword({ currentPassword, newPassword }));
+      await accept(await api.changePassword(currentPassword === null ? { newPassword } : { currentPassword, newPassword }));
+    },
+    face,
+    loginWithFace: async (beforeEnter) => {
+      const key = await unlockFaceKey(face.label);
+      let r;
+      try {
+        r = await api.deviceLogin({ deviceId: key.id, secret: key.secret });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          await clearFaceKey();
+          await reloadFace();
+        }
+        throw err;
+      }
+      await beforeEnter?.();
+      await accept(r);
+    },
+    registerWithFace: async (name, email, beforeEnter) => {
+      await confirmFace(`Use ${face.label} to protect your Huddle account`);
+      const r = await api.deviceRegister({ name, email, deviceName: deviceName() });
+      await saveFaceKey(r.device, { userId: r.user!.id, name: r.user!.name, email: r.user!.email }, face.label);
+      await reloadFace();
+      await beforeEnter?.();
+      await accept(r as AuthResponse);
+    },
+    enableFace: async () => {
+      const u = session?.user;
+      if (!u) return;
+      await confirmFace(`Turn on ${face.label} sign-in`);
+      const r = await api.deviceRegister({ deviceName: deviceName() });
+      await saveFaceKey(r.device, { userId: u.id, name: u.name, email: u.email }, face.label);
+      await reloadFace();
+    },
+    disableFace: async () => {
+      const meta = face.meta;
+      // Only remove it from the server if it belongs to the account signed in here.
+      if (meta && meta.userId === session?.user.id) await api.removeCredential(meta.deviceId);
+      await clearFaceKey();
+      await reloadFace();
+    },
+    refreshUser: async () => {
+      const { user } = await api.me();
+      setSession((s) => {
+        const next = s ? { ...s, user } : s;
+        if (next) void SecureStore.setItemAsync(KEY, JSON.stringify(next));
+        return next;
+      });
     },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -50,12 +50,26 @@ export function attachSignaling(httpServer, options) {
     for (const c of room.values()) if (c.id !== exceptId) send(c, msg);
   };
   const peerInfo = (c) => ({ id: c.id, userId: c.userId, name: c.name, media: c.media });
+  const activity = options.activity;
+  const safely = (p) => Promise.resolve(p).catch((err) => log('activity save failed', err));
 
   function leaveRoom(client) {
     const roomId = client.roomId;
     if (!roomId) return;
     const room = rooms.get(roomId);
     client.roomId = null;
+    // Calls tab: who you were with and for how long.
+    if (activity && client.userId && client.joinedAt) {
+      safely(
+        activity.recordCall({
+          userId: client.userId,
+          roomId,
+          startedAt: new Date(client.joinedAt),
+          endedAt: new Date(),
+          with: [...client.seen.values()].slice(0, 20),
+        }),
+      );
+    }
     if (!room) return;
     room.delete(client.id);
     broadcast(roomId, { type: 'peer-left', id: client.id });
@@ -74,6 +88,9 @@ export function attachSignaling(httpServer, options) {
       joining: false,
       media: { audio: false, video: false, screen: false },
       chatTimes: [],
+      joinedAt: 0,
+      /** userId -> name of everyone you were in this call with */
+      seen: new Map(),
     };
 
     ws.on('message', async (raw) => {
@@ -119,7 +136,16 @@ export function attachSignaling(httpServer, options) {
         client.name = user.name;
         client.userId = user.id;
         client.media = msg.media;
+        client.joinedAt = Date.now();
+        client.seen = new Map();
+        for (const other of room.values()) {
+          if (other.userId !== user.id) {
+            client.seen.set(other.userId, other.name);
+            other.seen.set(user.id, user.name);
+          }
+        }
         room.set(client.id, client);
+        if (activity) safely(activity.touchRoom(user.id, msg.roomId));
 
         // Saved chat so late joiners can catch up.
         let history = { messages: [], hasMore: false };
@@ -171,6 +197,7 @@ export function attachSignaling(httpServer, options) {
           }
           // Sent to everyone in the room, sender included as confirmation.
           broadcast(roomId, { type: 'chat', message: { ...toWire(saved), from: client.id } });
+          if (activity) safely(activity.touchRoom(client.userId, roomId));
           return;
         }
         case 'media-state': {
@@ -217,6 +244,10 @@ export function attachSignaling(httpServer, options) {
       participants: [...rooms.values()].reduce((n, r) => n + r.size, 0),
     }),
     roomSize: (roomId) => rooms.get(roomId)?.size ?? 0,
+    /** Names of the people in a call right now. */
+    roomPeople: (roomId) => [...(rooms.get(roomId)?.values() ?? [])].map((c) => ({ userId: c.userId, name: c.name })),
+    /** A message sent from the Chat tab (outside the call) reaches people in the call too. */
+    broadcastChat: (roomId, saved) => broadcast(roomId, { type: 'chat', message: toWire(saved) }),
     close: () => {
       clearInterval(heartbeat);
       for (const ws of wss.clients) ws.terminate();

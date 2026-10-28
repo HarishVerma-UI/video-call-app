@@ -1,4 +1,4 @@
-import { colorFor, generateRoomId, initials, normalizeRoomId, type AuthUser } from '@vca/shared';
+import { generateRoomId, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -21,10 +21,9 @@ interface Props {
   initialRoom: string;
   notice: string | null;
   onJoin: (roomId: string) => void;
-  onOpenProfile: () => void;
 }
 
-export function HomeScreen({ media, user, initialRoom, notice, onJoin, onOpenProfile }: Props) {
+export function HomeScreen({ media, user, initialRoom, notice, onJoin }: Props) {
   const { api } = useAuth();
   const [room, setRoom] = useState(initialRoom);
   const [roomError, setRoomError] = useState<string | null>(null);
@@ -68,17 +67,11 @@ export function HomeScreen({ media, user, initialRoom, notice, onJoin, onOpenPro
         <View style={styles.topRow}>
           <View style={styles.logoRow}>
             <View style={styles.logoMark} />
-            <Text style={styles.logo}>Huddle</Text>
+            <Text style={styles.logo}>Meet</Text>
           </View>
-          <Pressable style={styles.account} onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Your profile">
-            <View style={[styles.avatar, { backgroundColor: colorFor(user.id) }]}>
-              <Text style={styles.avatarText}>{initials(user.name)}</Text>
-            </View>
-            <Text style={styles.signOut} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
-          </Pressable>
         </View>
-        <Text style={styles.h1}>Face-to-face,</Text>
-        <Text style={[styles.h1, { color: theme.cyan }]}>from anywhere.</Text>
+        <Text style={styles.eyebrow}>READY WHEN YOU ARE</Text>
+        <Text style={styles.h1}>Hi {user.name.split(' ')[0]}, start or join a meeting.</Text>
 
         <View style={styles.preview}>
           {stream && media.videoOn ? (
@@ -167,9 +160,9 @@ const styles = StyleSheet.create({
   avatarText: { color: theme.ink, fontFamily: fonts.bold, fontSize: 12 },
   signOut: { color: theme.text, fontFamily: fonts.bold, fontSize: 13 },
   joiningAs: { fontFamily: fonts.regular, color: theme.muted, fontSize: 14, marginTop: 18 },
-  logoMark: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: theme.peach, backgroundColor: 'transparent' },
-  logo: { color: theme.text, fontSize: 18, fontFamily: fonts.bold },
-  h1: { color: theme.text, marginTop: 6, fontSize: 34, fontFamily: fonts.bold, letterSpacing: -1, lineHeight: 40 },
+  logoMark: { width: 24, height: 24, borderRadius: 12, borderWidth: 5, borderColor: theme.accent, backgroundColor: theme.primary },
+  logo: { color: theme.text, fontSize: 26, fontFamily: fonts.bold },
+  h1: { color: theme.text, marginTop: 4, fontSize: 26, fontFamily: fonts.bold, letterSpacing: -0.5, lineHeight: 32 },
   preview: {
     marginTop: 20,
     aspectRatio: 3 / 4,
@@ -214,6 +207,7 @@ const styles = StyleSheet.create({
   ghostText: { color: theme.text, fontFamily: fonts.bold },
   error: { fontFamily: fonts.regular, color: theme.hotSoft, fontSize: 13, marginTop: 6 },
   hint: { fontFamily: fonts.regular, color: theme.green, fontSize: 13, marginTop: 6 },
-  primary: { marginTop: 22, borderRadius: 999, paddingVertical: 17, alignItems: 'center', backgroundColor: theme.peach },
-  primaryText: { color: theme.ink, fontSize: 17, fontFamily: fonts.bold },
+  primary: { marginTop: 22, borderRadius: 8, paddingVertical: 15, alignItems: 'center', backgroundColor: theme.primary },
+  primaryText: { color: theme.onPrimary, fontSize: 17, fontFamily: fonts.bold },
+  eyebrow: { color: theme.accentText, fontSize: 12, letterSpacing: 1, fontFamily: fonts.bold, marginTop: 14 },
 });

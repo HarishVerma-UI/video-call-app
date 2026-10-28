@@ -8,11 +8,12 @@
 //   findById(id) -> user | null
 //   recordLogin(id) -> void
 //   updateProfile(id, { name?, email? }) -> user     (throws DuplicateEmailError)
-//   setPassword(id, passwordHash) -> user            (bumps tokenVersion: other sessions end)
+//   setPassword(id, passwordHash, { revokeSessions }) -> user  (by default bumps tokenVersion: other sessions end)
 //   ping() -> void
 //   close() -> void
 //
 // A "user" is { id, name, email, passwordHash, tokenVersion, createdAt, lastLoginAt }.
+// passwordHash is null for accounts created with face sign-in only.
 // tokenVersion is copied into every JWT; bumping it invalidates older tokens.
 
 import { randomBytes } from 'node:crypto';
@@ -25,7 +26,13 @@ export class DuplicateEmailError extends Error {
 
 /** Shape sent to clients — never includes the password hash. */
 export function publicUser(u) {
-  return { id: u.id, name: u.name, email: u.email, createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    hasPassword: !!u.passwordHash,
+    createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -37,7 +44,7 @@ export function createMemoryUserStore() {
     async create({ name, email, passwordHash }) {
       if (byEmail.has(email)) throw new DuplicateEmailError();
       const now = new Date();
-      const user = { id: randomBytes(12).toString('hex'), name, email, passwordHash, tokenVersion: 0, createdAt: now, lastLoginAt: null };
+      const user = { id: randomBytes(12).toString('hex'), name, email, passwordHash: passwordHash ?? null, tokenVersion: 0, createdAt: now, lastLoginAt: null };
       byId.set(user.id, user);
       byEmail.set(email, user);
       return { ...user };
@@ -66,11 +73,11 @@ export function createMemoryUserStore() {
       if (name) u.name = name;
       return { ...u };
     },
-    async setPassword(id, passwordHash) {
+    async setPassword(id, passwordHash, { revokeSessions = true } = {}) {
       const u = byId.get(id);
       if (!u) return null;
       u.passwordHash = passwordHash;
-      u.tokenVersion = (u.tokenVersion ?? 0) + 1;
+      if (revokeSessions) u.tokenVersion = (u.tokenVersion ?? 0) + 1;
       return { ...u };
     },
     async ping() {},
@@ -91,7 +98,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       id: doc._id.toString(),
       name: doc.name,
       email: doc.email,
-      passwordHash: doc.passwordHash,
+      passwordHash: doc.passwordHash ?? null,
       tokenVersion: doc.tokenVersion ?? 0,
       createdAt: doc.createdAt,
       lastLoginAt: doc.lastLoginAt ?? null,
@@ -102,7 +109,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
     kind: 'mongodb',
     async create({ name, email, passwordHash }) {
       const now = new Date();
-      const doc = { name, email, passwordHash, tokenVersion: 0, createdAt: now, updatedAt: now, lastLoginAt: null };
+      const doc = { name, email, passwordHash: passwordHash ?? null, tokenVersion: 0, createdAt: now, updatedAt: now, lastLoginAt: null };
       try {
         const res = await users.insertOne(doc);
         return toUser({ ...doc, _id: res.insertedId });
@@ -136,10 +143,13 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       }
       return toUser(await users.findOne({ _id }));
     },
-    async setPassword(id, passwordHash) {
+    async setPassword(id, passwordHash, { revokeSessions = true } = {}) {
       const _id = oid(id);
       if (!_id) return null;
-      await users.updateOne({ _id }, { $set: { passwordHash, updatedAt: new Date() }, $inc: { tokenVersion: 1 } });
+      await users.updateOne(
+        { _id },
+        { $set: { passwordHash, updatedAt: new Date() }, ...(revokeSessions ? { $inc: { tokenVersion: 1 } } : {}) },
+      );
       return toUser(await users.findOne({ _id }));
     },
     ping: extra.ping ?? (async () => {}),

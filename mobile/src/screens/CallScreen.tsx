@@ -11,7 +11,7 @@ import type { LocalStream } from '../useLocalStream';
 
 interface Props {
   roomId: string;
-  auth: { token: string; name: string };
+  auth: { token: string; name: string; userId?: string };
   media: LocalStream;
   onLeave: (reason?: string, code?: string) => void;
 }

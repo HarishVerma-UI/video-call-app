@@ -3,6 +3,8 @@ import { createApp } from './app.js';
 import { checkConfig, config } from './config.js';
 import { createMemoryMessageStore, mongoMessageStore } from './db/messageStore.js';
 import { connectMongoUserStore, createMemoryUserStore } from './db/userStore.js';
+import { createMemoryCredentialStore, mongoCredentialStore } from './db/credentialStore.js';
+import { createMemoryActivityStore, mongoActivityStore } from './db/activityStore.js';
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
@@ -14,10 +16,14 @@ if (problems.length) {
 
 let store;
 let messages;
+let credentials;
+let activity;
 if (config.mongoUri) {
   try {
     store = await connectMongoUserStore(config.mongoUri, config.mongoDb, log);
     messages = await mongoMessageStore(store.db, { retentionDays: config.chatRetentionDays });
+    credentials = await mongoCredentialStore(store.db);
+    activity = await mongoActivityStore(store.db);
   } catch (err) {
     console.error(`\n  Could not connect to MongoDB at ${config.mongoUri.replace(/\/\/[^@]*@/, '//***@')}`);
     console.error(`  ${err.message}\n  Is it running? Try:  docker compose up -d mongo\n`);
@@ -26,9 +32,11 @@ if (config.mongoUri) {
 } else {
   store = createMemoryUserStore();
   messages = createMemoryMessageStore({ retentionDays: config.chatRetentionDays });
+  credentials = createMemoryCredentialStore();
+  activity = createMemoryActivityStore();
 }
 
-const app = createApp(config, { store, messages, log });
+const app = createApp(config, { store, messages, credentials, activity, log });
 await app.listen();
 
 const lanIps = Object.values(os.networkInterfaces())

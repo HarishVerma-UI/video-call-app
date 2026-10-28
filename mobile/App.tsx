@@ -9,6 +9,9 @@ import { AuthScreen } from './src/screens/AuthScreen';
 import { CallScreen } from './src/screens/CallScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
+import { ChatScreen } from './src/screens/ChatScreen';
+import { CallsScreen } from './src/screens/CallsScreen';
+import { TabBar, type TabId } from './src/components/TabBar';
 import { useLocalStream } from './src/useLocalStream';
 
 export default function App() {
@@ -57,7 +60,7 @@ function SignedIn() {
   const [call, setCall] = useState<{ roomId: string } | null>(null);
   const [lastRoom, setLastRoom] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [tab, setTab] = useState<TabId>('meet');
 
   const leave = useCallback(
     (reason?: string, code?: string) => {
@@ -69,28 +72,21 @@ function SignedIn() {
   );
 
   if (!user || !token) return null;
-  if (call) return <CallScreen roomId={call.roomId} auth={{ token, name: user.name }} media={media} onLeave={leave} />;
-  if (profileOpen) {
-    return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <ProfileScreen onBack={() => setProfileOpen(false)} />
-      </SafeAreaView>
-    );
-  }
+  if (call) return <CallScreen roomId={call.roomId} auth={{ token, name: user.name, userId: user.id }} media={media} onLeave={leave} />;
+  const join = (roomId: string) => {
+    setLastRoom(roomId);
+    setNotice(null);
+    setCall({ roomId });
+  };
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <HomeScreen
-        media={media}
-        user={user}
-        initialRoom={lastRoom}
-        notice={notice}
-        onOpenProfile={() => setProfileOpen(true)}
-        onJoin={(roomId) => {
-          setLastRoom(roomId);
-          setNotice(null);
-          setCall({ roomId });
-        }}
-      />
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
+      <View style={{ flex: 1 }}>
+        {tab === 'meet' && <HomeScreen media={media} user={user} initialRoom={lastRoom} notice={notice} onJoin={join} />}
+        {tab === 'chat' && <ChatScreen user={user} onJoin={join} />}
+        {tab === 'calls' && <CallsScreen onJoin={join} />}
+        {tab === 'profile' && <ProfileScreen />}
+      </View>
+      <TabBar tab={tab} onChange={setTab} user={user} />
     </SafeAreaView>
   );
 }

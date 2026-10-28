@@ -47,7 +47,7 @@ export function VideoTile({ participant: p, displayStream, variant = 'grid' }: P
         <div className="tile__avatar-wrap">
           {/* camera off = the lens is shut, same as in the lobby */}
           <Aperture open={0} className="tile__iris" />
-          <div className="tile__avatar" style={{ background: colorFor(p.id) }}>
+          <div className="tile__avatar" style={{ background: colorFor(p.userId || p.id) }}>
             {initials(p.name)}
           </div>
         </div>

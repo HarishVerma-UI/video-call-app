@@ -1,15 +1,9 @@
-import { normalizeRoomId } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './auth/AuthContext';
 import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
-import { Lobby } from './components/Lobby';
+import { Shell, useRoute } from './components/Shell';
 import { useLocalMedia } from './hooks/useLocalMedia';
-
-function roomFromPath(): string {
-  const m = location.pathname.match(/^\/r\/([^/]+)/);
-  return m ? normalizeRoomId(decodeURIComponent(m[1])) ?? '' : '';
-}
 
 export function App() {
   const { status } = useAuth();
@@ -21,7 +15,7 @@ export function App() {
     );
   }
   // An invite link like /r/swift-comet-482 survives sign-in: the room is read
-  // from the URL again once the lobby mounts.
+  // from the URL again once you're signed in.
   if (status === 'signed-out') return <AuthPage />;
   return <SignedInApp />;
 }
@@ -30,28 +24,25 @@ export function App() {
 function SignedInApp() {
   const { user, token, logout } = useAuth();
   const media = useLocalMedia();
+  const [route, go] = useRoute();
   const [call, setCall] = useState<{ roomId: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [lastRoom, setLastRoom] = useState(roomFromPath);
 
   useEffect(() => {
-    if (location.pathname === '/login' || location.pathname === '/register') history.replaceState(null, '', '/');
+    if (location.pathname === '/login' || location.pathname === '/register') go({ view: 'meet', room: '' }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Browser back button leaves the call.
+  // Browser Back during a call leaves it.
   useEffect(() => {
-    const onPop = () => {
-      setLastRoom(roomFromPath());
-      setCall(null);
-    };
+    const onPop = () => setCall(null);
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
   const join = (roomId: string) => {
-    if (location.pathname !== `/r/${roomId}`) history.pushState(null, '', `/r/${roomId}`);
+    go({ view: 'meet', room: roomId });
     setNotice(null);
-    setLastRoom(roomId);
     setCall({ roomId });
   };
 
@@ -59,12 +50,12 @@ function SignedInApp() {
     (reason?: string, code?: string) => {
       setCall(null);
       if (code === 'unauthorized') logout('Your session expired. Please sign in again.');
-      else setNotice(reason ?? 'You left the call.');
+      else setNotice(reason ?? 'You left the meeting.');
     },
     [logout],
   );
 
   if (!user || !token) return null;
-  if (call) return <CallRoom roomId={call.roomId} auth={{ token, name: user.name }} media={media} onLeave={leave} />;
-  return <Lobby media={media} user={user} initialRoom={lastRoom} notice={notice} onJoin={join} onSignOut={() => logout()} />;
+  if (call) return <CallRoom roomId={call.roomId} auth={{ token, name: user.name, userId: user.id }} media={media} onLeave={leave} />;
+  return <Shell user={user} media={media} route={route} go={go} notice={notice} onJoin={join} />;
 }

@@ -31,7 +31,7 @@ export function currentMode(): Mode {
 
 function apply(mode: Mode) {
   document.documentElement.dataset.theme = mode;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', mode === 'light' ? '#f3f7f8' : '#0f2c3f');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', mode === 'light' ? '#ebebf2' : '#0c0b11');
   window.dispatchEvent(new CustomEvent('huddle:mode', { detail: mode }));
 }
 

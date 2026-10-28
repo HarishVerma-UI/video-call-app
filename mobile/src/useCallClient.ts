@@ -11,7 +11,7 @@ import { useAuth } from './auth';
 import { ICE_SERVERS, SIGNALING_URL } from './config';
 
 /** Same engine as the web app; this hook just binds it to React state. */
-export function useCallClient(roomId: string, auth: { token: string; name: string }, localStream: RNMediaStream | null) {
+export function useCallClient(roomId: string, auth: { token: string; name: string; userId?: string }, localStream: RNMediaStream | null) {
   const clientRef = useRef<CallClient | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [status, setStatus] = useState<CallStatus>('idle');

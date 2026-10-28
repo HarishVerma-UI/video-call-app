@@ -21,18 +21,19 @@ export async function startTestApp(overrides = {}) {
     jwtExpiresInSec: 3600,
     ...overrides.config,
   };
-  const app = createApp(config, { store, messages });
+  const app = createApp(config, { store, messages, credentials: overrides.credentials, activity: overrides.activity });
   const addr = await app.listen(0, '127.0.0.1');
   const base = `127.0.0.1:${addr.port}`;
   return { app, store, messages, base, http: `http://${base}`, config };
 }
 
-export async function api(base, method, path, body, token) {
+export async function api(base, method, path, body, token, extraHeaders = {}) {
   const res = await fetch(`http://${base}${path}`, {
     method,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extraHeaders,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
