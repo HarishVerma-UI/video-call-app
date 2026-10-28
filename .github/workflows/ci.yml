@@ -11,19 +11,20 @@ jobs:
   server:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
-      - run: npm install --no-audit --no-fund
-        working-directory: server
-      - run: npm test
-        working-directory: server
+      - name: Install the server only (the mobile app builds with Expo)
+        run: |
+          node -e "const p=require('./package.json');p.workspaces=['server'];require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))"
+          npm install --no-audit --no-fund --workspace @vca/server --include-workspace-root
+      - run: npm test -w @vca/server
 
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - name: Install web + shared only (the mobile app builds with Expo)
         run: |
@@ -35,7 +36,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: docker build -t huddle:ci .
       - name: Image starts and answers /health
         run: |
