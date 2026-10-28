@@ -66,6 +66,16 @@ export const config = {
   /** Messages sent to someone when they join a room. */
   chatHistoryOnJoin: 50,
 
+  // --- calls: STUN / TURN ---
+  /** Public STUN servers (comma-separated). */
+  stunUrls: (process.env.STUN_URLS ?? 'stun:stun.l.google.com:19302').split(',').map((s) => s.trim()).filter(Boolean),
+  /** Your TURN server, e.g. turn:huddle.duckdns.org:3478?transport=udp,turn:huddle.duckdns.org:3478?transport=tcp */
+  turnUrls: (process.env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  /** Shared with coturn's static-auth-secret. */
+  turnSecret: process.env.TURN_SECRET ?? '',
+  /** How long TURN credentials last (they're renewed on every join or reconnect). */
+  turnTtlSec: Number(process.env.TURN_TTL_SEC ?? 12 * 3600),
+
   // --- face sign-in (passkeys) ---
   /** The site's domain, e.g. huddle.example.com. Unset in dev: the page's own host is used. */
   webauthnRpId: process.env.WEBAUTHN_RP_ID || '',
@@ -84,6 +94,7 @@ export function checkConfig(c = config) {
   if (c.isProd && !c.mongoUri) problems.push('MONGODB_URI is required in production.');
   if (!c.jwtSecret || c.jwtSecret.length < 32) problems.push('JWT_SECRET must be set to at least 32 random characters.');
   if (c.isProd && c.jwtSecret === DEV_SECRET) problems.push('JWT_SECRET must not be the development default.');
+  if (c.turnUrls.length && c.turnSecret.length < 32) problems.push('TURN_SECRET must be at least 32 random characters when TURN_URLS is set.');
   if (c.isProd && !c.webauthnRpId) problems.push('WEBAUTHN_RP_ID is required in production (your domain, e.g. huddle.example.com).');
   return problems;
 }

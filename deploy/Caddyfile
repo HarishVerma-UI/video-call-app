@@ -1,0 +1,20 @@
+# Caddy gets and renews the HTTPS certificate for {$DOMAIN} by itself.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(self), display-capture=(self), publickey-credentials-get=(self), publickey-credentials-create=(self), geolocation=()"
+		-Server
+	}
+
+	# Web app, REST API and the /ws WebSocket all go to the Node server.
+	reverse_proxy app:3001
+}

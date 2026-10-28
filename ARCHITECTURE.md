@@ -48,7 +48,7 @@ flowchart TB
   SHARED <-->|"signaling JSON over WebSocket"| WSS
   SHARED -.->|"HTTPS + Bearer JWT"| AUTH
   SHARED -.->|"HTTP"| HTTP
-  STUN["STUN (Google) · TURN later"]
+  STUN["STUN (Google) · TURN (coturn)"]
   SHARED -.->|"discover public address"| STUN
 
   classDef server fill:#1f2733,stroke:#4f8cff,color:#e6e8ec;
@@ -451,15 +451,34 @@ A Teams-style workspace with a camera-lens twist (see the README for screenshots
 
 ---
 
-## 9. Known limits and what's next
+## 9. Production (`deploy/`)
+
+```mermaid
+flowchart LR
+  U["Browser / app"] -- "HTTPS + WSS :443" --> C["Caddy<br/>Let's Encrypt"]
+  C --> A["app (Node)<br/>web · API · /ws"]
+  A --> M[("MongoDB<br/>private network")]
+  B["backup<br/>nightly mongodump"] --> M
+  U -- "TURN :3478 udp/tcp · :5349 TLS<br/>relay 49160-49250/udp" --> T["coturn<br/>host network"]
+  A -. "same TURN_SECRET<br/>signs 12 h credentials" .- T
+```
+
+When someone joins a meeting, the `welcome` message carries the ICE servers,
+including TURN credentials made for that person: `username = "<expiry>:<userId>"`
+and `credential = base64(HMAC-SHA1(TURN_SECRET, username))`. coturn checks them
+with the same secret (`use-auth-secret`), so no TURN password is ever stored in
+the web or mobile app, and old credentials stop working on their own. coturn
+refuses to relay to private and cloud-metadata addresses.
+
+---
+
+## 10. Known limits and what's next
 
 | Limit | Why | Fix |
 |---|---|---|
-| Calls can fail on strict corporate / mobile-carrier networks | only STUN is configured; direct paths are sometimes blocked | **Step 2:** TURN server (coturn) |
-| Camera/mic need HTTPS off `localhost` | browser security rule | **Step 2:** HTTPS + WSS (e.g. Caddy / nginx + Let's Encrypt) |
 | Max 6 per room | mesh upload cost grows with each person | **Step 3:** SFU (mediasoup) |
 | One server instance | room state and rate limits are in memory | Redis pub/sub when scaling out |
-| Passkeys need HTTPS and a fixed domain | WebAuthn binds keys to a site | set `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` when deploying (Step 2) |
+| Passkeys are tied to one domain | WebAuthn binds keys to a site | moving domains means turning face sign-in on again (DEPLOY.md) |
 | Challenges are kept in memory | single server instance | move to Redis with the rest when scaling out |
 | No refresh tokens / single-device logout | JWTs are stateless | refresh tokens (`tokenVersion` already revokes all tokens on password change) |
 | A rename shows in a call only after rejoining | names are fixed when you join | broadcast a `peer-updated` message |

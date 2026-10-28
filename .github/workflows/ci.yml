@@ -1,0 +1,44 @@
+# On every push and pull request: server tests, web typecheck, and a real
+# production Docker build (the same image deploy/setup.sh builds on the server).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+        working-directory: server
+      - run: npm test
+        working-directory: server
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install web + shared only (the mobile app builds with Expo)
+        run: |
+          node -e "const p=require('./package.json');p.workspaces=['shared','web'];require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))"
+          npm install --no-audit --no-fund --workspace @vca/web --include-workspace-root
+      - run: npm run typecheck -w @vca/web
+      - run: npm exec -w @vca/web -- vite build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t huddle:ci .
+      - name: Image starts and answers /health
+        run: |
+          docker run -d --name huddle -p 3001:3001 -e NODE_ENV=development -e JWT_SECRET=ci-secret-ci-secret-ci-secret-ci-secret huddle:ci
+          for i in $(seq 1 20); do curl -fsS localhost:3001/health && exit 0; sleep 2; done
+          docker logs huddle; exit 1

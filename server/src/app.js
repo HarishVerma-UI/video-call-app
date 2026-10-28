@@ -20,6 +20,10 @@ const MIME = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
+  '.otf': 'font/otf',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
 function serveStatic(res, webDist, urlPath) {

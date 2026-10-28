@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { iceServersFor } from './turn.js';
 import { parseClientMessage } from './validate.js';
 
 /** Message as sent to clients. `from` is the live connection id when known. */
@@ -163,6 +164,8 @@ export function attachSignaling(httpServer, options) {
           maxPeers: options.maxPeersPerRoom,
           history: history.messages.map(toWire),
           historyHasMore: history.hasMore,
+          // Fresh, short-lived TURN credentials for this person (when TURN is configured).
+          ...(options.stunUrls ? { iceServers: iceServersFor(options, user.id) } : {}),
         });
         broadcast(msg.roomId, { type: 'peer-joined', peer: peerInfo(client) }, client.id);
         log(`join   room=${msg.roomId} id=${client.id.slice(0, 8)} name="${client.name}" size=${room.size}`);

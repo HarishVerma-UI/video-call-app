@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+mobile
+docs
+.git
+**/.env
+**/.env.*
+!**/.env.example
+deploy/data
+deploy/backups
+*.log

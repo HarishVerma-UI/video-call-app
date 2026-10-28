@@ -281,6 +281,8 @@ export class CallClient {
       case 'welcome': {
         this.selfId = msg.selfId;
         this._maxPeers = msg.maxPeers;
+        // The server knows where its TURN relay is; its list wins over the built-in default.
+        if (msg.iceServers?.length) this.opts.iceServers = msg.iceServers;
         this.reconnectAttempts = 0;
         // Saved chat from before we arrived (or from before a reconnect).
         this._chat = msg.history ?? [];

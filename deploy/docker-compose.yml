@@ -1,0 +1,106 @@
+# Huddle in production on one server:
+#   caddy   — HTTPS (free Let's Encrypt certificate, renewed automatically) → app
+#   app     — Node.js: web app, API, WebSocket signaling
+#   mongo   — database (not reachable from the internet)
+#   coturn  — TURN relay so calls work on strict networks
+#   backup  — nightly MongoDB backup into deploy/backups (last 7 kept)
+#
+# Run from this folder after ./setup.sh has written .env:
+#   docker compose up -d --build
+
+name: huddle
+
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/?authSource=admin
+      MONGODB_DB: huddle
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOWED_ORIGINS: https://${DOMAIN}
+      TRUST_PROXY: "true"
+      WEBAUTHN_RP_ID: ${DOMAIN}
+      WEBAUTHN_ORIGINS: https://${DOMAIN}
+      TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp,turns:${DOMAIN}:5349?transport=tcp
+      TURN_SECRET: ${TURN_SECRET}
+      MAX_PEERS: ${MAX_PEERS:-6}
+      CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
+    expose:
+      - "3001"
+    logging: &logs
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - ./data/mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logs
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
+    logging: *logs
+
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    # Host networking: TURN hands out relay ports, which doesn't work well through Docker's NAT.
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./data/turn-certs:/certs:ro
+    command:
+      - -c
+      - /etc/coturn/turnserver.conf
+      - --static-auth-secret=${TURN_SECRET}
+      - --realm=${DOMAIN}
+      - --server-name=${DOMAIN}
+      - --external-ip=${EXTERNAL_IP:-${PUBLIC_IP}}
+    logging: *logs
+
+  backup:
+    image: mongo:7
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/?authSource=admin
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/huddle-$$(date +%Y-%m-%d).archive.gz
+          mongodump --uri="$$MONGO_URI" --db=huddle --archive="$$f" --gzip --quiet && echo "backup ok $$f" || echo "backup FAILED"
+          ls -1t /backups/huddle-*.archive.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+          sleep 86400
+        done
+    logging: *logs

@@ -61,6 +61,8 @@ export type ServerMessage =
       history: ChatMessage[];
       /** True if older messages can be loaded from /api/rooms/:id/messages. */
       historyHasMore: boolean;
+      /** STUN/TURN servers to use, with short-lived TURN credentials. Replaces the app's defaults. */
+      iceServers?: RTCIceServer[];
     }
   | { type: 'peer-joined'; peer: PeerInfo }
   | { type: 'peer-left'; id: string }

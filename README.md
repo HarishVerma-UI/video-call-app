@@ -26,6 +26,12 @@ each other, and audio and video flow directly between devices.
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
 
+## Put it online
+
+**[DEPLOY.md](./DEPLOY.md)**: rent a small server, get a free DuckDNS address, run one
+script. You get HTTPS, MongoDB, a TURN relay for calls on any network, and nightly
+backups. The website can be added to a phone's home screen like an app.
+
 ## How face sign-in works
 
 Your face is **never sent anywhere**. The phone or computer checks it with its
@@ -106,7 +112,9 @@ video-call-app/
 ├── server/   @vca/server  — Node.js: auth (JWT), MongoDB users, rooms, WebSocket signaling, chat
 ├── web/      @vca/web     — React 19 + Vite + TypeScript
 ├── mobile/   @vca/mobile  — React Native (Expo dev build) + react-native-webrtc
-├── docker-compose.yml     — local MongoDB
+├── docker-compose.yml     — local MongoDB for development
+├── Dockerfile             — production image (web build + Node server)
+├── deploy/                — production stack: Caddy (HTTPS), MongoDB, coturn, backups, setup.sh
 └── docs/                  — screenshots
 ```
 
@@ -225,6 +233,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 | server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
 | server | `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGINS` | the page's own host in dev; **required in prod** (your domain, e.g. `huddle.example.com`, and `https://huddle.example.com`) |
+| server | `TURN_URLS`, `TURN_SECRET`, `TURN_TTL_SEC`, `STUN_URLS` | no TURN, `12h` credentials, Google STUN (set by `deploy/` automatically) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `false`, `../web/dist` |
 | web | `VITE_API_URL`, `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same origin, same host `/ws`, Google STUN |
@@ -234,14 +243,16 @@ Each folder has a `.env.example`.
 
 ## What's tested
 
-- **Server (46 tests):**
+- **Server (49 tests):**
   - **Face sign-in:** a software authenticator makes real P-256 passkeys and signatures. Checked: register a face-only account, sign in without an email, a response can't be replayed, and rejection of a missing face/PIN check, a wrong site or origin, a forged signature and a cloned key (counter going backwards). Fuzzing with 20,000 corrupted responses gives clean errors, never a crash. Also: adding a passkey to a password account (and nobody else can finish it), the last way in can't be removed, a backup password can be added, and mobile device keys (wrong or removed keys stop working; secrets are never stored or listed).
   - JWT tampering, expiry, wrong key or audience, and `alg: none`; salted password hashes; sign-up/sign-in validation, duplicate emails, rate limits.
   - Meetings: a token is required, names can't be spoofed, room cap, relay, chat, mute state.
   - Profile changes; saved chat (history, paging, retention); Chat and Calls tabs (last message, who's in the meeting, sending from outside a meeting reaches people inside, call history with names).
+  - TURN credentials (coturn REST scheme, expiry, sent on join) and production config checks.
   - MongoDB stores (users, chat, face sign-in devices, calls) against fake collections. Set `MONGODB_URI` to run against a real database.
 - **Web, end to end in Chromium (30 checks)** with Chrome's virtual authenticator standing in for face unlock: register with face, sign out and back in with face, a failed face check, a device with no passkey, adding a backup password and signing in with it, a password account turning on face sign-in from the banner, then a two-person meeting (pre-join shows who's there, unread badge, People panel), the Chat tab (live marker, message from the tab reaches the meeting), the Calls tab, the dark/light toggle, and the phone layout (bottom tabs, no sideways scrolling).
 - **3-person meeting (3 checks):** everyone sees everyone, chat, screen-share spotlight.
+- **CI on GitHub** (`.github/workflows/ci.yml`): server tests, web typecheck and build, and the production Docker image built and started on every push.
 - **Mobile:** written against `react-native-webrtc`, `expo-secure-store` and `expo-local-authentication`, and syntax-checked. It still needs a first run on a real phone (Face ID needs a device, not a simulator).
 
 ## Roadmap
@@ -249,7 +260,7 @@ Each folder has a `.env.example`.
 - [x] Step 1: 1-to-1 web call
 - [x] Full app: React web + React Native mobile + Node server, group calls, chat, screen share
 - [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
-- [ ] **Step 2**: TURN server (coturn) + HTTPS/WSS, so calls work across any network
+- [x] **Step 2**: deployment with HTTPS, TURN (coturn) with short-lived credentials, MongoDB backups ([DEPLOY.md](./DEPLOY.md))
 - [x] Profile editing and saved call chat (web + mobile)
 - [x] **Face sign-in** (passkeys + Face ID / face unlock) and a Teams-style layout with Chat and Calls tabs
 - [ ] Forgot-password email, refresh tokens, direct messages
