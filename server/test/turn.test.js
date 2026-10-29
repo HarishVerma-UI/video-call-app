@@ -24,12 +24,11 @@ test('TURN credentials follow the coturn REST scheme and expire', () => {
   assert.deepEqual(iceServersFor({ ...turnConfig, turnUrls: [] }, 'u'), [{ urls: turnConfig.stunUrls }]);
 });
 
-test('production config insists on a strong TURN secret and a passkey domain', () => {
-  const base = { isProd: true, mongoUri: 'mongodb://x', jwtSecret: 'x'.repeat(40), turnUrls: ['turn:a:3478'], turnSecret: 'short', webauthnRpId: '' };
+test('production config insists on a strong TURN secret', () => {
+  const base = { isProd: true, mongoUri: 'mongodb://x', jwtSecret: 'x'.repeat(40), turnUrls: ['turn:a:3478'], turnSecret: 'short' };
   const problems = checkConfig(base);
   assert.ok(problems.some((p) => p.includes('TURN_SECRET')));
-  assert.ok(problems.some((p) => p.includes('WEBAUTHN_RP_ID')));
-  assert.deepEqual(checkConfig({ ...base, turnSecret: SECRET, webauthnRpId: 'huddle.example.org' }), []);
+  assert.deepEqual(checkConfig({ ...base, turnSecret: SECRET }), []);
 });
 
 let t;

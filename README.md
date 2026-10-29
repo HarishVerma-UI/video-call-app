@@ -1,16 +1,20 @@
-# Huddle: meetings, chat and face sign-in (React · React Native · Node.js · MongoDB)
+# Huddle: group video meetings with chat (React · React Native · Node.js · MongoDB)
 
-Private group video meetings for up to 6 people, on **web, Android and iOS**,
+Private group video meetings for up to 10 people, on **web, Android and iOS**,
 built from scratch on **WebRTC**. The app is laid out like **Microsoft Teams**
 (a left app rail with Meet, Chat, Calls and Profile), with a camera-lens twist.
-You **sign in and register with your face**: Face ID, Windows Hello, Android
-face unlock or a fingerprint. Email and password stay available as a backup.
-No paid video vendor is involved: the Node.js server only introduces people to
-each other, and audio and video flow directly between devices.
+You **sign in with your email and password**, or with **Google or GitHub**, and
+an **admin dashboard** lets an administrator see everyone who has registered and
+manage accounts. No paid video vendor is involved: the Node.js server only
+introduces people to each other, and audio and video flow directly between devices.
 
-| Sign in with your face | Create an account with your face |
-|---|---|
-| ![Face sign-in](docs/screenshots/face-sign-in.png) | ![Face register](docs/screenshots/face-register.png) |
+> **▶ Live demo: [harish007.duckdns.org](https://harish007.duckdns.org)**
+> Create an account and start a meeting. It's best with two
+> devices — open it on your phone too (on mobile data) and join the same code.
+
+![Huddle demo: start a meeting, screen share and chat](docs/screenshots/demo.gif)
+
+*A quick tour — start a meeting, share your screen and chat, all in one place.*
 
 | Meet (dark) | Meet (light) |
 |---|---|
@@ -20,7 +24,7 @@ each other, and audio and video flow directly between devices.
 |---|---|
 | ![Meeting](docs/screenshots/meeting.png) | ![Share](docs/screenshots/meeting-share.png) |
 
-| Chat tab | Calls tab | Profile & face sign-in devices | Phone |
+| Chat tab | Calls tab | Profile | Phone |
 |---|---|---|---|
 | ![Chat](docs/screenshots/chat-tab.png) | ![Calls](docs/screenshots/calls-tab.png) | ![Profile](docs/screenshots/profile-face.png) | ![Phone](docs/screenshots/phone-chat.png) |
 
@@ -32,37 +36,27 @@ each other, and audio and video flow directly between devices.
 script. You get HTTPS, MongoDB, a TURN relay for calls on any network, and nightly
 backups. The website can be added to a phone's home screen like an app.
 
-## How face sign-in works
+The live instance above runs this exact stack on an **AWS Lightsail** (Ubuntu)
+server, with HTTPS at [harish007.duckdns.org](https://harish007.duckdns.org).
 
-Your face is **never sent anywhere**. The phone or computer checks it with its
-own face unlock, the same way it unlocks itself, and only then signs a
-one-time challenge from the server.
+## Accounts, sign-in and the admin dashboard
 
-- **Web: passkeys (WebAuthn).** When you register, the browser asks the
-  device's face unlock to create a key pair. The private key stays in the
-  device's secure chip; the server stores only the public key. Signing in, the
-  server sends a random challenge, the device checks your face and signs it,
-  and the server verifies the signature. No email needed: the device offers
-  your Huddle passkey. Synced passkeys (iCloud Keychain, Google Password
-  Manager) also work on your other devices, and a phone can sign you in on a
-  computer by scanning a QR code.
-- **Mobile app: a key behind Face ID.** The server gives the phone a random
-  key, kept in the iOS Keychain / Android Keystore with
-  `requireAuthentication`, so the OS releases it only after Face ID, face
-  unlock or fingerprint succeeds.
-- **Password as a backup.** A face-only account can add a password in Profile.
-  An account made with a password is offered "Sign in with your face next
-  time" once. You can't remove your last way in.
-- The server checks every passkey response itself (`server/src/auth/webauthn.js`,
-  no third-party library): the challenge is single-use and expires in 5
-  minutes, the page origin and site must match, user verification (face,
-  fingerprint or PIN) is required, the signature is checked, and a counter
-  that goes backwards (a cloned key) is rejected.
-
-**Honest limits:** the device decides what counts as "verified". Most phones
-and laptops use face or fingerprint, but some fall back to the device PIN. And
-passkeys need **HTTPS** (or `localhost` while developing), so set
-`WEBAUTHN_RP_ID` to your domain when you deploy.
+- **Email and password.** Passwords are hashed with **scrypt** and never stored
+  in the clear; sessions are **JWTs** (7 days by default). Sign-up checks the
+  email format and password strength, and failed logins are rate-limited.
+- **Google and GitHub (optional).** Set the matching client id and secret in the
+  server environment and the sign-in page shows "Continue with Google / GitHub".
+  The server runs the OAuth 2.0 authorization-code flow itself (no third-party
+  library, `server/src/auth/oauth.js`); a social account is matched to an existing
+  one by its verified email. Register the callback
+  `https://<your-domain>/api/auth/oauth/<provider>/callback` with each provider.
+  With no credentials set, the buttons simply don't appear.
+- **Admin dashboard.** An account with the **admin** role gets an **Admin** tab
+  that lists everyone who has registered, with full create / edit / delete and
+  the ability to change a user's role. On first start the server seeds an admin
+  account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (default **admin / admin** — change
+  the password before going live). Admins can't delete themselves or drop their
+  own admin role, so you can't lock yourself out.
 
 ## Design: Teams, with a lens
 
@@ -75,8 +69,7 @@ passkeys need **HTTPS** (or `localhost` while developing), so set
   "spark"** for anything live or selected (the active rail marker, the
   speaking ring around a video tile, the "You joined" line). The six-blade
   **camera aperture** is the logo; it closes over your preview when your
-  camera is off, and on the sign-in page a scan line sweeps the lens while
-  your device checks your face.
+  camera is off.
 - **Dark and light mode:** follows your device until you pick one with the
   half-amber, half-indigo toggle. Headings use TeX Gyre Adventor; body text
   uses Segoe UI (like Teams) or the system font.
@@ -84,8 +77,9 @@ passkeys need **HTTPS** (or `localhost` while developing), so set
 ## Features
 
 **Accounts**
-- Register and sign in **with your face** (web passkeys; Face ID / face unlock in the mobile app), or with email and password
-- Face sign-in devices listed in Profile, each removable; add a backup password to a face-only account
+- Sign in with **email and password**, or with **Google or GitHub** (optional social login)
+- **Admin dashboard** (admin role): see everyone who has registered, and create, edit, delete or re-role accounts
+- A social account can add a password in Profile, so it can also sign in by email
 - Accounts in **MongoDB** with **scrypt**-hashed passwords; **JWT** sessions (7 days by default)
 - Rate limiting, identical errors for "wrong password" and "no such account", invite links that survive sign-in
 - **Profile**: change your name, email and password (changing the password signs out your other devices)
@@ -93,7 +87,7 @@ passkeys need **HTTPS** (or `localhost` while developing), so set
 **Meet**
 - Pre-join stage with camera preview and camera/mic switches, shows who is already in the meeting
 - "Start a meeting now", join with a code, **Happening now** (your rooms with people in them), recent rooms
-- Group meetings up to 6 people, speaking indicator, mute / camera-off shown to everyone
+- Group meetings up to 10 people, speaking indicator, mute / camera-off shown to everyone
 - Screen sharing (desktop web) with a spotlight layout, People panel with the invite link
 - Recovers on its own: automatic reconnect, ICE restart, audio-only fallback
 
@@ -142,7 +136,7 @@ Then:
 npm run dev
 ```
 
-- Web app: **http://localhost:5173**. Create an account with your face (or a password), then start a meeting.
+- Web app: **http://localhost:5173**. Create an account with your email and password, then start a meeting.
 - Server: **http://localhost:3001** (`/health` shows whether MongoDB is connected).
 
 Open a second browser (or a private window), create another account, and join
@@ -195,15 +189,14 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | POST | `/api/auth/login` | — | `{ email, password }` → `200 { user, token, expiresAt }` |
 | GET | `/api/auth/me` | Bearer | → `{ user }` |
 | PATCH | `/api/auth/me` | Bearer | `{ name?, email?, currentPassword? }` → `{ user, token, expiresAt }` (email change needs `currentPassword`) |
-| POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working. Face-only accounts send just `newPassword` to add a backup password |
-| POST | `/api/auth/passkey/register/options` | — or Bearer | `{ name, email }` (new account) → WebAuthn creation options; with Bearer: add this device |
-| POST | `/api/auth/passkey/register/verify` | — or Bearer | `{ credential }` → `201 { user, token, expiresAt }` (new) / `{ credentials }` (added) |
-| POST | `/api/auth/passkey/login/options` | — | → WebAuthn request options (single-use challenge) |
-| POST | `/api/auth/passkey/login/verify` | — | `{ credential }` → `{ user, token, expiresAt }` |
-| POST | `/api/auth/device/register` | — or Bearer | `{ name, email, deviceName }` → `{ user, token, device: { id, secret } }` (mobile app) |
-| POST | `/api/auth/device/login` | — | `{ deviceId, secret }` → `{ user, token, expiresAt }` |
-| GET | `/api/auth/credentials` | Bearer | → `{ credentials }` (your face sign-in devices) |
-| DELETE | `/api/auth/credentials/:id` | Bearer | → `{ credentials }`; `409` if it's your only way in |
+| POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working. Social-login accounts with no password yet send just `newPassword` to add one |
+| GET | `/api/auth/providers` | — | → `{ providers: { google, github } }` (which social buttons to show) |
+| GET | `/api/auth/oauth/:provider/start` | — | Redirects to Google/GitHub to sign in (`provider` = `google` or `github`) |
+| GET | `/api/auth/oauth/:provider/callback` | — | Provider returns here; redirects to the app with a token in the URL hash |
+| GET | `/api/admin/users` | Bearer (admin) | → `{ users, total }` |
+| POST | `/api/admin/users` | Bearer (admin) | `{ name, email, password, role? }` → `201 { user }` |
+| PATCH | `/api/admin/users/:id` | Bearer (admin) | `{ name?, email?, role?, password? }` → `{ user }` |
+| DELETE | `/api/admin/users/:id` | Bearer (admin) | → `{ ok, id }` (you can't delete yourself) |
 | GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, people, maxPeers, full }` |
 | POST | `/api/rooms/:id/messages` | Bearer | `{ text }` → `201 { message }`; also sent live to people in the meeting |
 | GET | `/api/chats` | Bearer | → `{ chats }`: your rooms, last message, who's in the meeting now |
@@ -222,7 +215,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 | `npm run dev` | server + web with hot reload |
 | `npm run db` | start MongoDB in Docker |
 | `npm run dev:server` / `dev:web` / `dev:mobile` | one at a time |
-| `npm test` | server tests (auth, face sign-in, JWT, passwords, MongoDB stores, signaling, chat, calls) |
+| `npm test` | server tests (auth, admin + social providers, JWT, passwords, MongoDB stores, signaling, chat, calls) |
 | `npm run build` | production web build |
 | `npm start` | production server (serves `web/dist`) |
 
@@ -232,10 +225,11 @@ forms (e.g. `{ email: "Already registered…" }`).
 |---|---|---|
 | server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
-| server | `WEBAUTHN_RP_ID`, `WEBAUTHN_ORIGINS` | the page's own host in dev; **required in prod** (your domain, e.g. `huddle.example.com`, and `https://huddle.example.com`) |
+| server | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | `admin`, `admin`, `Administrator` — the seeded admin account (change the password before going live) |
+| server | `APP_URL`, `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` | social login: public base URL for OAuth callbacks, and each provider's credentials (unset → that button is hidden) |
 | server | `TURN_URLS`, `TURN_SECRET`, `TURN_TTL_SEC`, `STUN_URLS` | no TURN, `12h` credentials, Google STUN (set by `deploy/` automatically) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
-| server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `6`, `*`, `false`, `../web/dist` |
+| server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `10`, `*`, `false`, `../web/dist` |
 | web | `VITE_API_URL`, `VITE_SIGNALING_URL`, `VITE_ICE_SERVERS` | same origin, same host `/ws`, Google STUN |
 | mobile | `EXPO_PUBLIC_SIGNALING_URL`, `EXPO_PUBLIC_ICE_SERVERS` | — (set your LAN IP), Google STUN |
 
@@ -244,13 +238,13 @@ Each folder has a `.env.example`.
 ## What's tested
 
 - **Server (49 tests):**
-  - **Face sign-in:** a software authenticator makes real P-256 passkeys and signatures. Checked: register a face-only account, sign in without an email, a response can't be replayed, and rejection of a missing face/PIN check, a wrong site or origin, a forged signature and a cloned key (counter going backwards). Fuzzing with 20,000 corrupted responses gives clean errors, never a crash. Also: adding a passkey to a password account (and nobody else can finish it), the last way in can't be removed, a backup password can be added, and mobile device keys (wrong or removed keys stop working; secrets are never stored or listed).
+  - **Accounts & admin:** register / sign-in validation, duplicate emails, new accounts defaulting to the `user` role, the social-providers endpoint, and the admin API — list, create, update and delete users, role changes, and the guards that stop an admin from deleting or demoting themselves.
   - JWT tampering, expiry, wrong key or audience, and `alg: none`; salted password hashes; sign-up/sign-in validation, duplicate emails, rate limits.
   - Meetings: a token is required, names can't be spoofed, room cap, relay, chat, mute state.
   - Profile changes; saved chat (history, paging, retention); Chat and Calls tabs (last message, who's in the meeting, sending from outside a meeting reaches people inside, call history with names).
   - TURN credentials (coturn REST scheme, expiry, sent on join) and production config checks.
-  - MongoDB stores (users, chat, face sign-in devices, calls) against fake collections. Set `MONGODB_URI` to run against a real database.
-- **Web, end to end in Chromium (30 checks)** with Chrome's virtual authenticator standing in for face unlock: register with face, sign out and back in with face, a failed face check, a device with no passkey, adding a backup password and signing in with it, a password account turning on face sign-in from the banner, then a two-person meeting (pre-join shows who's there, unread badge, People panel), the Chat tab (live marker, message from the tab reaches the meeting), the Calls tab, the dark/light toggle, and the phone layout (bottom tabs, no sideways scrolling).
+  - MongoDB stores (users, chat, calls) against fake collections. Set `MONGODB_URI` to run against a real database.
+- **Web, end to end in Chromium:** register and sign in with email and password, then a two-person meeting (pre-join shows who's there, unread badge, People panel), the Chat tab (live marker, a message from the tab reaches the meeting), the Calls tab, the dark/light toggle, and the phone layout (bottom tabs, no sideways scrolling).
 - **3-person meeting (3 checks):** everyone sees everyone, chat, screen-share spotlight.
 - **CI on GitHub** (`.github/workflows/ci.yml`): server tests, web typecheck and build, and the production Docker image built and started on every push.
 - **Mobile:** written against `react-native-webrtc`, `expo-secure-store` and `expo-local-authentication`, and syntax-checked. It still needs a first run on a real phone (Face ID needs a device, not a simulator).
@@ -262,6 +256,6 @@ Each folder has a `.env.example`.
 - [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
 - [x] **Step 2**: deployment with HTTPS, TURN (coturn) with short-lived credentials, MongoDB backups ([DEPLOY.md](./DEPLOY.md))
 - [x] Profile editing and saved call chat (web + mobile)
-- [x] **Face sign-in** (passkeys + Face ID / face unlock) and a Teams-style layout with Chat and Calls tabs
+- [x] **Email + password and social login** (Google / GitHub), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
 - [ ] Forgot-password email, refresh tokens, direct messages
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)

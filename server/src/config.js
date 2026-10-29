@@ -45,8 +45,8 @@ export const config = {
   isProd,
   port: Number(process.env.PORT ?? 3001),
   host: process.env.HOST ?? '0.0.0.0',
-  /** Max people per room. Mesh calls get heavy past ~6; an SFU lifts this later. */
-  maxPeersPerRoom: Number(process.env.MAX_PEERS ?? 6),
+  /** Max people per room. Mesh calls get heavy past ~10; an SFU lifts this later. */
+  maxPeersPerRoom: Number(process.env.MAX_PEERS ?? 10),
   /** Built web app to serve in production (`npm run build -w web`). */
   webDist: process.env.WEB_DIST ?? path.resolve(here, '../../web/dist'),
   /** Comma-separated list of allowed browser origins, or "*". */
@@ -76,11 +76,20 @@ export const config = {
   /** How long TURN credentials last (they're renewed on every join or reconnect). */
   turnTtlSec: Number(process.env.TURN_TTL_SEC ?? 12 * 3600),
 
-  // --- face sign-in (passkeys) ---
-  /** The site's domain, e.g. huddle.example.com. Unset in dev: the page's own host is used. */
-  webauthnRpId: process.env.WEBAUTHN_RP_ID || '',
-  /** Full origins allowed to use passkeys, e.g. https://huddle.example.com (comma-separated). */
-  webauthnOrigins: (process.env.WEBAUTHN_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  // --- admin dashboard ---
+  /** Seeded admin account. Defaults to admin/admin for a quick start — CHANGE THESE in production. */
+  adminEmail: (process.env.ADMIN_EMAIL ?? 'admin').trim().toLowerCase(),
+  adminPassword: process.env.ADMIN_PASSWORD ?? 'admin',
+  adminName: process.env.ADMIN_NAME ?? 'Administrator',
+
+  // --- social login (OAuth) ---
+  /** Public base URL used to build OAuth redirect URIs, e.g. https://harish007.duckdns.org.
+   *  Leave empty to derive it from each request (host + proto). */
+  appUrl: (process.env.APP_URL ?? '').replace(/\/+$/, ''),
+  oauth: {
+    google: { clientId: process.env.GOOGLE_CLIENT_ID ?? '', clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '' },
+    github: { clientId: process.env.GITHUB_CLIENT_ID ?? '', clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '' },
+  },
 
   // --- auth ---
   jwtSecret: process.env.JWT_SECRET || (isProd ? '' : DEV_SECRET),
@@ -95,6 +104,5 @@ export function checkConfig(c = config) {
   if (!c.jwtSecret || c.jwtSecret.length < 32) problems.push('JWT_SECRET must be set to at least 32 random characters.');
   if (c.isProd && c.jwtSecret === DEV_SECRET) problems.push('JWT_SECRET must not be the development default.');
   if (c.turnUrls.length && c.turnSecret.length < 32) problems.push('TURN_SECRET must be at least 32 random characters when TURN_URLS is set.');
-  if (c.isProd && !c.webauthnRpId) problems.push('WEBAUTHN_RP_ID is required in production (your domain, e.g. huddle.example.com).');
   return problems;
 }

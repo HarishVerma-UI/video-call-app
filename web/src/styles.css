@@ -2458,3 +2458,53 @@ svg {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ===== social sign-in buttons ===== */
+.social { display: grid; gap: 10px; margin: 4px 0 2px; }
+.btn--social {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--line);
+}
+.btn--social:hover { background: var(--surface-3); }
+.btn--social svg { flex: 0 0 auto; }
+
+/* ===== admin dashboard ===== */
+.admin__hero { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.admin__hero-text { flex: 1 1 auto; }
+.admin__hero-text h1 { margin: 0; font-family: var(--display); font-size: 1.5rem; }
+.admin__hero-text p { margin: 2px 0 0; color: var(--muted); }
+.admin__tablewrap { padding: 0; overflow: hidden; }
+.admin__table { width: 100%; border-collapse: collapse; font-size: 0.94rem; }
+.admin__table th {
+  text-align: left; padding: 12px 16px; color: var(--faint); font-weight: 600;
+  font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--line);
+}
+.admin__table td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.admin__table tbody tr:last-child td { border-bottom: 0; }
+.admin__user { display: inline-flex; align-items: center; gap: 10px; }
+.admin__user-text { display: flex; flex-direction: column; line-height: 1.25; }
+.admin__user-text span { color: var(--muted); font-size: 0.85rem; }
+.admin__row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.admin__select { width: 100%; background: transparent; border: 0; color: var(--text); font: inherit; padding: 6px 0; outline: none; }
+.admin__select:disabled { color: var(--muted); }
+.admin__select option { color: #111; }
+
+.pill--admin { background: var(--accent-soft); color: var(--accent); }
+.pill--user { background: var(--surface-3); color: var(--muted); }
+.line__hint { color: var(--faint); font-size: 0.8rem; margin: 4px 0 0; }
+
+/* ===== modal ===== */
+.modal {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px);
+}
+.modal__card { width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+@media (max-width: 760px) {
+  .admin__table thead { display: none; }
+  .admin__table, .admin__table tbody, .admin__table tr, .admin__table td { display: block; width: 100%; }
+  .admin__table tbody tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .admin__table td { border: 0; padding: 4px 16px; }
+  .admin__row-actions { justify-content: flex-start; padding-top: 8px; }
+}

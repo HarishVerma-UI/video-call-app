@@ -5,7 +5,7 @@ import { HttpError, bearerToken, clientIp, readJson, sendJson } from '../http.js
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
 import { TokenError, signToken, verifyToken } from './jwt.js';
 import { dummyVerify, hashPassword, verifyPassword } from './password.js';
-import { createFaceAuth } from './faceAuth.js';
+import { createOAuth } from './oauth.js';
 import { createRateLimiter } from './rateLimit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -48,7 +48,7 @@ function validateNewAccount(body) {
 }
 
 /**
- * @param {{ store: any, credentials: any, webauthn?: object, allowedOrigins?: string[], jwtSecret: string, jwtExpiresInSec: number, trustProxy: boolean, log?: Function }} opts
+ * @param {{ store: any, oauth?: object, appUrl?: string, allowedOrigins?: string[], jwtSecret: string, jwtExpiresInSec: number, trustProxy: boolean, log?: Function }} opts
  */
 export function createAuth(opts) {
   const tokenOpts = { secret: opts.jwtSecret, issuer: 'huddle', audience: 'huddle-app' };
@@ -219,29 +219,29 @@ export function createAuth(opts) {
     sendJson(res, 200, issue(updated));
   }
 
-  const face = createFaceAuth({
-    store: opts.store,
-    credentials: opts.credentials,
-    issue,
-    requireUser,
-    validateNewAccount,
+  const oauth = createOAuth({
+    oauth: opts.oauth ?? {},
+    appUrl: opts.appUrl ?? '',
     trustProxy: opts.trustProxy,
-    allowedOrigins: opts.allowedOrigins ?? ['*'],
-    webauthn: opts.webauthn,
-    limits: opts.faceLimits,
+    jwtSecret: opts.jwtSecret,
+    jwtExpiresInSec: opts.jwtExpiresInSec,
+    store: opts.store,
+    issue,
     log: opts.log,
   });
 
   /** Returns true if the request was an auth route (and has been answered). */
   async function handle(req, res, pathname) {
     if (!pathname.startsWith('/api/auth/')) return false;
+    if (await oauth.handle(req, res, pathname)) return true;
     const route = `${req.method} ${pathname}`;
     if (route === 'POST /api/auth/register') await register(req, res);
     else if (route === 'POST /api/auth/login') await login(req, res);
     else if (route === 'GET /api/auth/me') await me(req, res);
     else if (route === 'PATCH /api/auth/me') await updateMe(req, res);
     else if (route === 'POST /api/auth/password') await changePassword(req, res);
-    else if (!(await face.handle(req, res, pathname))) throw new HttpError(404, 'Not found');
+    else if (route === 'GET /api/auth/providers') sendJson(res, 200, { providers: oauth.configuredProviders() });
+    else throw new HttpError(404, 'Not found');
     return true;
   }
 
@@ -253,7 +253,6 @@ export function createAuth(opts) {
       loginByIp.close();
       loginByEmail.close();
       registerByIp.close();
-      face.close();
     },
   };
 }

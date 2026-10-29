@@ -1,7 +1,6 @@
 import { createApi, type ApiClient, type AuthResponse, type AuthUser } from '@vca/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { API_BASE } from '../config';
-import { createPasskey, getPasskey } from './passkey';
 
 const KEY = 'huddle:session';
 
@@ -26,19 +25,35 @@ interface AuthValue {
   updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
   /** Change password (currentPassword null = set a first one); this device stays signed in, other devices are signed out. */
   changePassword: (currentPassword: string | null, newPassword: string) => Promise<void>;
-  /** Sign in with the device's face unlock (passkey). No email needed. */
-  loginWithFace: (beforeEnter?: () => Promise<void>, onPrompt?: () => void) => Promise<void>;
-  /** Create an account secured by face unlock (no password). */
-  registerWithFace: (name: string, email: string, beforeEnter?: () => Promise<void>, onPrompt?: () => void) => Promise<void>;
-  /** Turn on face sign-in for this device on the signed-in account. */
-  addFaceToAccount: () => Promise<void>;
-  /** Re-read the user (e.g. after removing devices). */
+  /** Re-read the user (e.g. after a change elsewhere). */
   refreshUser: () => Promise<void>;
   /** Message to show on the sign-in page (e.g. "session expired"). */
   notice: string | null;
 }
 
 const Ctx = createContext<AuthValue | null>(null);
+
+const BLANK_USER: AuthUser = { id: '', name: '', email: '', createdAt: '' };
+
+/** After a social login the server sends us back with the token in the URL hash. */
+function readOAuthToken(): string | null {
+  try {
+    const h = location.hash;
+    const m = h.match(/(?:^#|&)auth_token=([^&]+)/);
+    if (!m) return null;
+    const token = decodeURIComponent(m[1]);
+    // Strip the token from the URL so it isn't left in history or copied.
+    const cleaned = h.replace(/(?:^#|&)auth_token=[^&]+/, '').replace(/^#/, '');
+    history.replaceState(null, '', location.pathname + location.search + (cleaned ? `#${cleaned}` : ''));
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
+// Read once at module load, before React renders, so StrictMode's double-invoked
+// state initializers can't consume (and clear) the token twice.
+const OAUTH_TOKEN = readOAuthToken();
 
 function load(): Session | null {
   try {
@@ -60,8 +75,14 @@ function save(s: Session | null) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(load);
-  const [status, setStatus] = useState<Status>(() => (load() ? 'checking' : 'signed-out'));
+  const [session, setSession] = useState<Session | null>(() => {
+    if (OAUTH_TOKEN) {
+      // Provisional session; the /me check below fills in the real user and persists it.
+      return { token: OAUTH_TOKEN, user: BLANK_USER, expiresAt: new Date(Date.now() + 7 * 86400_000).toISOString() };
+    }
+    return load();
+  });
+  const [status, setStatus] = useState<Status>(() => (session ? 'checking' : 'signed-out'));
   const [notice, setNotice] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(session?.token ?? null);
   tokenRef.current = session?.token ?? null;
@@ -95,8 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        // Offline? Trust the unexpired stored session; the call itself will re-check.
-        if (err?.status === 0 && session) setStatus('signed-in');
+        // Offline with a previously saved session? Trust it; the next call re-checks.
+        if (err?.status === 0 && session && session.user.id) setStatus('signed-in');
         else logout();
       });
     return () => {
@@ -149,26 +170,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     changePassword: async (currentPassword, newPassword) => {
       accept(await api.changePassword(currentPassword === null ? { newPassword } : { currentPassword, newPassword }));
-    },
-    loginWithFace: async (beforeEnter, onPrompt) => {
-      const options = await api.passkeyLoginOptions();
-      onPrompt?.();
-      const credential = await getPasskey(options);
-      const r = await api.passkeyLoginVerify(credential);
-      await beforeEnter?.();
-      accept(r);
-    },
-    registerWithFace: async (name, email, beforeEnter, onPrompt) => {
-      const options = await api.passkeyRegisterOptions({ name, email });
-      onPrompt?.();
-      const credential = await createPasskey(options);
-      const r = await api.passkeyRegisterVerify(credential);
-      await beforeEnter?.();
-      accept(r);
-    },
-    addFaceToAccount: async () => {
-      const options = await api.passkeyRegisterOptions();
-      await api.passkeyRegisterVerify(await createPasskey(options));
     },
     refreshUser: async () => {
       const { user } = await api.me();

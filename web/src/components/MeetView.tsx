@@ -1,12 +1,11 @@
 import { generateRoomId, normalizeRoomId, type AuthUser, type ChatSummary } from '@vca/shared';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { hasBuiltInUnlock, passkeysSupported, PasskeyCancelled, unlockName } from '../auth/passkey';
 import { names, roomTitle, shortWhen } from '../format';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
-import { CamIcon, CamOffIcon, ChatIcon, CloseIcon, FaceIdIcon, MicIcon, MicOffIcon, PlusIcon, SparkIcon, VideoIcon } from './Icons';
+import { CamIcon, CamOffIcon, ChatIcon, MicIcon, MicOffIcon, PlusIcon, SparkIcon, VideoIcon } from './Icons';
 import { Avatar, RoomBadge } from './RoomBadge';
 
 interface Props {
@@ -25,77 +24,6 @@ const PROBLEM_TEXT: Record<string, string> = {
   insecure: 'Camera and mic need HTTPS (or localhost). Open this page over HTTPS to use them.',
   other: 'Could not start your camera. You can still join and listen.',
 };
-
-/** Offer face sign-in once to people who signed up with a password. */
-function FaceSetupBanner({ user }: { user: AuthUser }) {
-  const { api, addFaceToAccount } = useAuth();
-  const key = `huddle:face-offer:${user.id}`;
-  const [show, setShow] = useState(false);
-  const [state, setState] = useState<'idle' | 'busy' | 'done'>('idle');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let dismissed = false;
-    try {
-      dismissed = localStorage.getItem(key) === 'no';
-    } catch {
-      /* ignore */
-    }
-    if (dismissed || !passkeysSupported()) return;
-    let cancelled = false;
-    void (async () => {
-      if (!(await hasBuiltInUnlock())) return;
-      const { credentials } = await api.credentials().catch(() => ({ credentials: [{}] }));
-      if (!cancelled && credentials.length === 0) setShow(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [api, key]);
-
-  if (!show) return null;
-  const dismiss = () => {
-    try {
-      localStorage.setItem(key, 'no');
-    } catch {
-      /* ignore */
-    }
-    setShow(false);
-  };
-  const turnOn = async () => {
-    setError(null);
-    setState('busy');
-    try {
-      await addFaceToAccount();
-      setState('done');
-      setTimeout(() => setShow(false), 2400);
-    } catch (err) {
-      setState('idle');
-      setError(err instanceof PasskeyCancelled ? null : (err as Error).message);
-    }
-  };
-  return (
-    <div className={`face-banner${state === 'done' ? ' face-banner--done' : ''}`} role="region" aria-label="Face sign-in" data-testid="face-banner">
-      <span className="face-banner__icon">
-        <FaceIdIcon width={26} height={26} />
-      </span>
-      <div className="face-banner__text">
-        <strong>{state === 'done' ? 'Face sign-in is on for this device' : 'Sign in with your face next time'}</strong>
-        <span>{state === 'done' ? 'Next time, just look at your camera.' : error ?? `Use ${unlockName()} instead of typing your password.`}</span>
-      </div>
-      {state !== 'done' && (
-        <>
-          <button className="btn btn--primary btn--small" onClick={() => void turnOn()} disabled={state === 'busy'}>
-            {state === 'busy' ? 'Waiting…' : 'Turn on'}
-          </button>
-          <button className="icon-btn" onClick={dismiss} aria-label="Not now">
-            <CloseIcon width={16} height={16} />
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
 
 export function MeetView({ user, media, room, setRoom, notice, onJoin, openChat }: Props) {
   const { api } = useAuth();
@@ -245,7 +173,6 @@ export function MeetView({ user, media, room, setRoom, notice, onJoin, openChat 
       </section>
 
       <section className="stage-pane" aria-label="Get ready to join">
-        <FaceSetupBanner user={user} />
         {notice && <p className="notice" role="status">{notice}</p>}
 
         <div className="prejoin">

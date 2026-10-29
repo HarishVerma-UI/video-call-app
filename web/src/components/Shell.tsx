@@ -1,16 +1,17 @@
 import { normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { LocalMedia } from '../hooks/useLocalMedia';
+import { AdminView } from './AdminView';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
-import { ChatIcon, PhoneIcon, SearchIcon, VideoIcon } from './Icons';
+import { ChatIcon, PhoneIcon, SearchIcon, ShieldIcon, VideoIcon } from './Icons';
 import { MeetView } from './MeetView';
 import { ModeToggle } from './ModeToggle';
 import { ProfileView } from './ProfileView';
 import { Avatar } from './RoomBadge';
 
-export type Route = { view: 'meet'; room: string } | { view: 'chat'; room: string } | { view: 'calls' } | { view: 'profile' };
+export type Route = { view: 'meet'; room: string } | { view: 'chat'; room: string } | { view: 'calls' } | { view: 'profile' } | { view: 'admin' };
 
 export function parseRoute(path = location.pathname): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -18,6 +19,7 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'chat') return { view: 'chat', room: normalizeRoomId(seg[1] ?? '') ?? '' };
   if (seg[0] === 'calls') return { view: 'calls' };
   if (seg[0] === 'profile') return { view: 'profile' };
+  if (seg[0] === 'admin') return { view: 'admin' };
   return { view: 'meet', room: '' };
 }
 
@@ -121,6 +123,17 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             <span>{item.label}</span>
           </button>
         ))}
+        {user.role === 'admin' && (
+          <button
+            className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
+            onClick={() => go({ view: 'admin' })}
+            aria-current={route.view === 'admin' ? 'page' : undefined}
+            data-testid="rail-admin"
+          >
+            <ShieldIcon />
+            <span>Admin</span>
+          </button>
+        )}
         <button
           className={`rail__item rail__item--me${route.view === 'profile' ? ' is-on' : ''}`}
           onClick={() => go({ view: 'profile' })}
@@ -147,6 +160,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'chat' && <ChatView user={user} room={route.room} openRoom={(room) => go({ view: 'chat', room })} onJoin={onJoin} />}
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
         {route.view === 'profile' && <ProfileView />}
+        {route.view === 'admin' && <AdminView />}
       </div>
     </div>
   );

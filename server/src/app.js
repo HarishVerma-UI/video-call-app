@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { createAuth } from './auth/auth.js';
+import { createAdmin } from './auth/admin.js';
 import { createMemoryActivityStore } from './db/activityStore.js';
-import { createMemoryCredentialStore } from './db/credentialStore.js';
 import { createMemoryMessageStore } from './db/messageStore.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
@@ -54,15 +54,14 @@ function serveStatic(res, webDist, urlPath) {
 /**
  * Create (but don't start) the HTTP + WebSocket server.
  * @param {object} config see config.js
- * @param {{ store: object, messages?: object, credentials?: object, activity?: object, log?: Function }} deps
- *   users, saved chat, face sign-in devices, call history (MongoDB or memory)
+ * @param {{ store: object, messages?: object, activity?: object, log?: Function }} deps
+ *   users, saved chat, call history (MongoDB or memory)
  */
 export function createApp(
   config,
   {
     store,
     messages = createMemoryMessageStore(),
-    credentials = createMemoryCredentialStore(),
     activity = createMemoryActivityStore(),
     log = () => {},
   },
@@ -71,15 +70,15 @@ export function createApp(
   const chatPosts = createRateLimiter({ limit: 5, windowMs: 5000 });
   const auth = createAuth({
     store,
-    credentials,
     allowedOrigins: config.allowedOrigins,
-    webauthn: { rpId: config.webauthnRpId, origins: config.webauthnOrigins },
-    faceLimits: config.faceLimits,
+    oauth: config.oauth,
+    appUrl: config.appUrl,
     jwtSecret: config.jwtSecret,
     jwtExpiresInSec: config.jwtExpiresInSec,
     trustProxy: config.trustProxy,
     log,
   });
+  const admin = createAdmin({ store, requireUser: auth.requireUser, log });
   let signaling;
 
   const cors = (req) => {
@@ -120,6 +119,7 @@ export function createApp(
       return;
     }
     if (await auth.handle(req, res, path)) return;
+    if (await admin.handle(req, res, path)) return;
 
     // Calls tab: your recent calls, newest first.
     if (path === '/api/calls' && req.method === 'GET') {

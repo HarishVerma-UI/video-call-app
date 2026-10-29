@@ -35,8 +35,19 @@ JWT_SECRET=$(rand 64)
 TURN_SECRET=$(rand 48)
 MONGO_USER=huddle
 MONGO_PASSWORD=$(rand 40)
-MAX_PEERS=6
+MAX_PEERS=10
 CHAT_RETENTION_DAYS=30
+# Public URL, used to build social-login (OAuth) redirect URIs.
+APP_URL=https://$DOMAIN
+# Admin dashboard sign-in. Defaults to admin/admin — CHANGE ADMIN_PASSWORD after first login.
+ADMIN_EMAIL=admin
+ADMIN_PASSWORD=admin
+# Social login (optional). Fill these in to show the Google / GitHub buttons,
+# and register the callback https://$DOMAIN/api/auth/oauth/<provider>/callback with each provider.
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
 ENV
   echo "Saved deploy/.env (secrets generated)."
 fi
