@@ -2,9 +2,9 @@ import os from 'node:os';
 import { createApp } from './app.js';
 import { checkConfig, config } from './config.js';
 import { createMemoryMessageStore, mongoMessageStore } from './db/messageStore.js';
-import { connectMongoUserStore, createMemoryUserStore } from './db/userStore.js';
-import { createMemoryCredentialStore, mongoCredentialStore } from './db/credentialStore.js';
+import { connectMongoUserStore, createMemoryUserStore, seedAdmin } from './db/userStore.js';
 import { createMemoryActivityStore, mongoActivityStore } from './db/activityStore.js';
+import { hashPassword } from './auth/password.js';
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
@@ -16,13 +16,11 @@ if (problems.length) {
 
 let store;
 let messages;
-let credentials;
 let activity;
 if (config.mongoUri) {
   try {
     store = await connectMongoUserStore(config.mongoUri, config.mongoDb, log);
     messages = await mongoMessageStore(store.db, { retentionDays: config.chatRetentionDays });
-    credentials = await mongoCredentialStore(store.db);
     activity = await mongoActivityStore(store.db);
   } catch (err) {
     console.error(`\n  Could not connect to MongoDB at ${config.mongoUri.replace(/\/\/[^@]*@/, '//***@')}`);
@@ -32,11 +30,15 @@ if (config.mongoUri) {
 } else {
   store = createMemoryUserStore();
   messages = createMemoryMessageStore({ retentionDays: config.chatRetentionDays });
-  credentials = createMemoryCredentialStore();
   activity = createMemoryActivityStore();
 }
 
-const app = createApp(config, { store, messages, credentials, activity, log });
+// Make sure the admin dashboard has an account to sign in with.
+await seedAdmin(store, { email: config.adminEmail, password: config.adminPassword, name: config.adminName }, hashPassword, log);
+if (config.isProd && config.adminPassword === 'admin')
+  console.warn('  ⚠  Admin password is the default "admin" — set ADMIN_PASSWORD to something private.');
+
+const app = createApp(config, { store, messages, activity, log });
 await app.listen();
 
 const lanIps = Object.values(os.networkInterfaces())

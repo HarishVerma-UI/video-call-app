@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { mongoMessageStoreFromCollection } from '../src/db/messageStore.js';
-import { mongoCredentialStoreFromCollection, publicCredential } from '../src/db/credentialStore.js';
 import { mongoActivityStoreFromCollections } from '../src/db/activityStore.js';
 import { DuplicateEmailError, connectMongoUserStore, mongoUserStoreFromCollection } from '../src/db/userStore.js';
 
@@ -149,23 +148,6 @@ test('mongo message store: save, newest page oldest-first, paging with before', 
   assert.deepEqual(page3.messages.map((m) => m.text), ['m0']);
   assert.equal(page3.hasMore, false);
   assert.ok(page1.messages.every((m) => typeof m.ts === 'number' && m.userId === 'u1'));
-});
-
-test('MongoDB credential store: add, find, list, touch, remove (fake collection)', async () => {
-  const store = mongoCredentialStoreFromCollection(fakeCollection());
-  await store.add({ id: 'cred-a', userId: 'u1', kind: 'passkey', name: 'Chrome on Mac', publicKey: { kty: 'EC' }, alg: -7, signCount: 0 });
-  await store.add({ id: 'cred-b', userId: 'u1', kind: 'device', name: 'iPhone', secretHash: 'x' });
-  await assert.rejects(store.add({ id: 'cred-a', userId: 'u2', kind: 'passkey' }), (e) => e.code === 'duplicate');
-  assert.equal((await store.findById('cred-a')).userId, 'u1');
-  assert.equal((await store.listByUser('u1')).length, 2);
-  await store.touch('cred-a', { signCount: 7 });
-  const a = await store.findById('cred-a');
-  assert.equal(a.signCount, 7);
-  assert.ok(a.lastUsedAt instanceof Date);
-  assert.deepEqual(Object.keys(publicCredential(a)).sort(), ['createdAt', 'id', 'kind', 'lastUsedAt', 'name', 'synced']);
-  assert.equal(await store.remove('u2', 'cred-a'), false, "can't remove someone else's");
-  assert.equal(await store.remove('u1', 'cred-a'), true);
-  assert.equal(await store.findById('cred-a'), null);
 });
 
 test('MongoDB activity store: calls and recent rooms (fake collections)', async () => {

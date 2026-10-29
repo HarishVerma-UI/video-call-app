@@ -1,9 +1,7 @@
-import { ApiError, passwordStrength, type FaceCredential } from '@vca/shared';
-import { useEffect, useState, type FormEvent } from 'react';
+import { ApiError, passwordStrength } from '@vca/shared';
+import { useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { PasskeyCancelled, passkeysSupported, unlockName } from '../auth/passkey';
-import { ago } from '../format';
-import { FaceIdIcon, KeyIcon, LaptopIcon, PhoneDeviceIcon, SignOutIcon, TrashIcon } from './Icons';
+import { KeyIcon, SignOutIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 
@@ -16,93 +14,6 @@ function Status({ msg }: { msg: Msg }) {
     <p className={`form-msg${msg.ok ? ' form-msg--ok' : ''}`} role="status">
       {msg.text}
     </p>
-  );
-}
-
-function FaceDevices() {
-  const { api, user, addFaceToAccount, refreshUser } = useAuth();
-  const [list, setList] = useState<FaceCredential[] | null>(null);
-  const [msg, setMsg] = useState<Msg>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .credentials()
-      .then(({ credentials }) => setList(credentials))
-      .catch(() => setList([]));
-  }, [api]);
-
-  const add = async () => {
-    setMsg(null);
-    setBusy(true);
-    try {
-      await addFaceToAccount();
-      setList((await api.credentials()).credentials);
-      setMsg({ ok: true, text: 'Face sign-in is on for this device.' });
-    } catch (err) {
-      if (!(err instanceof PasskeyCancelled)) setMsg({ ok: false, text: (err as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async (c: FaceCredential) => {
-    setMsg(null);
-    try {
-      setList((await api.removeCredential(c.id)).credentials);
-      setMsg({ ok: true, text: `Removed “${c.name}”. It can no longer sign in to your account.` });
-      await refreshUser();
-    } catch (err) {
-      setMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Couldn’t remove that device.' });
-    }
-  };
-
-  return (
-    <section className="card" aria-labelledby="face-h">
-      <header className="card__head">
-        <span className="card__icon card__icon--face">
-          <FaceIdIcon width={22} height={22} />
-        </span>
-        <div>
-          <h2 id="face-h">Face sign-in</h2>
-          <p>Devices that can sign in with Face ID, Windows Hello, Android face unlock or fingerprint. Your face never leaves the device.</p>
-        </div>
-      </header>
-      {list === null ? (
-        <div className="skeleton-list" aria-hidden="true">
-          <i />
-        </div>
-      ) : list.length === 0 ? (
-        <p className="card__empty">No devices yet.{user?.hasPassword ? ' You sign in with your password.' : ''}</p>
-      ) : (
-        <ul className="devices" data-testid="face-devices">
-          {list.map((c) => (
-            <li key={c.id} className="devices__row">
-              <span className="devices__icon">{c.kind === 'device' || /iPhone|Android/.test(c.name) ? <PhoneDeviceIcon /> : <LaptopIcon />}</span>
-              <span className="devices__main">
-                <strong>
-                  {c.name}
-                  {c.synced && <span className="pill">Synced</span>}
-                  {c.kind === 'device' && <span className="pill">Huddle app</span>}
-                </strong>
-                <span>
-                  Added {ago(c.createdAt)} · last used {ago(c.lastUsedAt)}
-                </span>
-              </span>
-              <button className="icon-btn icon-btn--danger" onClick={() => void remove(c)} aria-label={`Remove ${c.name}`} title="Remove">
-                <TrashIcon width={18} height={18} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Status msg={msg} />
-      {passkeysSupported() && (
-        <button className="btn btn--secondary" onClick={() => void add()} disabled={busy} data-testid="add-face">
-          <FaceIdIcon width={18} height={18} /> {busy ? `Waiting for ${unlockName()}…` : 'Set up face sign-in on this device'}
-        </button>
-      )}
-    </section>
   );
 }
 
@@ -170,7 +81,7 @@ export function ProfileView() {
       setNext('');
       setPMsg({
         ok: true,
-        text: hasPassword ? 'Password changed. Your other devices have been signed out.' : 'Backup password added. You can now sign in with your email too.',
+        text: hasPassword ? 'Password changed. Your other devices have been signed out.' : 'Password added. You can now sign in with your email too.',
       });
     } catch (err) {
       const apiErr = err instanceof ApiError ? err : null;
@@ -188,7 +99,8 @@ export function ProfileView() {
         <div>
           <h1>{user.name}</h1>
           <p>
-            {user.email} · member since {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+            {user.email || 'No email'} · member since {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+            {user.provider ? ` · via ${user.provider}` : ''}
           </p>
         </div>
         <button className="btn btn--secondary btn--small profile-hero__out" onClick={() => logout()} data-testid="sign-out">
@@ -224,19 +136,17 @@ export function ProfileView() {
         </button>
       </form>
 
-      <FaceDevices />
-
       <form className="card" onSubmit={savePassword} noValidate aria-labelledby="pw-h">
         <header className="card__head">
           <span className="card__icon">
             <KeyIcon width={20} height={20} />
           </span>
           <div>
-            <h2 id="pw-h">{hasPassword ? 'Password' : 'Backup password'}</h2>
+            <h2 id="pw-h">{hasPassword ? 'Password' : 'Add a password'}</h2>
             <p>
               {hasPassword
                 ? 'Changing your password signs you out on your other devices.'
-                : 'Your account has no password. Add one so you can still sign in on a device without face unlock.'}
+                : 'Your account signs in with social login. Add a password so you can also sign in with your email.'}
             </p>
           </div>
         </header>

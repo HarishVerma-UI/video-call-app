@@ -2,25 +2,20 @@ import type { ChatMessage } from './protocol';
 
 // Tiny typed client for the server's REST API, shared by web and mobile.
 
+export type UserRole = 'user' | 'admin';
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  /** false for accounts created with face sign-in only (they can add a backup password). */
+  /** 'admin' can open the admin dashboard; everyone else is 'user'. */
+  role?: UserRole;
+  /** false for accounts created via social login only (they can add a password). */
   hasPassword?: boolean;
+  /** 'google' | 'github' when the account was created via social login, else null. */
+  provider?: string | null;
   createdAt: string;
-}
-
-/** A device that can sign in with face unlock. */
-export interface FaceCredential {
-  id: string;
-  /** "passkey": a browser passkey (WebAuthn). "device": the mobile app on a phone. */
-  kind: 'passkey' | 'device';
-  name: string;
-  /** Synced through iCloud Keychain / Google Password Manager, so it works on your other devices too. */
-  synced: boolean;
-  createdAt: string;
-  lastUsedAt: string | null;
+  lastLoginAt?: string | null;
 }
 
 export interface CallRecord {
@@ -41,14 +36,14 @@ export interface ChatSummary {
   inCall: { userId: string; name: string }[];
 }
 
-/** WebAuthn options as JSON (binary fields are base64url strings). */
-export type PasskeyOptionsJSON = { publicKey: Record<string, any> };
-
 export interface AuthResponse {
   user: AuthUser;
   token: string;
   expiresAt: string;
 }
+
+/** Which social sign-in buttons the server has configured. */
+export type Providers = Record<string, boolean>;
 
 export interface RoomInfo {
   roomId: string;
@@ -82,18 +77,14 @@ export interface ApiClient {
   updateProfile(input: { name?: string; email?: string; currentPassword?: string }): Promise<AuthResponse>;
   /** Change password (or set a first one: no currentPassword). Returns a fresh token; other devices are signed out on a change. */
   changePassword(input: { currentPassword?: string; newPassword: string }): Promise<AuthResponse>;
+  /** Which social sign-in providers are configured on the server. */
+  providers(): Promise<{ providers: Providers }>;
 
-  // Face sign-in on the web (passkeys). Pass the browser's credential, serialized to JSON.
-  /** New account ({ name, email }) or, when signed in, add this device to your account. */
-  passkeyRegisterOptions(input?: { name: string; email: string }): Promise<PasskeyOptionsJSON>;
-  passkeyRegisterVerify(credential: unknown, deviceName?: string): Promise<AuthResponse & { credentials?: FaceCredential[] }>;
-  passkeyLoginOptions(): Promise<PasskeyOptionsJSON>;
-  passkeyLoginVerify(credential: unknown): Promise<AuthResponse>;
-  // Face sign-in in the mobile app (a key kept behind Face ID / face unlock).
-  deviceRegister(input: { name?: string; email?: string; deviceName: string }): Promise<Partial<AuthResponse> & { device: { id: string; secret: string } }>;
-  deviceLogin(input: { deviceId: string; secret: string }): Promise<AuthResponse>;
-  credentials(): Promise<{ credentials: FaceCredential[] }>;
-  removeCredential(id: string): Promise<{ credentials: FaceCredential[] }>;
+  // --- admin dashboard (admin role only) ---
+  adminListUsers(): Promise<{ users: AuthUser[]; total: number }>;
+  adminCreateUser(input: { name: string; email: string; password: string; role?: UserRole }): Promise<{ user: AuthUser }>;
+  adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
+  adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
 
   /** Your recent calls, newest first. */
   calls(): Promise<{ calls: CallRecord[] }>;
@@ -131,7 +122,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       // Only an authenticated call failing with 401 means "your session ended".
-      if (res.status === 401 && token && !/^\/api\/auth\/(login|passkey|device)/.test(path)) onUnauthorized?.();
+      if (res.status === 401 && token && !/^\/api\/auth\/login/.test(path)) onUnauthorized?.();
       throw new ApiError(res.status, data);
     }
     return data as T;
@@ -143,14 +134,11 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     me: () => request('GET', '/api/auth/me'),
     updateProfile: (input) => request('PATCH', '/api/auth/me', input),
     changePassword: (input) => request('POST', '/api/auth/password', input),
-    passkeyRegisterOptions: (input) => request('POST', '/api/auth/passkey/register/options', input ?? {}),
-    passkeyRegisterVerify: (credential, deviceName) => request('POST', '/api/auth/passkey/register/verify', { credential, deviceName }),
-    passkeyLoginOptions: () => request('POST', '/api/auth/passkey/login/options', {}),
-    passkeyLoginVerify: (credential) => request('POST', '/api/auth/passkey/login/verify', { credential }),
-    deviceRegister: (input) => request('POST', '/api/auth/device/register', input),
-    deviceLogin: (input) => request('POST', '/api/auth/device/login', input),
-    credentials: () => request('GET', '/api/auth/credentials'),
-    removeCredential: (id) => request('DELETE', `/api/auth/credentials/${encodeURIComponent(id)}`),
+    providers: () => request('GET', '/api/auth/providers'),
+    adminListUsers: () => request('GET', '/api/admin/users'),
+    adminCreateUser: (input) => request('POST', '/api/admin/users', input),
+    adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
+    adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
     calls: () => request('GET', '/api/calls'),
     chats: () => request('GET', '/api/chats'),
     sendRoomMessage: (roomId, text) => request('POST', `/api/rooms/${encodeURIComponent(roomId)}/messages`, { text }),
