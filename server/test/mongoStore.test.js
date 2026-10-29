@@ -116,7 +116,7 @@ test('mongo user store: create / find / duplicate / recordLogin (fake collection
   const store = mongoUserStoreFromCollection(col, FakeObjectId);
   await exercise(store, 'fake');
   assert.equal(col.docs.length, 2);
-  assert.deepEqual(Object.keys(col.docs[0]).sort(), ['_id', 'createdAt', 'email', 'lastLoginAt', 'name', 'passwordHash', 'tokenVersion', 'updatedAt']);
+  assert.deepEqual(Object.keys(col.docs[0]).sort(), ['_id', 'createdAt', 'email', 'lastLoginAt', 'name', 'passwordHash', 'provider', 'providerId', 'role', 'tokenVersion', 'updatedAt']);
 });
 
 test('mongo user store against a real MongoDB', { skip: !process.env.MONGODB_URI && 'set MONGODB_URI to run' }, async () => {
