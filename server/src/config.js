@@ -91,6 +91,16 @@ export const config = {
     github: { clientId: process.env.GITHUB_CLIENT_ID ?? '', clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '' },
   },
 
+  // --- media uploads (S3) ---
+  s3: {
+    region: process.env.AWS_REGION || process.env.S3_REGION || '',
+    bucket: process.env.S3_BUCKET || '',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    /** Public base URL for publicly-readable objects (photos, post images). Defaults to the standard bucket URL. */
+    publicBaseUrl: (process.env.S3_PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
+  },
+
   // --- auth ---
   jwtSecret: process.env.JWT_SECRET || (isProd ? '' : DEV_SECRET),
   jwtExpiresInSec: parseDuration(process.env.JWT_EXPIRES_IN, 7 * 86400),

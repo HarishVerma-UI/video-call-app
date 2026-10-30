@@ -4,6 +4,7 @@ import { checkConfig, config } from './config.js';
 import { createMemoryMessageStore, mongoMessageStore } from './db/messageStore.js';
 import { connectMongoUserStore, createMemoryUserStore, seedAdmin } from './db/userStore.js';
 import { createMemoryActivityStore, mongoActivityStore } from './db/activityStore.js';
+import { connectSocialStores } from './db/socialStore.js';
 import { hashPassword } from './auth/password.js';
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
@@ -17,11 +18,13 @@ if (problems.length) {
 let store;
 let messages;
 let activity;
+let social;
 if (config.mongoUri) {
   try {
     store = await connectMongoUserStore(config.mongoUri, config.mongoDb, log);
     messages = await mongoMessageStore(store.db, { retentionDays: config.chatRetentionDays });
     activity = await mongoActivityStore(store.db);
+    social = await connectSocialStores(store.db, log);
   } catch (err) {
     console.error(`\n  Could not connect to MongoDB at ${config.mongoUri.replace(/\/\/[^@]*@/, '//***@')}`);
     console.error(`  ${err.message}\n  Is it running? Try:  docker compose up -d mongo\n`);
@@ -38,7 +41,7 @@ await seedAdmin(store, { email: config.adminEmail, password: config.adminPasswor
 if (config.isProd && config.adminPassword === 'admin')
   console.warn('  ⚠  Admin password is the default "admin" — set ADMIN_PASSWORD to something private.');
 
-const app = createApp(config, { store, messages, activity, log });
+const app = createApp(config, { store, messages, activity, social, log });
 await app.listen();
 
 const lanIps = Object.values(os.networkInterfaces())
