@@ -26,14 +26,14 @@ export function PersonView({ userId, openMessages, startCall, back }: { userId: 
 
   const onConn = (_s: ConnectionState) => void load();
 
-  if (missing) return <section className="page page--narrow"><button className="link-btn" onClick={back}>← Back</button><p className="card__empty">This person doesn’t have a profile yet.</p></section>;
+  if (missing) return <section className="page page--narrow"><button className="link-btn" onClick={back}>&larr; Back</button><p className="card__empty">This person doesn&apos;t have a profile yet.</p></section>;
   if (!profile) return <section className="page page--narrow"><div className="skeleton-list" aria-hidden="true"><i /></div></section>;
 
   const full = profile.connection === 'connected' || profile.connection === 'self';
 
   return (
     <section className="page page--narrow" aria-label="Profile" data-testid="person">
-      <button className="link-btn" onClick={back}>← Back</button>
+      <button className="link-btn" onClick={back}>&larr; Back</button>
       <div className="card">
         <div className="person-hero">
           <ProfileAvatar profile={profile} size={84} />
@@ -80,7 +80,7 @@ export function PersonView({ userId, openMessages, startCall, back }: { userId: 
             )}
           </>
         ) : (
-          <p className="card__empty">Connect to see {profile.name || 'this person'}’s full profile, CV and contact details.</p>
+          <p className="card__empty">Connect to see {profile.name || 'this person'}&apos;s full profile, CV and contact details.</p>
         )}
       </div>
 

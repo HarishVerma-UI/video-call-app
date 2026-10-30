@@ -43,7 +43,7 @@ export function ProfessionalProfile() {
   };
 
   useEffect(() => {
-    api.myProfile().then(({ profile }) => fill(profile)).catch(() => setMsg({ ok: false, text: 'Couldn’t load your profile.' }));
+    api.myProfile().then(({ profile }) => fill(profile)).catch(() => setMsg({ ok: false, text: "Couldn't load your profile." }));
   }, [api]);
 
   const fields = () => ({
@@ -68,7 +68,7 @@ export function ProfessionalProfile() {
       fill(profile);
       setMsg({ ok: true, text: 'Profile saved.' });
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof ApiError ? err.message : 'Couldn’t save your profile.' });
+      setMsg({ ok: false, text: err instanceof ApiError ? err.message : "Couldn't save your profile." });
     } finally {
       setSaving(false);
     }
@@ -148,8 +148,8 @@ export function ProfessionalProfile() {
       <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
 
       <div className="pp-flags">
-        <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I’m looking for mentorship</label>
-        <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I’m available as a mentor</label>
+        <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I&apos;m looking for mentorship</label>
+        <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I&apos;m available as a mentor</label>
       </div>
 
       <div className="pp-cv">

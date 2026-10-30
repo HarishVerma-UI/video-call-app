@@ -80,6 +80,7 @@ export function createApp(
     jwtSecret: config.jwtSecret,
     jwtExpiresInSec: config.jwtExpiresInSec,
     trustProxy: config.trustProxy,
+    registerRateLimit: config.registerRateLimit,
     log,
   });
   const admin = createAdmin({ store, requireUser: auth.requireUser, log });

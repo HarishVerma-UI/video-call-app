@@ -54,7 +54,7 @@ export function createAuth(opts) {
   const tokenOpts = { secret: opts.jwtSecret, issuer: 'huddle', audience: 'huddle-app' };
   const loginByIp = createRateLimiter({ limit: 50, windowMs: 15 * 60_000 });
   const loginByEmail = createRateLimiter({ limit: 10, windowMs: 15 * 60_000 });
-  const registerByIp = createRateLimiter({ limit: 20, windowMs: 60 * 60_000 });
+  const registerByIp = createRateLimiter({ limit: opts.registerRateLimit ?? 20, windowMs: 60 * 60_000 });
 
   const issue = (user) => {
     const token = signToken(
