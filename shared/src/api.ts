@@ -55,6 +55,79 @@ export interface RoomInfo {
 }
 
 /** Error from the API, with per-field messages when the server sent them. */
+// --- professional network ---
+export type ConnectionState = 'self' | 'connected' | 'pending_outgoing' | 'pending_incoming' | 'none';
+
+export interface Experience {
+  title: string;
+  company: string;
+  start: string;
+  end: string;
+  description: string;
+}
+export interface Education {
+  school: string;
+  degree: string;
+  year: string;
+}
+
+export interface Profile {
+  userId: string;
+  name: string;
+  headline: string;
+  location: string;
+  skills: string[];
+  mentor: boolean;
+  mentee: boolean;
+  focusAreas: string[];
+  hasPhoto: boolean;
+  photoUrl: string | null;
+  connection: ConnectionState;
+  updatedAt: string | null;
+  // private fields, present only when the viewer may see them (self or accepted connection)
+  bio?: string;
+  mobile?: string;
+  experience?: Experience[];
+  education?: Education[];
+  hasCv?: boolean;
+  cvName?: string;
+  cvUrl?: string | null;
+}
+
+export interface PostComment {
+  id: string;
+  userId: string;
+  name: string;
+  text: string;
+  ts: number;
+}
+export interface Post {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorPhotoUrl: string | null;
+  text: string;
+  imageUrl: string | null;
+  likeCount: number;
+  likedByMe: boolean;
+  comments: PostComment[];
+  createdAt: string | null;
+}
+
+export interface DmMessage {
+  id: string;
+  from: string;
+  fromName: string;
+  to: string;
+  text: string;
+  ts: number;
+}
+export interface Conversation {
+  other: string;
+  profile: Profile;
+  last: DmMessage;
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -95,6 +168,27 @@ export interface ApiClient {
   roomInfo(roomId: string): Promise<RoomInfo>;
   /** Saved chat, newest page first in time order; pass `before` (a message ts) for older pages. */
   roomMessages(roomId: string, opts?: { before?: number; limit?: number }): Promise<{ messages: ChatMessage[]; hasMore: boolean }>;
+
+  // --- professional network ---
+  myProfile(): Promise<{ profile: Profile }>;
+  saveProfile(input: Partial<Profile> & { photoKey?: string; cvKey?: string; cvName?: string }): Promise<{ profile: Profile }>;
+  getProfile(userId: string): Promise<{ profile: Profile; posts: Post[] }>;
+  searchPeople(opts?: { q?: string; role?: string }): Promise<{ people: Profile[] }>;
+  uploadUrl(input: { kind: 'photo' | 'cv' | 'post'; contentType: string }): Promise<{ uploadUrl: string; key: string }>;
+  requestConnect(userId: string): Promise<{ status: ConnectionState }>;
+  acceptConnect(userId: string): Promise<{ status: ConnectionState }>;
+  declineConnect(userId: string): Promise<{ status: ConnectionState }>;
+  removeConnect(userId: string): Promise<{ status: ConnectionState }>;
+  listConnections(): Promise<{ connections: Profile[] }>;
+  listRequests(): Promise<{ requests: Profile[] }>;
+  createPost(input: { text: string; imageKey?: string | null }): Promise<{ post: Post }>;
+  getFeed(before?: number): Promise<{ posts: Post[] }>;
+  likePost(id: string): Promise<{ post: Post }>;
+  commentPost(id: string, text: string): Promise<{ post: Post }>;
+  deletePost(id: string): Promise<{ ok: boolean }>;
+  dmThread(userId: string): Promise<{ messages: DmMessage[] }>;
+  sendDm(userId: string, text: string): Promise<{ message: DmMessage }>;
+  conversations(): Promise<{ conversations: Conversation[] }>;
 }
 
 /**
@@ -150,6 +244,31 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       const qs = q.toString();
       return request('GET', `/api/rooms/${encodeURIComponent(roomId)}/messages${qs ? `?${qs}` : ''}`);
     },
+    myProfile: () => request('GET', '/api/profile/me'),
+    saveProfile: (input) => request('PUT', '/api/profile', input),
+    getProfile: (userId) => request('GET', `/api/profile/${encodeURIComponent(userId)}`),
+    searchPeople: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.q) q.set('q', opts.q);
+      if (opts.role) q.set('role', opts.role);
+      const qs = q.toString();
+      return request('GET', `/api/people${qs ? `?${qs}` : ''}`);
+    },
+    uploadUrl: (input) => request('POST', '/api/media/upload-url', input),
+    requestConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/request`, {}),
+    acceptConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/accept`, {}),
+    declineConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/decline`, {}),
+    removeConnect: (userId) => request('DELETE', `/api/connections/${encodeURIComponent(userId)}`),
+    listConnections: () => request('GET', '/api/connections'),
+    listRequests: () => request('GET', '/api/connections/requests'),
+    createPost: (input) => request('POST', '/api/posts', input),
+    getFeed: (before) => request('GET', `/api/feed${before ? `?before=${before}` : ''}`),
+    likePost: (id) => request('POST', `/api/posts/${encodeURIComponent(id)}/like`, {}),
+    commentPost: (id, text) => request('POST', `/api/posts/${encodeURIComponent(id)}/comments`, { text }),
+    deletePost: (id) => request('DELETE', `/api/posts/${encodeURIComponent(id)}`),
+    dmThread: (userId) => request('GET', `/api/dm/${encodeURIComponent(userId)}`),
+    sendDm: (userId, text) => request('POST', `/api/dm/${encodeURIComponent(userId)}`, { text }),
+    conversations: () => request('GET', '/api/dm'),
   };
 }
 

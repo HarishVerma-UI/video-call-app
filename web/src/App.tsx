@@ -29,7 +29,7 @@ function SignedInApp() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (location.pathname === '/login' || location.pathname === '/register') go({ view: 'meet', room: '' }, true);
+    if (location.pathname === '/login' || location.pathname === '/register') go({ view: 'feed' }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

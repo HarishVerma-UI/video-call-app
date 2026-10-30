@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { KeyIcon, SignOutIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
+import { ProfessionalProfile } from './social/ProfessionalProfile';
 
 type Fields = Record<string, string | undefined>;
 type Msg = { ok: boolean; text: string } | null;
@@ -107,6 +108,8 @@ export function ProfileView() {
           <SignOutIcon width={16} height={16} /> Sign out
         </button>
       </header>
+
+      <ProfessionalProfile />
 
       <form className="card" onSubmit={saveDetails} noValidate aria-labelledby="details-h">
         <header className="card__head">
