@@ -72,6 +72,10 @@ export function createApp(
 ) {
   const startedAt = Date.now();
   const chatPosts = createRateLimiter({ limit: 5, windowMs: 5000 });
+  const onRegister = async (user) => {
+    await social.profiles.upsert(user.id, { name: user.name });
+    log(`social auto-profile created for ${user.id}`);
+  };
   const auth = createAuth({
     store,
     allowedOrigins: config.allowedOrigins,
@@ -81,6 +85,7 @@ export function createApp(
     jwtExpiresInSec: config.jwtExpiresInSec,
     trustProxy: config.trustProxy,
     registerRateLimit: config.registerRateLimit,
+    onRegister,
     log,
   });
   const getStats = () => ({
@@ -88,7 +93,7 @@ export function createApp(
     activeRooms: signaling ? signaling.activeRooms() : [],
     uptimeSec: Math.round((Date.now() - startedAt) / 1000),
   });
-  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats });
+  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister });
   const media = createMedia(config.s3 ?? {}, log);
   const socialApi = createSocial({ ...social, media, requireUser: auth.requireUser, log });
   let signaling;

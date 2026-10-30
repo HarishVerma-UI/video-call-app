@@ -109,6 +109,7 @@ export function createAuth(opts) {
       throw err;
     }
     opts.log?.(`auth   registered ${email}`);
+    if (opts.onRegister) await opts.onRegister(user);
     sendJson(res, 201, issue(user));
   }
 
@@ -227,6 +228,7 @@ export function createAuth(opts) {
     jwtExpiresInSec: opts.jwtExpiresInSec,
     store: opts.store,
     issue,
+    onRegister: opts.onRegister,
     log: opts.log,
   });
 
