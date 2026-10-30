@@ -19,6 +19,7 @@ export async function startTestApp(overrides = {}) {
     maxPayloadBytes: 64 * 1024,
     jwtSecret: TEST_SECRET,
     jwtExpiresInSec: 3600,
+    registerRateLimit: 500,
     ...overrides.config,
   };
   const app = createApp(config, { store, messages, credentials: overrides.credentials, activity: overrides.activity });
