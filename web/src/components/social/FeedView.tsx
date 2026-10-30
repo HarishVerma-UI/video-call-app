@@ -191,16 +191,16 @@ export function FeedView() {
   return (
     <section className="feed-layout" aria-label="Feed" data-testid="feed">
       <div className="feed-main">
-        <form className="card composer" onSubmit={submit}>
-          <div className="composer__top">
+        <form className="card post-composer" onSubmit={submit}>
+          <div className="post-composer__top">
             <ProfileAvatar profile={{ userId: user.id, name: user.name }} size={40} />
-            <textarea className="pp-textarea composer__input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Share an update, a question, or a win…" />
+            <textarea className="pp-textarea post-composer__input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Share an update, a question, or a win…" />
           </div>
-          {preview && <img className="composer__preview" src={preview} alt="" />}
+          {preview && <img className="post-composer__preview" src={preview} alt="" />}
           {err && <p className="form-msg" role="alert">{err}</p>}
-          <div className="composer__bar">
-            <div className="composer__actions">
-              <button type="button" className="composer__action" onClick={() => fileInput.current?.click()}>
+          <div className="post-composer__bar">
+            <div className="post-composer__actions">
+              <button type="button" className="post-composer__action" onClick={() => fileInput.current?.click()}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                 Add photo
               </button>
