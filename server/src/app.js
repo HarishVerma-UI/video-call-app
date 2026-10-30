@@ -7,6 +7,9 @@ import { createAuth } from './auth/auth.js';
 import { createAdmin } from './auth/admin.js';
 import { createMemoryActivityStore } from './db/activityStore.js';
 import { createMemoryMessageStore } from './db/messageStore.js';
+import { createMemorySocialStores } from './db/socialStore.js';
+import { createMedia } from './media.js';
+import { createSocial } from './social.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
 import { attachSignaling } from './signaling.js';
@@ -63,6 +66,7 @@ export function createApp(
     store,
     messages = createMemoryMessageStore(),
     activity = createMemoryActivityStore(),
+    social = createMemorySocialStores(),
     log = () => {},
   },
 ) {
@@ -79,6 +83,8 @@ export function createApp(
     log,
   });
   const admin = createAdmin({ store, requireUser: auth.requireUser, log });
+  const media = createMedia(config.s3 ?? {}, log);
+  const socialApi = createSocial({ ...social, media, requireUser: auth.requireUser, log });
   let signaling;
 
   const cors = (req) => {
@@ -120,6 +126,7 @@ export function createApp(
     }
     if (await auth.handle(req, res, path)) return;
     if (await admin.handle(req, res, path)) return;
+    if (await socialApi.handle(req, res, path, url)) return;
 
     // Calls tab: your recent calls, newest first.
     if (path === '/api/calls' && req.method === 'GET') {
