@@ -214,8 +214,8 @@ export function createMemoryPostStore() {
       return p ? { ...p } : null;
     },
     async feed(authorIds, { before, limit = 20 } = {}) {
-      const set = new Set(authorIds);
-      let list = [...byId.values()].filter((p) => set.has(p.authorId));
+      let list = [...byId.values()];
+      if (authorIds) { const set = new Set(authorIds); list = list.filter((p) => set.has(p.authorId)); }
       if (before) list = list.filter((p) => new Date(p.createdAt).getTime() < before);
       return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, limit).map((p) => ({ ...p }));
     },
@@ -252,7 +252,7 @@ function mongoPostStore(col, ObjectId) {
       return _id ? toPost(await col.findOne({ _id })) : null;
     },
     async feed(authorIds, { before, limit = 20 } = {}) {
-      const filter = { authorId: { $in: authorIds } };
+      const filter = authorIds ? { authorId: { $in: authorIds } } : {};
       if (before) filter.createdAt = { $lt: new Date(before) };
       return (await col.find(filter).sort({ createdAt: -1 }).limit(limit).toArray()).map(toPost);
     },

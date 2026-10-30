@@ -187,10 +187,8 @@ export function createSocial(deps) {
 
   async function feed(req, res, url) {
     const me = await requireUser(req);
-    const accepted = await connections.listFor(me.id, 'accepted');
-    const authorIds = [me.id, ...accepted.map((c) => c.users.find((u) => u !== me.id))];
     const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : undefined;
-    const list = await posts.feed(authorIds, { before, limit: 20 });
+    const list = await posts.feed(null, { before, limit: 20 });
     sendJson(res, 200, { posts: await Promise.all(list.map((p) => postOut(p, me.id))) });
   }
 

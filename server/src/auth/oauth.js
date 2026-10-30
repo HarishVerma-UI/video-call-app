@@ -126,7 +126,9 @@ export function createOAuth(opts) {
       const byEmail = await opts.store.findByEmail(profile.email);
       if (byEmail) return byEmail; // same verified email = same person
     }
-    return opts.store.create({ name: profile.name, email: profile.email || null, provider, providerId: profile.id });
+    const newUser = await opts.store.create({ name: profile.name, email: profile.email || null, provider, providerId: profile.id });
+    if (opts.onRegister) await opts.onRegister(newUser);
+    return newUser;
   }
 
   /** Returns true if the request was an OAuth route (and has been answered). */

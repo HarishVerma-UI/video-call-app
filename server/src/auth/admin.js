@@ -71,6 +71,7 @@ export function createAdmin(opts) {
       throw err;
     }
     opts.log?.(`admin  created ${email} (${role})`);
+    if (opts.onRegister) await opts.onRegister(user);
     sendJson(res, 201, { user: publicUser(user) });
   }
 
