@@ -58,6 +58,37 @@ server, with HTTPS at [harish007.duckdns.org](https://harish007.duckdns.org).
   the password before going live). Admins can't delete themselves or drop their
   own admin role, so you can't lock yourself out.
 
+## Growing into a professional network (round one)
+
+Huddle is being extended from a video-call app into a **professional network where job
+seekers find mentors and guidance**. Round one adds the following — the **server and tests
+are complete**; the web UI is in progress:
+
+- **Professional profiles & CV** — photo, headline, bio, location, skills, experience,
+  education, mobile, and a CV upload. A **partial profile** (photo, name, headline, skills)
+  is visible to anyone; private details (mobile, CV, full experience) unlock only after a
+  connection is **accepted**.
+- **Connections** — request, accept or decline; connections unlock full profiles and messaging.
+- **Posts & feed** — post text and a photo, like and comment; your home feed shows posts from
+  you and your connections.
+- **Direct messages** — 1:1 chat between connected users.
+- **Mentorship** — "request guidance" from a mentor, then chat and start a **live video call**
+  (reusing the existing WebRTC calls).
+
+### Design
+
+- **Media on S3.** Photos, CVs and post images upload straight from the browser to **Amazon S3**
+  via short-lived **presigned URLs**, so large files never pass through the Node server. The
+  bucket stays fully private: reads use short-lived presigned GET links, and a CV is only
+  readable by accepted connections.
+- **Partial visibility is enforced on the server** — every profile response is shaped by the
+  viewer's connection state, so private fields are never sent to strangers.
+- **Reuse over rebuild.** The mentorship session is the existing WebRTC call; direct messages
+  extend the chat system; accounts, roles and the admin dashboard carry over unchanged.
+- **Data** lives in MongoDB collections: `profiles`, `connections`, `posts`, `dms`.
+
+The full plan, phases and open decisions live in the product-requirements doc.
+
 ## Design: Teams, with a lens
 
 - **Layout like Teams:** title bar with a room search, a left **app rail**
@@ -208,6 +239,31 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 Errors are `{ error, code?, fields? }`. `fields` holds per-field messages for
 forms (e.g. `{ email: "Already registered…" }`).
 
+### Professional network API (round one)
+
+All require a Bearer token. Profile responses are shaped by the viewer's connection state.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/profile/me` | → `{ profile }` (your full profile) |
+| PUT | `/api/profile` | profile fields → `{ profile }` |
+| GET | `/api/profile/:userId` | → `{ profile, posts }` (partial unless connected) |
+| GET | `/api/people?q=&role=` | → `{ people }` (search; `role` = `mentor`/`mentee`) |
+| POST | `/api/media/upload-url` | `{ kind, contentType }` → `{ uploadUrl, key }` (S3 presigned; `kind` = `photo`/`cv`/`post`) |
+| POST | `/api/connections/:userId/request` | → `{ status }` |
+| POST | `/api/connections/:userId/accept` | → `{ status }` |
+| POST | `/api/connections/:userId/decline` | → `{ status }` |
+| GET | `/api/connections` | → `{ connections }` |
+| GET | `/api/connections/requests` | → `{ requests }` (incoming) |
+| POST | `/api/posts` | `{ text, imageKey? }` → `201 { post }` |
+| GET | `/api/feed?before=<ts>` | → `{ posts }` (you + your connections) |
+| POST | `/api/posts/:id/like` | → `{ post }` (toggles) |
+| POST | `/api/posts/:id/comments` | `{ text }` → `{ post }` |
+| DELETE | `/api/posts/:id` | → `{ ok }` (author or admin) |
+| GET | `/api/dm` | → `{ conversations }` |
+| GET | `/api/dm/:userId` | → `{ messages }` (connections only) |
+| POST | `/api/dm/:userId` | `{ text }` → `201 { message }` (connections only) |
+
 ## Scripts
 
 | Command | What it does |
@@ -227,6 +283,7 @@ forms (e.g. `{ email: "Already registered…" }`).
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
 | server | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | `admin`, `admin`, `Administrator` — the seeded admin account (change the password before going live) |
 | server | `APP_URL`, `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` | social login: public base URL for OAuth callbacks, and each provider's credentials (unset → that button is hidden) |
+| server | `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 for photo/CV/post uploads (unset → uploads disabled, rest of the app works) |
 | server | `TURN_URLS`, `TURN_SECRET`, `TURN_TTL_SEC`, `STUN_URLS` | no TURN, `12h` credentials, Google STUN (set by `deploy/` automatically) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `10`, `*`, `false`, `../web/dist` |
