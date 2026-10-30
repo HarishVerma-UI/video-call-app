@@ -246,6 +246,12 @@ export function attachSignaling(httpServer, options) {
       rooms: rooms.size,
       participants: [...rooms.values()].reduce((n, r) => n + r.size, 0),
     }),
+    /** Every active room with its participant names — for the admin dashboard. */
+    activeRooms: () =>
+      [...rooms.entries()].map(([roomId, members]) => ({
+        roomId,
+        participants: [...members.values()].map((c) => ({ userId: c.userId, name: c.name })),
+      })),
     roomSize: (roomId) => rooms.get(roomId)?.size ?? 0,
     /** Names of the people in a call right now. */
     roomPeople: (roomId) => [...(rooms.get(roomId)?.values() ?? [])].map((c) => ({ userId: c.userId, name: c.name })),

@@ -29,7 +29,7 @@ function passwordError(pw) {
 const roleOk = (r) => r === 'user' || r === 'admin';
 
 /**
- * @param {{ store: any, requireUser: (req)=>Promise<any>, log?: Function }} opts
+ * @param {{ store: any, requireUser: (req)=>Promise<any>, log?: Function, getStats?: ()=>object }} opts
  */
 export function createAdmin(opts) {
   async function requireAdmin(req) {
@@ -132,11 +132,32 @@ export function createAdmin(opts) {
     sendJson(res, 200, { ok: true, id });
   }
 
+  async function statsHandler(req, res) {
+    await requireAdmin(req);
+    const [users, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
+    const byRole = { admin: 0, user: 0 };
+    for (const u of users) byRole[u.role || 'user']++;
+    const now = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const recentSignups = users.filter((u) => new Date(u.createdAt).getTime() > weekAgo).length;
+    const recentLogins = users.filter((u) => u.lastLoginAt && new Date(u.lastLoginAt).getTime() > weekAgo).length;
+    const dailyActivity = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now - (6 - i) * 24 * 60 * 60 * 1000);
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+      const count = users.filter((u) => u.lastLoginAt && new Date(u.lastLoginAt).getTime() >= dayStart && new Date(u.lastLoginAt).getTime() < dayEnd).length;
+      return { day: d.toLocaleDateString('en', { weekday: 'short' }), count };
+    });
+    const extra = typeof opts.getStats === 'function' ? opts.getStats() : { activeCalls: { rooms: 0, participants: 0 }, activeRooms: [], uptimeSec: 0 };
+    sendJson(res, 200, { totalUsers: total, byRole, recentSignups, recentLogins, dailyActivity, ...extra });
+  }
+
   /** Returns true if the request was an admin route (and has been answered). */
   async function handle(req, res, pathname) {
     if (!pathname.startsWith('/api/admin/')) return false;
     if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res);
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
+    else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
     else {
       const m = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
       if (m && req.method === 'PATCH') await updateUser(req, res, decodeURIComponent(m[1]));

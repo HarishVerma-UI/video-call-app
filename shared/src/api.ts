@@ -142,6 +142,22 @@ export class ApiError extends Error {
   }
 }
 
+export interface ActiveRoom {
+  roomId: string;
+  participants: { userId: string; name: string }[];
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  byRole: { admin: number; user: number };
+  recentSignups: number;
+  recentLogins: number;
+  dailyActivity: { day: string; count: number }[];
+  activeCalls: { rooms: number; participants: number };
+  activeRooms: ActiveRoom[];
+  uptimeSec: number;
+}
+
 export interface ApiClient {
   register(input: { name: string; email: string; password: string }): Promise<AuthResponse>;
   login(input: { email: string; password: string }): Promise<AuthResponse>;
@@ -158,6 +174,7 @@ export interface ApiClient {
   adminCreateUser(input: { name: string; email: string; password: string; role?: UserRole }): Promise<{ user: AuthUser }>;
   adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
+  adminStats(): Promise<AdminStats>;
 
   /** Your recent calls, newest first. */
   calls(): Promise<{ calls: CallRecord[] }>;
@@ -233,6 +250,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminCreateUser: (input) => request('POST', '/api/admin/users', input),
     adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
+    adminStats: () => request('GET', '/api/admin/stats'),
     calls: () => request('GET', '/api/calls'),
     chats: () => request('GET', '/api/chats'),
     sendRoomMessage: (roomId, text) => request('POST', `/api/rooms/${encodeURIComponent(roomId)}/messages`, { text }),

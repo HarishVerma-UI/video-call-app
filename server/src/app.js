@@ -82,7 +82,12 @@ export function createApp(
     trustProxy: config.trustProxy,
     log,
   });
-  const admin = createAdmin({ store, requireUser: auth.requireUser, log });
+  const getStats = () => ({
+    activeCalls: signaling ? signaling.stats() : { rooms: 0, participants: 0 },
+    activeRooms: signaling ? signaling.activeRooms() : [],
+    uptimeSec: Math.round((Date.now() - startedAt) / 1000),
+  });
+  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats });
   const media = createMedia(config.s3 ?? {}, log);
   const socialApi = createSocial({ ...social, media, requireUser: auth.requireUser, log });
   let signaling;
