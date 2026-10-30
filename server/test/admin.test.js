@@ -66,6 +66,28 @@ test('an admin can list, create, update and delete users', async () => {
   assert.equal(res.status, 401);
 });
 
+test('admin stats endpoint returns dashboard data', async () => {
+  const admin = await registerUser(t.base, 'Stats Admin');
+  await t.store.setRole(admin.user.id, 'admin');
+  const res = await api(t.base, 'GET', '/api/admin/stats', null, admin.token);
+  assert.equal(res.status, 200);
+  assert.ok(typeof res.body.totalUsers === 'number');
+  assert.ok(typeof res.body.byRole.admin === 'number');
+  assert.ok(typeof res.body.byRole.user === 'number');
+  assert.ok(Array.isArray(res.body.dailyActivity));
+  assert.equal(res.body.dailyActivity.length, 7);
+  assert.ok(typeof res.body.activeCalls.rooms === 'number');
+  assert.ok(typeof res.body.activeCalls.participants === 'number');
+  assert.ok(Array.isArray(res.body.activeRooms));
+  assert.ok(typeof res.body.uptimeSec === 'number');
+});
+
+test('admin stats rejects non-admins', async () => {
+  const u = await registerUser(t.base, 'Stats Normal');
+  const res = await api(t.base, 'GET', '/api/admin/stats', null, u.token);
+  assert.equal(res.status, 403);
+});
+
 test('duplicate email is rejected on admin create', async () => {
   const admin = await registerUser(t.base, 'Admin Two');
   await t.store.setRole(admin.user.id, 'admin');
