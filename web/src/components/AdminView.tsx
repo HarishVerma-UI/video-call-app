@@ -178,7 +178,7 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AuthUser; isSelf: boolean
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => {
+    const close = (e: globalThis.MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('click', close, true);
