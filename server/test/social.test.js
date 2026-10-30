@@ -86,7 +86,7 @@ test('direct messages: only between connections', async () => {
 
   const sent = await api(t.base, 'POST', `/api/dm/${b.user.id}`, { text: 'hi B' }, a.token);
   assert.equal(sent.status, 201);
-  const thread = await api(t.base, 'GET', `/api/dm/${b.user.id}`, null, b.token);
+  const thread = await api(t.base, 'GET', `/api/dm/${a.user.id}`, null, b.token);
   assert.ok(thread.body.messages.some((m) => m.text === 'hi B'));
 
   const blocked = await api(t.base, 'POST', `/api/dm/${c.user.id}`, { text: 'hi C' }, a.token);
