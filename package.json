@@ -17,7 +17,10 @@
     "dev:mobile": "npm run start -w @vca/mobile",
     "build": "npm run build -w @vca/web",
     "start": "npm run start -w @vca/server",
-    "test": "npm test -w @vca/server"
+    "test": "npm test -w @vca/server",
+    "test:e2e": "npx playwright test --config e2e/playwright.config.js --project api",
+    "test:e2e:ui": "npx playwright test --config e2e/playwright.config.js --project ui",
+    "test:e2e:all": "npx playwright test --config e2e/playwright.config.js"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"
