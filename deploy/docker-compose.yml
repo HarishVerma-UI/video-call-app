@@ -37,10 +37,13 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      LOCAL_MEDIA_DIR: /app/uploads
       TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp,turns:${DOMAIN}:5349?transport=tcp
       TURN_SECRET: ${TURN_SECRET}
       MAX_PEERS: ${MAX_PEERS:-10}
       CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
+    volumes:
+      - ./data/uploads:/app/uploads
     expose:
       - "3001"
     logging: &logs
