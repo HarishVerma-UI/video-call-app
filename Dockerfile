@@ -32,6 +32,7 @@ COPY --from=server-deps /app/server/node_modules server/node_modules
 COPY server/package.json server/package.json
 COPY server/src server/src
 COPY --from=web /src/web/dist web/dist
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
