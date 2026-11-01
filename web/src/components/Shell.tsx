@@ -5,7 +5,8 @@ import { AdminView } from './AdminView';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
-import { ChatIcon, PeopleIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { ChatIcon, LogsIcon, PeopleIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { LogsView } from './LogsView';
 import { MeetView } from './MeetView';
 import { ModeToggle } from './ModeToggle';
 import { ProfileView } from './ProfileView';
@@ -26,7 +27,8 @@ export type Route =
   | { view: 'chat'; room: string }
   | { view: 'calls' }
   | { view: 'profile' }
-  | { view: 'admin' };
+  | { view: 'admin' }
+  | { view: 'logs' };
 
 export function parseRoute(path = location.pathname): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -36,6 +38,7 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'calls') return { view: 'calls' };
   if (seg[0] === 'profile') return { view: 'profile' };
   if (seg[0] === 'admin') return { view: 'admin' };
+  if (seg[0] === 'logs') return { view: 'logs' };
   if (seg[0] === 'people') return { view: 'people' };
   if (seg[0] === 'network') return { view: 'network' };
   if (seg[0] === 'messages') return { view: 'messages', user: seg[1] ?? '' };
@@ -151,15 +154,26 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           </button>
         ))}
         {user.role === 'admin' && (
-          <button
-            className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
-            onClick={() => go({ view: 'admin' })}
-            aria-current={route.view === 'admin' ? 'page' : undefined}
-            data-testid="rail-admin"
-          >
-            <ShieldIcon />
-            <span>Admin</span>
-          </button>
+          <>
+            <button
+              className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
+              onClick={() => go({ view: 'admin' })}
+              aria-current={route.view === 'admin' ? 'page' : undefined}
+              data-testid="rail-admin"
+            >
+              <ShieldIcon />
+              <span>Admin</span>
+            </button>
+            <button
+              className={`rail__item${route.view === 'logs' ? ' is-on' : ''}`}
+              onClick={() => go({ view: 'logs' })}
+              aria-current={route.view === 'logs' ? 'page' : undefined}
+              data-testid="rail-logs"
+            >
+              <LogsIcon />
+              <span>Logs</span>
+            </button>
+          </>
         )}
         <button
           className={`rail__item rail__item--me${route.view === 'profile' ? ' is-on' : ''}`}
@@ -188,6 +202,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
         {route.view === 'profile' && <ProfileView />}
         {route.view === 'admin' && <AdminView />}
+        {route.view === 'logs' && <LogsView />}
         {route.view === 'feed' && <FeedView />}
         {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}

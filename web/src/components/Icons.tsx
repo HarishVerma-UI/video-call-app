@@ -151,6 +151,12 @@ export const FaceIdIcon = (p: P) => (
     <path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9 16a4.5 4.5 0 0 0 6 0" />
   </svg>
 );
+export const LogsIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M8 8h8M8 12h8M8 16h5" />
+  </svg>
+);
 export const ShieldIcon = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z" />
