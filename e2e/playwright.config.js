@@ -11,7 +11,6 @@ const config = {
   use: {
     baseURL: `http://127.0.0.1:${process.env.E2E_PORT || 3210}`,
     headless: true,
-    channel: process.env.PW_CHANNEL,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
@@ -24,14 +23,11 @@ const config = {
     {
       name: 'ui',
       testMatch: '**/*.ui.e2e.js',
-      use: {
-        launchOptions: { slowMo: 2000 },
-      },
     },
   ],
 
   webServer: {
-    command: 'node server-harness.js',
+    command: 'node e2e/server-harness.js',
     port: Number(process.env.E2E_PORT) || 3210,
     reuseExistingServer: true,
     timeout: 10_000,

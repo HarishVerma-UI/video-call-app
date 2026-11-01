@@ -12,7 +12,7 @@ export interface AuthUser {
   role?: UserRole;
   /** false for accounts created via social login only (they can add a password). */
   hasPassword?: boolean;
-  /** OAuth provider when the account was created via social login, else null. */
+  /** 'google' | 'github' when the account was created via social login, else null. */
   provider?: string | null;
   createdAt: string;
   lastLoginAt?: string | null;

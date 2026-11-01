@@ -89,7 +89,6 @@ export const config = {
   oauth: {
     google: { clientId: process.env.GOOGLE_CLIENT_ID ?? '', clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '' },
     github: { clientId: process.env.GITHUB_CLIENT_ID ?? '', clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '' },
-    facebook: { clientId: process.env.FACEBOOK_CLIENT_ID ?? '', clientSecret: process.env.FACEBOOK_CLIENT_SECRET ?? '' },
   },
 
   // --- media uploads (S3) ---
@@ -98,7 +97,6 @@ export const config = {
     bucket: process.env.S3_BUCKET || '',
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    localDirectory: isProd ? '' : (process.env.LOCAL_MEDIA_DIR || path.resolve(here, '../uploads')),
     /** Public base URL for publicly-readable objects (photos, post images). Defaults to the standard bucket URL. */
     publicBaseUrl: (process.env.S3_PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
   },

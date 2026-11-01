@@ -120,26 +120,6 @@ build takes about 3–5 minutes. At the end it prints:
 Copy it somewhere private (a password manager is ideal). Without it, the
 backups can't be restored on a new server.
 
-### Enable Google or Facebook sign-in
-
-Create OAuth credentials with Google Cloud Console or Meta for Developers, then
-add the provider's client ID and secret to `deploy/.env`. In the provider
-settings, register the exact redirect URI:
-
-```text
-https://<your-domain>/api/auth/oauth/google/callback
-https://<your-domain>/api/auth/oauth/facebook/callback
-```
-
-For Google, also add your domain as an authorized JavaScript origin. Restart the
-app to load updated credentials:
-
-```bash
-docker compose up -d
-```
-
-The sign-in button only appears when both values for that provider are set.
-
 ---
 
 ## Everyday tasks
@@ -170,31 +150,6 @@ Change them in `deploy/.env`, then run `docker compose up -d`.
 |---|---|---|
 | `MAX_PEERS` | `6` | people per meeting (more than 6 needs an SFU, see the roadmap) |
 | `CHAT_RETENTION_DAYS` | `30` | how long room chat is kept |
-
-### Enable photo and document uploads
-
-Set `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`
-in `deploy/.env`. In the S3 bucket's **Permissions → Cross-origin resource
-sharing (CORS)** settings, allow browser uploads from your domain (replace the
-origin with your actual HTTPS site):
-
-```json
-[
-  {
-    "AllowedOrigins": ["https://huddle-harish.duckdns.org"],
-    "AllowedMethods": ["GET", "HEAD", "PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
-  }
-]
-```
-
-Apply the settings by restarting the app:
-
-```bash
-docker compose up -d
-```
 
 ## Moving to your own domain later
 

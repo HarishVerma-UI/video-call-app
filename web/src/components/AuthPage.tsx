@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { API_BASE } from '../config';
 import { Aperture } from './Aperture';
-import { FacebookIcon, GitHubIcon, GoogleIcon } from './Icons';
+import { GitHubIcon, GoogleIcon } from './Icons';
 import { Line } from './Line';
 import { ModeToggle } from './ModeToggle';
 
@@ -36,7 +36,7 @@ function startOAuth(provider: string) {
 }
 
 function SocialButtons({ providers }: { providers: Providers }) {
-  const hasAny = providers.google || providers.github || providers.facebook;
+  const hasAny = providers.google || providers.github;
   if (!hasAny) return null;
   return (
     <>
@@ -49,11 +49,6 @@ function SocialButtons({ providers }: { providers: Providers }) {
         {providers.github && (
           <button type="button" className="btn btn--social" onClick={() => startOAuth('github')} data-testid="oauth-github">
             <GitHubIcon /> Continue with GitHub
-          </button>
-        )}
-        {providers.facebook && (
-          <button type="button" className="btn btn--social" onClick={() => startOAuth('facebook')} data-testid="oauth-facebook">
-            <FacebookIcon /> Continue with Facebook
           </button>
         )}
       </div>

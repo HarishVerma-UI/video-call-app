@@ -15,7 +15,7 @@ test('new accounts default to the "user" role', async () => {
 test('providers endpoint reports which social logins are configured', async () => {
   const res = await api(t.base, 'GET', '/api/auth/providers');
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body.providers, { google: false, github: false, facebook: false });
+  assert.deepEqual(res.body.providers, { google: false, github: false });
 });
 
 test('admin routes reject non-admins', async () => {

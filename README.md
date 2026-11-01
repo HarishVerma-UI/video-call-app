@@ -44,16 +44,13 @@ server, with HTTPS at [harish007.duckdns.org](https://harish007.duckdns.org).
 - **Email and password.** Passwords are hashed with **scrypt** and never stored
   in the clear; sessions are **JWTs** (7 days by default). Sign-up checks the
   email format and password strength, and failed logins are rate-limited.
-- **Google, GitHub and Facebook (optional).** Set the matching client id and
-  secret in the server environment and the sign-in page shows each configured button.
+- **Google and GitHub (optional).** Set the matching client id and secret in the
+  server environment and the sign-in page shows "Continue with Google / GitHub".
   The server runs the OAuth 2.0 authorization-code flow itself (no third-party
   library, `server/src/auth/oauth.js`); a social account is matched to an existing
-  one by its provider ID or the email returned by the provider. Register the exact
-  callback `https://<your-domain>/api/auth/oauth/<provider>/callback` with each
-  provider. For local Google login, register
-  `http://localhost:5173/api/auth/oauth/google/callback` as an authorized redirect
-  URI. Keep provider secrets in `server/.env` locally or `deploy/.env` in production.
-  With credentials missing, the corresponding button is hidden.
+  one by its verified email. Register the callback
+  `https://<your-domain>/api/auth/oauth/<provider>/callback` with each provider.
+  With no credentials set, the buttons simply don't appear.
 - **Admin dashboard.** An account with the **admin** role gets an **Admin** tab
   that lists everyone who has registered, with full create / edit / delete and
   the ability to change a user's role. On first start the server seeds an admin
@@ -80,14 +77,10 @@ are complete**; the web UI is in progress:
 
 ### Design
 
-- **Media on S3.** In production, photos, CVs and post images upload straight from the browser to **Amazon S3**
+- **Media on S3.** Photos, CVs and post images upload straight from the browser to **Amazon S3**
   via short-lived **presigned URLs**, so large files never pass through the Node server. The
   bucket stays fully private: reads use short-lived presigned GET links, and a CV is only
   readable by accepted connections.
-- **Local media in development.** Without S3 credentials, the development server stores uploads
-  under `server/uploads/`. This local-file fallback is disabled in production.
-  For production S3 uploads, configure the bucket's CORS policy to allow `PUT` from your app's
-  HTTPS origin (for example `https://your-domain.example`).
 - **Partial visibility is enforced on the server** — every profile response is shaped by the
   viewer's connection state, so private fields are never sent to strangers.
 - **Reuse over rebuild.** The mentorship session is the existing WebRTC call; direct messages
@@ -228,8 +221,8 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | GET | `/api/auth/me` | Bearer | → `{ user }` |
 | PATCH | `/api/auth/me` | Bearer | `{ name?, email?, currentPassword? }` → `{ user, token, expiresAt }` (email change needs `currentPassword`) |
 | POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working. Social-login accounts with no password yet send just `newPassword` to add one |
-| GET | `/api/auth/providers` | — | → `{ providers: { google, github, facebook } }` (which social buttons to show) |
-| GET | `/api/auth/oauth/:provider/start` | — | Redirects to Google, GitHub or Facebook (`provider` = `google`, `github` or `facebook`) |
+| GET | `/api/auth/providers` | — | → `{ providers: { google, github } }` (which social buttons to show) |
+| GET | `/api/auth/oauth/:provider/start` | — | Redirects to Google/GitHub to sign in (`provider` = `google` or `github`) |
 | GET | `/api/auth/oauth/:provider/callback` | — | Provider returns here; redirects to the app with a token in the URL hash |
 | GET | `/api/admin/users` | Bearer (admin) | → `{ users, total }` |
 | POST | `/api/admin/users` | Bearer (admin) | `{ name, email, password, role? }` → `201 { user }` |
@@ -289,9 +282,8 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | server | `MONGODB_URI`, `MONGODB_DB` | in-memory in dev (required in prod), `huddle` |
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
 | server | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | `admin`, `admin`, `Administrator` — the seeded admin account (change the password before going live) |
-| server | `APP_URL`, `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `FACEBOOK_CLIENT_ID`/`_SECRET` | social login: public base URL for callbacks and provider credentials (unset → that button is hidden) |
-| server | `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 for production photo/CV/post uploads; configure bucket CORS to allow `PUT` from your app's origin |
-| server | `LOCAL_MEDIA_DIR` | development upload storage directory (default `server/uploads/`; production always requires S3) |
+| server | `APP_URL`, `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET` | social login: public base URL for OAuth callbacks, and each provider's credentials (unset → that button is hidden) |
+| server | `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 for photo/CV/post uploads (unset → uploads disabled, rest of the app works) |
 | server | `TURN_URLS`, `TURN_SECRET`, `TURN_TTL_SEC`, `STUN_URLS` | no TURN, `12h` credentials, Google STUN (set by `deploy/` automatically) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `10`, `*`, `false`, `../web/dist` |
@@ -321,6 +313,6 @@ Each folder has a `.env.example`.
 - [x] **Accounts**: MongoDB + JWT, sign-in / sign-up on web and mobile
 - [x] **Step 2**: deployment with HTTPS, TURN (coturn) with short-lived credentials, MongoDB backups ([DEPLOY.md](./DEPLOY.md))
 - [x] Profile editing and saved call chat (web + mobile)
-- [x] **Email + password and social login** (Google / GitHub / Facebook), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
+- [x] **Email + password and social login** (Google / GitHub), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
 - [ ] Forgot-password email, refresh tokens, direct messages
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)

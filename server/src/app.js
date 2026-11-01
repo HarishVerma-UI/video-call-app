@@ -137,7 +137,6 @@ export function createApp(
     }
     if (await auth.handle(req, res, path)) return;
     if (await admin.handle(req, res, path)) return;
-    if (await media.handleLocal(req, res, url)) return;
     if (await socialApi.handle(req, res, path, url)) return;
 
     // Calls tab: your recent calls, newest first.

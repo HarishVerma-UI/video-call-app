@@ -17,11 +17,11 @@ function freshCreds(name = 'UI User') {
 async function registerViaUI(page, creds) {
   await page.goto('/');
   // Switch to registration form
-  await page.getByTestId('tab-register').click();
+  await page.getByRole('button', { name: /sign up|register|create/i }).click();
   await page.getByLabel(/name/i).fill(creds.name);
   await page.getByLabel(/email/i).fill(creds.email);
   await page.getByLabel(/password/i).fill(creds.password);
-  await page.getByTestId('password-submit').click();
+  await page.getByRole('button', { name: /sign up|register|create account/i }).click();
   // Wait for the app shell to load (feed is the default view)
   await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
 }
@@ -44,86 +44,6 @@ async function registerAndLogin(page, request, name) {
 
   return { ...body, creds };
 }
-
-test.describe('UI: Account journey', () => {
-  test('registers, signs out, signs in, and signs out again', async ({ page }) => {
-    const user = freshCreds('Account Journey');
-
-    await registerViaUI(page, user);
-    await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible();
-
-    await page.getByTestId('rail-profile').click();
-    await page.getByTestId('sign-out').click();
-    await expect(page.getByTestId('tab-login')).toBeVisible();
-
-    await page.getByLabel(/email/i).fill(user.email);
-    await page.getByLabel(/password/i).fill(user.password);
-    await page.getByTestId('password-submit').click();
-    await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
-
-    await page.getByTestId('rail-profile').click();
-    await page.getByTestId('sign-out').click();
-    await expect(page.getByTestId('tab-login')).toBeVisible();
-  });
-});
-
-test.describe('UI: Profile photo upload', () => {
-  test('uploads and displays a profile photo', async ({ page, request }) => {
-    const user = freshCreds('Photo Upload');
-    const registered = await request.post('/api/auth/register', { data: user });
-    expect(registered.status()).toBe(201);
-
-    await page.goto('/');
-    await page.getByLabel(/email/i).fill(user.email);
-    await page.getByLabel(/password/i).fill(user.password);
-    await page.getByTestId('password-submit').click();
-    await expect(page.getByTestId('rail-profile')).toBeVisible({ timeout: 5000 });
-    await page.getByTestId('rail-profile').click();
-
-    await page.locator('input[accept="image/*"]').setInputFiles({
-      name: 'profile.png',
-      mimeType: 'image/png',
-      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64'),
-    });
-
-    await expect(page.locator('.pp-photo img.pf-avatar')).toHaveAttribute('src', /\/api\/media\/local\/view\?/);
-  });
-
-  test('uploads an image to a feed post and displays it', async ({ page, request }) => {
-    await registerAndLogin(page, request, 'Post Photo');
-    const imageBuffer = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
-      'base64',
-    );
-
-    await page.locator('input[accept="image/*"]').setInputFiles({
-      name: 'post.png',
-      mimeType: 'image/png',
-      buffer: imageBuffer,
-    });
-
-    const preview = page.locator('.post-composer__preview');
-    await expect(preview).toBeVisible();
-    await expect(preview).toHaveAttribute('src', /^blob:/);
-    await expect(page.getByTestId('submit-post')).toBeEnabled();
-    await page.getByTestId('submit-post').click();
-
-    const postImage = page.locator('.post__img');
-    await expect(postImage).toHaveAttribute('src', /\/api\/media\/local\/view\?/);
-    await expect.poll(() => postImage.evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
-  });
-
-  test('shows an error when the selected image type is unsupported', async ({ page, request }) => {
-    await registerAndLogin(page, request, 'Unsupported Photo');
-    await page.locator('input[accept="image/*"]').setInputFiles({
-      name: 'not-an-image.svg',
-      mimeType: 'image/svg+xml',
-      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
-    });
-    await expect(page.getByRole('alert')).toContainText('file type isn’t allowed');
-    await expect(page.getByTestId('submit-post')).toBeDisabled();
-  });
-});
 
 test.describe('UI: Feed visibility', () => {
   test('User B sees User A post in the feed', async ({ page, request }) => {
