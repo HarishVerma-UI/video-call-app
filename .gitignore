@@ -9,6 +9,7 @@ dist/
 test-results/
 playwright-report/
 blob-report/
+server/uploads/
 
 # Expo / React Native
 mobile/.expo/

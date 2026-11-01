@@ -1,4 +1,4 @@
-// Social login (Google & GitHub) with no third-party library — just the OAuth 2.0
+// Social login (Google, GitHub & Facebook) with no third-party library — just the OAuth 2.0
 // authorization-code flow over fetch.
 //
 //   GET /api/auth/oauth/:provider/start     → redirects the browser to the provider
@@ -13,6 +13,7 @@
 // session token is passed back to the SPA in the URL hash (`#auth_token=…`), which
 // browsers don't send to servers or put in the Referer header.
 
+import { randomBytes } from 'node:crypto';
 import { signToken, verifyToken, TokenError } from './jwt.js';
 
 const STATE_AUDIENCE = 'huddle-oauth';
@@ -60,6 +61,28 @@ const PROVIDERS = {
       return { id: String(u.id), email, name: u.name || u.login || 'GitHub user' };
     },
   },
+  facebook: {
+    label: 'Facebook',
+    scope: 'email,public_profile',
+    authorizeUrl: 'https://www.facebook.com/v26.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v26.0/oauth/access_token',
+    tokenMethod: 'GET',
+    extraAuthParams: {},
+    async profile(accessToken) {
+      const url = new URL('https://graph.facebook.com/v26.0/me');
+      url.searchParams.set('fields', 'id,name,email');
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!r.ok) throw new Error('Could not read your Facebook profile.');
+      const p = await r.json();
+      return {
+        id: String(p.id),
+        email: p.email ? String(p.email).toLowerCase() : null,
+        name: p.name || (p.email ? String(p.email).split('@')[0] : 'Facebook user'),
+      };
+    },
+  },
 };
 
 /** A safe in-app path to return to after login (prevents open redirects). */
@@ -100,17 +123,25 @@ export function createOAuth(opts) {
   const fail = (res, base, message) => redirect(res, `${base}/login?oauth_error=${encodeURIComponent(message)}`);
 
   async function exchangeCode(spec, cfg, code, redirectUri) {
-    const r = await fetch(spec.tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        client_id: cfg.clientId,
-        client_secret: cfg.clientSecret,
-        redirect_uri: redirectUri,
-      }).toString(),
+    const params = new URLSearchParams({
+      code,
+      client_id: cfg.clientId,
+      client_secret: cfg.clientSecret,
+      redirect_uri: redirectUri,
     });
+    let tokenUrl = spec.tokenUrl;
+    const init = { headers: { Accept: 'application/json' } };
+    if (spec.tokenMethod === 'GET') {
+      const url = new URL(tokenUrl);
+      url.search = params.toString();
+      tokenUrl = url.toString();
+    } else {
+      params.set('grant_type', 'authorization_code');
+      init.method = 'POST';
+      init.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      init.body = params.toString();
+    }
+    const r = await fetch(tokenUrl, init);
     const data = await r.json().catch(() => null);
     if (!r.ok || !data || data.error || !data.access_token) {
       throw new Error(data?.error_description || data?.error || 'Sign-in with the provider failed.');
@@ -133,7 +164,7 @@ export function createOAuth(opts) {
 
   /** Returns true if the request was an OAuth route (and has been answered). */
   async function handle(req, res, pathname) {
-    const m = pathname.match(/^\/api\/auth\/oauth\/(google|github)\/(start|callback)$/);
+    const m = pathname.match(/^\/api\/auth\/oauth\/(google|github|facebook)\/(start|callback)$/);
     if (!m || req.method !== 'GET') return false;
     const [, provider, action] = m;
     const spec = PROVIDERS[provider];
@@ -149,7 +180,7 @@ export function createOAuth(opts) {
 
     if (action === 'start') {
       const state = signToken(
-        { p: provider, next: safeNext(url.searchParams.get('next')) },
+        { sub: randomBytes(16).toString('base64url'), p: provider, next: safeNext(url.searchParams.get('next')) },
         { ...stateOpts, expiresInSec: 600 },
       );
       const authUrl = new URL(spec.authorizeUrl);
@@ -177,7 +208,10 @@ export function createOAuth(opts) {
       try {
         claims = verifyToken(state, stateOpts);
       } catch (e) {
-        if (e instanceof TokenError) return (fail(res, base, 'Sign-in link expired. Please try again.'), true);
+        if (e instanceof TokenError) {
+          const message = e.reason === 'expired' ? 'Sign-in link expired. Please try again.' : 'Sign-in state is invalid. Please try again.';
+          return (fail(res, base, message), true);
+        }
         throw e;
       }
       if (claims.p !== provider) return (fail(res, base, 'Sign-in state mismatch.'), true);

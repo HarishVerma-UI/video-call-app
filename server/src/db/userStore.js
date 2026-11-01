@@ -21,7 +21,7 @@
 // A "user" is { id, name, email, passwordHash, role, provider, providerId,
 //               tokenVersion, createdAt, lastLoginAt }.
 // passwordHash is null for accounts created via social login only.
-// role is 'user' or 'admin'. provider is 'google' | 'github' | null.
+// role is 'user' or 'admin'. provider is 'google' | 'github' | 'facebook' | null.
 // tokenVersion is copied into every JWT; bumping it invalidates older tokens.
 
 import { randomBytes } from 'node:crypto';
@@ -289,7 +289,19 @@ export async function connectMongoUserStore(uri, dbName, log = () => {}) {
   const users = db.collection('users');
   // Email is unique but optional (social accounts may share nothing else): a
   // partial index lets several docs omit it while still enforcing uniqueness.
-  await users.createIndex({ email: 1 }, { unique: true, name: 'email_unique', partialFilterExpression: { email: { $type: 'string' } } });
+  const emailIndex = {
+    key: { email: 1 },
+    options: { unique: true, name: 'email_unique', partialFilterExpression: { email: { $type: 'string' } } },
+  };
+  try {
+    await users.createIndex(emailIndex.key, emailIndex.options);
+  } catch (err) {
+    if (err?.code !== 85 && err?.code !== 86 && err?.codeName !== 'IndexOptionsConflict' && err?.codeName !== 'IndexKeySpecsConflict') throw err;
+    const indexes = await users.listIndexes().toArray();
+    if (!indexes.some((index) => index.name === emailIndex.options.name)) throw err;
+    await users.dropIndex(emailIndex.options.name);
+    await users.createIndex(emailIndex.key, emailIndex.options);
+  }
   await users.createIndex({ provider: 1, providerId: 1 }, { name: 'provider_lookup', sparse: true });
   log(`MongoDB connected (db="${db.databaseName}")`);
   const store = mongoUserStoreFromCollection(users, ObjectId, {

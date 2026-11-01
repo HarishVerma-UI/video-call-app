@@ -2,10 +2,11 @@
 // Used by Playwright's webServer config and can also be run standalone.
 
 import { createApp } from '../server/src/app.js';
-import { createMemoryUserStore } from '../server/src/db/userStore.js';
+import { createMemoryUserStore, seedAdmin } from '../server/src/db/userStore.js';
 import { createMemoryMessageStore } from '../server/src/db/messageStore.js';
 import { createMemoryActivityStore } from '../server/src/db/activityStore.js';
 import { createMemorySocialStores } from '../server/src/db/socialStore.js';
+import { hashPassword } from '../server/src/auth/password.js';
 
 const PORT = Number(process.env.E2E_PORT) || 3210;
 
@@ -13,6 +14,12 @@ const store = createMemoryUserStore();
 const messages = createMemoryMessageStore();
 const activity = createMemoryActivityStore();
 const social = createMemorySocialStores();
+
+await seedAdmin(
+  store,
+  { name: 'E2E Admin', email: 'admin@example.test', password: 'admin-test-1234' },
+  hashPassword,
+);
 
 const config = {
   port: PORT,
@@ -26,6 +33,7 @@ const config = {
   jwtSecret: 'e2e-test-secret-0123456789-abcdefghijklmnopqrstuvwxyz',
   jwtExpiresInSec: 3600,
   registerRateLimit: 500,
+  s3: { localDirectory: new URL('../server/uploads', import.meta.url).pathname },
 };
 
 const app = createApp(config, {

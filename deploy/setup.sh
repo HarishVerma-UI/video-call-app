@@ -42,12 +42,14 @@ APP_URL=https://$DOMAIN
 # Admin dashboard sign-in. Defaults to admin/admin — CHANGE ADMIN_PASSWORD after first login.
 ADMIN_EMAIL=admin
 ADMIN_PASSWORD=admin
-# Social login (optional). Fill these in to show the Google / GitHub buttons,
+# Social login (optional). Fill these in to show provider buttons,
 # and register the callback https://$DOMAIN/api/auth/oauth/<provider>/callback with each provider.
 # GOOGLE_CLIENT_ID=
 # GOOGLE_CLIENT_SECRET=
 # GITHUB_CLIENT_ID=
 # GITHUB_CLIENT_SECRET=
+# FACEBOOK_CLIENT_ID=
+# FACEBOOK_CLIENT_SECRET=
 ENV
   echo "Saved deploy/.env (secrets generated)."
 fi
