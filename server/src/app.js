@@ -12,6 +12,7 @@ import { createMedia } from './media.js';
 import { createSocial } from './social.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
+import { createLogStore } from './logStore.js';
 import { attachSignaling } from './signaling.js';
 
 const MIME = {
@@ -71,6 +72,8 @@ export function createApp(
   },
 ) {
   const startedAt = Date.now();
+  const logStore = createLogStore();
+  log = logStore.wrapLog(log); // capture every log line for the /logs UI
   const chatPosts = createRateLimiter({ limit: 5, windowMs: 5000 });
   const onRegister = async (user) => {
     await social.profiles.upsert(user.id, { name: user.name });
@@ -139,6 +142,18 @@ export function createApp(
     if (await admin.handle(req, res, path)) return;
     if (await media.handleLocal(req, res, url)) return;
     if (await socialApi.handle(req, res, path, url)) return;
+
+    // Server logs (admin only): GET /api/logs?since=&level=&q=&limit=
+    if (path === '/api/logs' && req.method === 'GET') {
+      const user = await auth.requireUser(req);
+      if (user.role !== 'admin') throw new HttpError(403, 'Admin access required.');
+      const since = url.searchParams.has('since') ? Number(url.searchParams.get('since')) : undefined;
+      const level = url.searchParams.get('level') || undefined;
+      const q = url.searchParams.get('q') || undefined;
+      const limit = Number(url.searchParams.get('limit') || 200) || 200;
+      sendJson(res, 200, { logs: logStore.query({ since, level, q, limit }) });
+      return;
+    }
 
     // Calls tab: your recent calls, newest first.
     if (path === '/api/calls' && req.method === 'GET') {

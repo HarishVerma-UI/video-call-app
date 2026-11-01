@@ -206,6 +206,9 @@ export interface ApiClient {
   dmThread(userId: string): Promise<{ messages: DmMessage[] }>;
   sendDm(userId: string, text: string): Promise<{ message: DmMessage }>;
   conversations(): Promise<{ conversations: Conversation[] }>;
+
+  // --- server logs (admin only) ---
+  logs(opts?: { since?: number; level?: string; q?: string; limit?: number }): Promise<{ logs: { id: number; ts: number; level: string; message: string }[] }>;
 }
 
 /**
@@ -287,6 +290,15 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     dmThread: (userId) => request('GET', `/api/dm/${encodeURIComponent(userId)}`),
     sendDm: (userId, text) => request('POST', `/api/dm/${encodeURIComponent(userId)}`, { text }),
     conversations: () => request('GET', '/api/dm'),
+    logs: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.since !== undefined) q.set('since', String(opts.since));
+      if (opts.level) q.set('level', opts.level);
+      if (opts.q) q.set('q', opts.q);
+      if (opts.limit !== undefined) q.set('limit', String(opts.limit));
+      const qs = q.toString();
+      return request('GET', `/api/logs${qs ? `?${qs}` : ''}`);
+    },
   };
 }
 
