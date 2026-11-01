@@ -6,12 +6,11 @@
 FROM node:22-alpine AS web
 WORKDIR /src
 # Only the workspaces the web build needs (the mobile app is built separately with Expo).
-COPY package.json package-lock.json* ./
+COPY package.json ./
 COPY shared/package.json shared/
 COPY web/package.json web/
 RUN node -e "const f='package.json',p=require('./'+f);p.workspaces=['shared','web'];require('fs').writeFileSync(f,JSON.stringify(p,null,2))" \
- && npm install --no-audit --no-fund --workspace @vca/web --include-workspace-root \
- && npm rebuild
+ && npm install --no-audit --no-fund
 COPY shared shared
 COPY web web
 RUN npm exec -w @vca/web -- vite build
@@ -33,6 +32,7 @@ COPY --from=server-deps /app/server/node_modules server/node_modules
 COPY server/package.json server/package.json
 COPY server/src server/src
 COPY --from=web /src/web/dist web/dist
+RUN mkdir -p /app/uploads && chown node:node /app/uploads
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
