@@ -10,7 +10,8 @@ COPY package.json package-lock.json* ./
 COPY shared/package.json shared/
 COPY web/package.json web/
 RUN node -e "const f='package.json',p=require('./'+f);p.workspaces=['shared','web'];require('fs').writeFileSync(f,JSON.stringify(p,null,2))" \
- && npm install --no-audit --no-fund --workspace @vca/web --include-workspace-root
+ && npm install --no-audit --no-fund --workspace @vca/web --include-workspace-root \
+ && npm rebuild
 COPY shared shared
 COPY web web
 RUN npm exec -w @vca/web -- vite build
