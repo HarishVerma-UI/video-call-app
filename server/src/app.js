@@ -96,7 +96,7 @@ export function createApp(
     activeRooms: signaling ? signaling.activeRooms() : [],
     uptimeSec: Math.round((Date.now() - startedAt) / 1000),
   });
-  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister });
+  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social });
   const media = createMedia(config.s3 ?? {}, log);
   const socialApi = createSocial({ ...social, media, requireUser: auth.requireUser, log });
   let signaling;
@@ -139,7 +139,7 @@ export function createApp(
       return;
     }
     if (await auth.handle(req, res, path)) return;
-    if (await admin.handle(req, res, path)) return;
+    if (await admin.handle(req, res, path, url)) return;
     if (await media.handleLocal(req, res, url)) return;
     if (await socialApi.handle(req, res, path, url)) return;
 
@@ -226,6 +226,11 @@ export function createApp(
   }
 
   const server = http.createServer((req, res) => {
+    // Security headers on every response
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '0');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     for (const [k, v] of Object.entries(cors(req))) res.setHeader(k, v);
     route(req, res).catch((err) => {
       if (res.headersSent) return res.end();

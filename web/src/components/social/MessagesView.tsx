@@ -1,10 +1,10 @@
-import type { Conversation, DmMessage } from '@vca/shared';
+import { generateRoomId, type Conversation, type DmMessage } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { ago } from '../../format';
 import { ProfileAvatar } from './common';
 
-export function MessagesView({ initialUser }: { initialUser?: string }) {
+export function MessagesView({ initialUser, startCall }: { initialUser?: string; startCall?: (roomId: string) => void }) {
   const { api, user } = useAuth();
   const [convs, setConvs] = useState<Conversation[] | null>(null);
   const [active, setActive] = useState<string | null>(initialUser ?? null);
@@ -12,7 +12,11 @@ export function MessagesView({ initialUser }: { initialUser?: string }) {
   const [headerName, setHeaderName] = useState('');
   const [text, setText] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [convPage, setConvPage] = useState(1);
+  const [hasMoreMsgs, setHasMoreMsgs] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const CONV_PAGE_SIZE = 20;
 
   const loadConvs = useCallback(() => {
     api.conversations().then(({ conversations }) => setConvs(conversations)).catch(() => setConvs([]));
@@ -21,11 +25,33 @@ export function MessagesView({ initialUser }: { initialUser?: string }) {
 
   const loadThread = useCallback(async (other: string) => {
     try {
-      setMessages((await api.dmThread(other)).messages);
+      const result = await api.dmThread(other);
+      setMessages(result.messages);
+      setHasMoreMsgs(result.messages.length >= 50);
     } catch {
       setMessages([]);
+      setHasMoreMsgs(false);
     }
   }, [api]);
+
+  const loadOlderMessages = async () => {
+    if (!active || messages.length === 0 || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const oldest = messages[0];
+      const { messages: older } = await api.dmThread(active);
+      // Filter to messages older than our current oldest
+      const newOlder = older.filter((m) => m.ts < oldest.ts);
+      if (newOlder.length > 0) {
+        setMessages((prev) => [...newOlder, ...prev]);
+      }
+      setHasMoreMsgs(false); // We fetched all available
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
   useEffect(() => {
     if (active) void loadThread(active);
   }, [active, loadThread]);
@@ -70,25 +96,31 @@ export function MessagesView({ initialUser }: { initialUser?: string }) {
         ) : convs.length === 0 ? (
           <p className="card__empty">No messages yet.</p>
         ) : (
-          <ul>
-            {convs.map((c) => (
-              <li key={c.other}>
-                <button className={`messages__conv${active === c.other ? ' is-on' : ''}`} onClick={() => setActive(c.other)}>
-                  <div className="messages__conv-avatar">
-                    <ProfileAvatar profile={c.profile} size={40} />
-                    <i className="online-dot" />
-                  </div>
-                  <span className="messages__conv-text">
-                    <span className="messages__conv-top">
-                      <strong>{c.profile.name || 'Member'}</strong>
-                      <time>{ago(c.last.ts)}</time>
+          <>
+            <ul>
+              {convs.slice(0, convPage * CONV_PAGE_SIZE).map((c) => (
+                <li key={c.other}>
+                  <button className={`messages__conv${active === c.other ? ' is-on' : ''}`} onClick={() => setActive(c.other)}>
+                    <div className="messages__conv-avatar">
+                      <ProfileAvatar profile={c.profile} size={40} />
+                    </div>
+                    <span className="messages__conv-text">
+                      <span className="messages__conv-top">
+                        <strong>{c.profile.name || 'Member'}</strong>
+                        <time>{ago(c.last.ts)}</time>
+                      </span>
+                      <span className="messages__conv-preview">{c.last.text}</span>
                     </span>
-                    <span className="messages__conv-preview">{c.last.text}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {convs.length > convPage * CONV_PAGE_SIZE && (
+              <button className="btn btn--secondary btn--small btn--full" onClick={() => setConvPage((p) => p + 1)} style={{ margin: '0.5rem' }}>
+                Show more conversations
+              </button>
+            )}
+          </>
         )}
       </aside>
 
@@ -103,12 +135,17 @@ export function MessagesView({ initialUser }: { initialUser?: string }) {
             <header className="messages__head">
               <strong>{headerName}</strong>
               <div className="messages__head-actions">
-                <button className="messages__icon-btn" title="Start video call" aria-label="Start video call">
+                <button className="messages__icon-btn" title="Start video call" aria-label="Start video call" onClick={() => startCall?.(generateRoomId())}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
                 </button>
               </div>
             </header>
             <div className="messages__scroll" ref={scrollRef}>
+              {hasMoreMsgs && (
+                <button className="btn btn--secondary btn--small" onClick={() => void loadOlderMessages()} disabled={loadingOlder} style={{ alignSelf: 'center', margin: '0.5rem auto', display: 'block' }}>
+                  {loadingOlder ? 'Loading...' : 'Load older messages'}
+                </button>
+              )}
               {messages.map((m) => (
                 <div key={m.id} className={`bubble${m.from === user.id ? ' bubble--mine' : ''}`}>
                   <span className="bubble__text">{m.text}</span>

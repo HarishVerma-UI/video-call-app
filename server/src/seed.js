@@ -14,6 +14,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
+import { hashPassword } from './auth/password.js';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Load .env so MONGODB_URI is available ──
@@ -138,6 +140,9 @@ async function main() {
 
   console.log('🌱 Seeding Huddle with 30 users, profiles, and posts...\n');
 
+  // Hash the shared seed password once
+  const seedPasswordHash = await hashPassword('HuddleDemo123!');
+
   // Ensure upload directory exists
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
@@ -161,7 +166,7 @@ async function main() {
     const userDoc = {
       name: p.name,
       email,
-      passwordHash: null,
+      passwordHash: seedPasswordHash,
       role: 'user',
       provider: null,
       providerId: null,
@@ -284,7 +289,7 @@ async function main() {
 
   console.log('\n✅ Seed complete! 30 users, 30 profiles, 30 posts created.');
   console.log('   Seed accounts use emails: seed1@huddle.demo … seed30@huddle.demo');
-  console.log('   These accounts have no password (display-only).\n');
+  console.log('   Password for all seed accounts: HuddleDemo123!\n');
 
   await client.close();
 }

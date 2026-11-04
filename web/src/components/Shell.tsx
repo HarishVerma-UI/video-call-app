@@ -28,7 +28,8 @@ export type Route =
   | { view: 'calls' }
   | { view: 'profile' }
   | { view: 'admin' }
-  | { view: 'logs' };
+  | { view: 'logs' }
+  | { view: 'not-found' };
 
 export function parseRoute(path = location.pathname): Route {
   const seg = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -43,7 +44,8 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'network') return { view: 'network' };
   if (seg[0] === 'messages') return { view: 'messages', user: seg[1] ?? '' };
   if (seg[0] === 'u') return { view: 'person', id: seg[1] ?? '' };
-  return { view: 'feed' };
+  if (seg.length === 0) return { view: 'feed' };
+  return { view: 'not-found' };
 }
 
 export function routePath(r: Route): string {
@@ -52,6 +54,7 @@ export function routePath(r: Route): string {
   if (r.view === 'chat') return r.room ? `/chat/${encodeURIComponent(r.room)}` : '/chat';
   if (r.view === 'messages') return r.user ? `/messages/${encodeURIComponent(r.user)}` : '/messages';
   if (r.view === 'person') return `/u/${encodeURIComponent(r.id)}`;
+  if (r.view === 'not-found') return location.pathname;
   return `/${r.view}`;
 }
 
@@ -203,10 +206,10 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'profile' && <ProfileView />}
         {route.view === 'admin' && <AdminView />}
         {route.view === 'logs' && <LogsView />}
-        {route.view === 'feed' && <FeedView />}
+        {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} />}
         {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
-        {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} />}
+        {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} startCall={(roomId) => onJoin(roomId)} />}
         {route.view === 'person' && (
           <PersonView
             key={route.id}
@@ -215,6 +218,13 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             startCall={() => onJoin(generateRoomId())}
             back={() => go({ view: 'people' })}
           />
+        )}
+        {route.view === 'not-found' && (
+          <section className="page" aria-label="Page not found" style={{ textAlign: 'center', paddingTop: '4rem' }}>
+            <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>404</h1>
+            <p style={{ marginBottom: '1.5rem', color: 'var(--muted)' }}>Page not found. The page you are looking for does not exist.</p>
+            <button className="btn btn--primary" onClick={() => go({ view: 'feed' })}>Back to Feed</button>
+          </section>
         )}
       </div>
     </div>

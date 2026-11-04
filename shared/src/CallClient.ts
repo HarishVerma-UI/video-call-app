@@ -266,7 +266,8 @@ export class CallClient {
       this.emit('error', { code: 'signaling', message: 'Lost connection to the server.' });
       return;
     }
-    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 8000);
+    const base = Math.min(1000 * 2 ** this.reconnectAttempts, 8000);
+    const delay = base + Math.floor(Math.random() * base * 0.5); // jitter to avoid thundering herd
     this.reconnectAttempts++;
     this.setStatus('reconnecting');
     this.reconnectTimer = setTimeout(() => this.connect(), delay);

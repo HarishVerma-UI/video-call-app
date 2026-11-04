@@ -62,7 +62,7 @@ export function createSocial(deps) {
     const b = await readJson(req);
     const patch = {
       name: user.name, // keep display name in sync with the account
-      headline: str(b.headline, 120),
+      headline: str(b.headline, 200),
       bio: str(b.bio, 2000),
       location: str(b.location, 120),
       mobile: str(b.mobile, 40),
@@ -94,14 +94,23 @@ export function createSocial(deps) {
 
   async function people(req, res, url) {
     const me = await requireUser(req);
-    const found = await profiles.search({ q: url.searchParams.get('q') ?? '', role: url.searchParams.get('role') ?? '', exclude: me.id, limit: 40 });
-    const out = await Promise.all(
+    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+    const skip = (page - 1) * limit;
+    const { items: found, total } = await profiles.search({ q: url.searchParams.get('q') ?? '', role: url.searchParams.get('role') ?? '', exclude: me.id, limit, skip });
+
+    // Exclude users who already have a pending connection request with the current user
+    const withState = await Promise.all(
       found.map(async (p) => {
         const state = await connState(me.id, p.userId);
-        return profileOut(p, { full: false, state });
+        return { profile: p, state };
       }),
     );
-    sendJson(res, 200, { people: out });
+    const filtered = withState.filter(({ state }) => state !== 'pending_outgoing' && state !== 'pending_incoming');
+    const out = await Promise.all(
+      filtered.map(({ profile: p, state }) => profileOut(p, { full: false, state })),
+    );
+    sendJson(res, 200, { people: out, page, limit, total });
   }
 
   // --- media ---
@@ -156,12 +165,16 @@ export function createSocial(deps) {
     sendJson(res, 200, { status: 'none' });
   }
 
-  async function listConnections(req, res) {
+  async function listConnections(req, res, url) {
     const me = await requireUser(req);
+    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 20));
     const accepted = await connections.listFor(me.id, 'accepted');
-    const ids = accepted.map((c) => c.users.find((u) => u !== me.id));
+    const total = accepted.length;
+    const paged = accepted.slice((page - 1) * limit, page * limit);
+    const ids = paged.map((c) => c.users.find((u) => u !== me.id));
     const profs = await profiles.getMany(ids);
-    sendJson(res, 200, { connections: await Promise.all(profs.map((p) => profileOut(p, { full: true, state: 'connected' }))) });
+    sendJson(res, 200, { connections: await Promise.all(profs.map((p) => profileOut(p, { full: true, state: 'connected' }))), page, limit, total });
   }
 
   async function listRequests(req, res) {
@@ -177,7 +190,8 @@ export function createSocial(deps) {
   async function createPost(req, res) {
     const user = await requireUser(req);
     const b = await readJson(req);
-    const text = str(b.text, 3000);
+    const text = str(b.text, 5000);
+    if (text.length > 5000) throw new HttpError(400, 'Post text must be 5000 characters or fewer.');
     const imageKey = typeof b.imageKey === 'string' ? b.imageKey.slice(0, 300) : null;
     if (!text && !imageKey) throw new HttpError(400, 'Write something or add a photo.');
     const myProf = await profiles.get(user.id);
@@ -201,7 +215,7 @@ export function createSocial(deps) {
 
   async function commentPost(req, res, id) {
     const me = await requireUser(req);
-    const text = str((await readJson(req)).text, 1000);
+    const text = str((await readJson(req)).text, 2000);
     if (!text) throw new HttpError(400, 'Write a comment first.');
     const post = await posts.addComment(id, { userId: me.id, name: me.name, text });
     if (!post) throw new HttpError(404, 'Post not found.');
@@ -214,22 +228,62 @@ export function createSocial(deps) {
     if (!post) throw new HttpError(404, 'Post not found.');
     if (post.authorId !== me.id && me.role !== 'admin') throw new HttpError(403, 'You can only delete your own posts.');
     await posts.remove(id);
+    if (post.imageKey) media.deleteFile(post.imageKey).catch(() => {});
     sendJson(res, 200, { ok: true });
   }
 
+  async function editPost(req, res, id) {
+    const me = await requireUser(req);
+    const post = await posts.byId(id);
+    if (!post) throw new HttpError(404, 'Post not found.');
+    if (post.authorId !== me.id) throw new HttpError(403, 'You can only edit your own posts.');
+    const b = await readJson(req);
+    const text = str(b.text, 5000);
+    if (!text) throw new HttpError(400, 'Post text cannot be empty.');
+    const updated = await posts.update(id, { text });
+    if (!updated) throw new HttpError(404, 'Post not found.');
+    sendJson(res, 200, { post: await postOut(updated, me.id) });
+  }
+
+  async function deleteComment(req, res, postId, commentId) {
+    const me = await requireUser(req);
+    const post = await posts.byId(postId);
+    if (!post) throw new HttpError(404, 'Post not found.');
+    const comment = post.comments.find((c) => c.id === commentId);
+    if (!comment) throw new HttpError(404, 'Comment not found.');
+    if (comment.userId !== me.id && post.authorId !== me.id && me.role !== 'admin') {
+      throw new HttpError(403, 'You can only delete your own comments or comments on your posts.');
+    }
+    const updated = await posts.removeComment(postId, commentId);
+    sendJson(res, 200, { post: await postOut(updated, me.id) });
+  }
+
+  async function searchPosts(req, res, url) {
+    const me = await requireUser(req);
+    const q = (url.searchParams.get('q') ?? '').trim();
+    if (!q) throw new HttpError(400, 'Search query is required.');
+    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+    const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : undefined;
+    const list = await posts.searchText(q, { before, limit });
+    sendJson(res, 200, { posts: await Promise.all(list.map((p) => postOut(p, me.id))), page, limit });
+  }
+
   // --- direct messages (connected users only) ---
-  async function dmThread(req, res, other) {
+  async function dmThread(req, res, other, url) {
     const me = await requireUser(req);
     if (!(await connections.areConnected(me.id, other))) throw new HttpError(403, 'You can only message your connections.');
-    const before = undefined;
-    const msgs = await dms.thread(me.id, other, { before });
-    sendJson(res, 200, { messages: msgs });
+    const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+    const before = url.searchParams.has('before') ? Number(url.searchParams.get('before')) : undefined;
+    const msgs = await dms.thread(me.id, other, { before, limit });
+    sendJson(res, 200, { messages: msgs, page, limit });
   }
 
   async function dmSend(req, res, other) {
     const me = await requireUser(req);
     if (!(await connections.areConnected(me.id, other))) throw new HttpError(403, 'You can only message your connections.');
-    const text = str((await readJson(req)).text, 2000);
+    const text = str((await readJson(req)).text, 5000);
     if (!text) throw new HttpError(400, 'Write a message first.');
     const m = await dms.send({ from: me.id, fromName: me.name, to: other, text });
     sendJson(res, 201, { message: m });
@@ -259,9 +313,10 @@ export function createSocial(deps) {
     if (pathname === '/api/profile' && m === 'PUT') return (await saveProfile(req, res), true);
     if (pathname === '/api/people' && m === 'GET') return (await people(req, res, url), true);
     if (pathname === '/api/media/upload-url' && m === 'POST') return (await uploadUrl(req, res), true);
-    if (pathname === '/api/connections' && m === 'GET') return (await listConnections(req, res), true);
+    if (pathname === '/api/connections' && m === 'GET') return (await listConnections(req, res, url), true);
     if (pathname === '/api/connections/requests' && m === 'GET') return (await listRequests(req, res), true);
     if (pathname === '/api/posts' && m === 'POST') return (await createPost(req, res), true);
+    if (pathname === '/api/posts/search' && m === 'GET') return (await searchPosts(req, res, url), true);
     if (pathname === '/api/feed' && m === 'GET') return (await feed(req, res, url), true);
     if (pathname === '/api/dm' && m === 'GET') return (await conversations(req, res), true);
 
@@ -273,8 +328,10 @@ export function createSocial(deps) {
     if ((mm = pathname.match(/^\/api\/connections\/([^/]+)$/)) && m === 'DELETE') return (await removeConn(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/posts\/([^/]+)\/like$/)) && m === 'POST') return (await likePost(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/posts\/([^/]+)\/comments$/)) && m === 'POST') return (await commentPost(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/posts\/([^/]+)\/comments\/([^/]+)$/)) && m === 'DELETE') return (await deleteComment(req, res, decodeURIComponent(mm[1]), decodeURIComponent(mm[2])), true);
+    if ((mm = pathname.match(/^\/api\/posts\/([^/]+)$/)) && m === 'PATCH') return (await editPost(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/posts\/([^/]+)$/)) && m === 'DELETE') return (await deletePost(req, res, decodeURIComponent(mm[1])), true);
-    if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'GET') return (await dmThread(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'GET') return (await dmThread(req, res, decodeURIComponent(mm[1]), url), true);
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'POST') return (await dmSend(req, res, decodeURIComponent(mm[1])), true);
 
     return false;

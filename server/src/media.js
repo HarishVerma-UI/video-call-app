@@ -165,7 +165,32 @@ export function createMedia(s3 = {}, log = () => {}) {
     return true;
   }
 
-  return { configured, presignUpload, viewUrl, handleLocal };
+  /** Delete an uploaded file by its storage key. Best-effort — errors are logged, not thrown. */
+  async function deleteFile(key) {
+    if (!key) return;
+    if (localDirectory) {
+      const filePath = path.resolve(localDirectory, key);
+      if (!filePath.startsWith(`${localDirectory}${path.sep}`)) return;
+      try {
+        await fs.unlink(filePath);
+        log(`media deleted local file ${key}`);
+      } catch (err) {
+        if (err?.code !== 'ENOENT') log(`media delete failed ${key}: ${err.message}`);
+      }
+      return;
+    }
+    if (!s3Configured) return;
+    try {
+      const client = await getClient(s3);
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      await client.send(new DeleteObjectCommand({ Bucket: s3.bucket, Key: key }));
+      log(`media deleted s3 object ${key}`);
+    } catch (err) {
+      log(`media s3 delete failed ${key}: ${err.message}`);
+    }
+  }
+
+  return { configured, presignUpload, viewUrl, deleteFile, handleLocal };
 }
 
 export class MediaError extends Error {

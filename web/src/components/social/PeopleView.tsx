@@ -1,17 +1,22 @@
 import type { ConnectionState, Profile } from '@vca/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { ConnectButton, ProfileAvatar, roleBadges } from './common';
+
+const PAGE_SIZE = 20;
 
 export function PeopleView({ openUser }: { openUser: (id: string) => void }) {
   const { api } = useAuth();
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [people, setPeople] = useState<Profile[] | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
       setPeople((await api.searchPeople({ q, role })).people);
+      setVisibleCount(PAGE_SIZE);
     } catch {
       setPeople([]);
     }
@@ -21,6 +26,22 @@ export function PeopleView({ openUser }: { openUser: (id: string) => void }) {
     const t = setTimeout(() => void load(), 200);
     return () => clearTimeout(t);
   }, [load]);
+
+  // IntersectionObserver for loading more people
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => c + PAGE_SIZE);
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [people]);
 
   const setConn = (userId: string, connection: ConnectionState) =>
     setPeople((xs) => (xs ?? []).map((p) => (p.userId === userId ? { ...p, connection } : p)));
@@ -44,42 +65,45 @@ export function PeopleView({ openUser }: { openUser: (id: string) => void }) {
       ) : people.length === 0 ? (
         <p className="card__empty">No one found. Try a different search.</p>
       ) : (
-        <ul className="people-grid">
-          {people.map((p) => (
-            <li key={p.userId} className="person-card card">
-              <div className="person-card__banner" />
-              <div className="person-card__body">
-                <button className="person-card__main" onClick={() => openUser(p.userId)}>
-                  <ProfileAvatar profile={p} size={64} />
-                  <span className="person-card__text">
-                    <strong>{p.name || 'Member'}</strong>
-                    <span className="person-card__headline">{p.headline || '—'}</span>
-                    {p.location && <span className="person-card__location">{p.location}</span>}
-                  </span>
-                </button>
-                {p.skills.length > 0 && (
-                  <div className="person-card__skills">
-                    {p.skills.slice(0, 4).map((s) => <span key={s} className="pill">{s}</span>)}
-                    {p.skills.length > 4 && <span className="pill pill--more">+{p.skills.length - 4}</span>}
-                  </div>
-                )}
-                {roleBadges(p).length > 0 && (
-                  <div className="person-card__roles">
-                    {roleBadges(p).map((b) => <span key={b} className="pill pill--role">{b}</span>)}
-                  </div>
-                )}
-                <div className="person-card__footer">
-                  <ConnectButton profile={p} api={api} onChange={(s) => setConn(p.userId, s)} />
-                  {p.connection === 'connected' && (
-                    <button className="btn btn--secondary btn--small" onClick={(e) => { e.stopPropagation(); openUser(p.userId); }}>
-                      Message
-                    </button>
+        <>
+          <ul className="people-grid">
+            {people.slice(0, visibleCount).map((p) => (
+              <li key={p.userId} className="person-card card">
+                <div className="person-card__banner" />
+                <div className="person-card__body">
+                  <button className="person-card__main" onClick={() => openUser(p.userId)}>
+                    <ProfileAvatar profile={p} size={64} />
+                    <span className="person-card__text">
+                      <strong>{p.name || 'Member'}</strong>
+                      <span className="person-card__headline">{p.headline || '---'}</span>
+                      {p.location && <span className="person-card__location">{p.location}</span>}
+                    </span>
+                  </button>
+                  {p.skills.length > 0 && (
+                    <div className="person-card__skills">
+                      {p.skills.slice(0, 4).map((s) => <span key={s} className="pill">{s}</span>)}
+                      {p.skills.length > 4 && <span className="pill pill--more">+{p.skills.length - 4}</span>}
+                    </div>
                   )}
+                  {roleBadges(p).length > 0 && (
+                    <div className="person-card__roles">
+                      {roleBadges(p).map((b) => <span key={b} className="pill pill--role">{b}</span>)}
+                    </div>
+                  )}
+                  <div className="person-card__footer">
+                    <ConnectButton profile={p} api={api} onChange={(s) => setConn(p.userId, s)} />
+                    {p.connection === 'connected' && (
+                      <button className="btn btn--secondary btn--small" onClick={(e) => { e.stopPropagation(); openUser(p.userId); }}>
+                        Message
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+          {people.length > visibleCount && <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />}
+        </>
       )}
     </section>
   );
