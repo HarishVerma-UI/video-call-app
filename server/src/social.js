@@ -4,7 +4,7 @@
 
 import { HttpError, readJson, sendJson } from './http.js';
 import { MediaError } from './media.js';
-import { publicPost, publicProfile } from './db/socialStore.js';
+import { publicAd, publicPost, publicProfile } from './db/socialStore.js';
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const arr = (v, maxItems, maxLen) => (Array.isArray(v) ? v.slice(0, maxItems).map((x) => str(x, maxLen)).filter(Boolean) : []);
@@ -23,8 +23,19 @@ function entries(v, keys, maxItems = 20) {
  * @param {{ profiles, connections, posts, dms, media, requireUser, log? }} deps
  */
 export function createSocial(deps) {
-  const { profiles, connections, posts, dms, media, requireUser } = deps;
+  const { profiles, connections, posts, dms, media, requireUser, users, ads } = deps;
   const log = deps.log ?? (() => {});
+
+  // Some accounts (e.g. the seeded admin) are created directly in the user store
+  // and never got a social profile. Make sure a real account has one so other
+  // members can find it, connect, and message it.
+  async function ensureProfile(userId) {
+    const existing = await profiles.get(userId);
+    if (existing) return existing;
+    const u = users ? await users.findById(userId) : null;
+    if (!u) return null;
+    return profiles.upsert(userId, { name: u.name });
+  }
 
   // --- visibility helpers ---
   async function connState(me, target) {
@@ -48,6 +59,19 @@ export function createSocial(deps) {
     out.imageUrl = p.imageKey ? await media.viewUrl(p.imageKey) : null;
     out.authorPhotoUrl = p.authorPhotoKey ? await media.viewUrl(p.authorPhotoKey) : null;
     return out;
+  }
+  async function adOut(a) {
+    const out = publicAd(a);
+    out.imageUrl = a.imageKey ? await media.viewUrl(a.imageKey) : null;
+    return out;
+  }
+
+  // --- ads (admin-managed promos shown in the feed sidebar) ---
+  async function listAds(req, res) {
+    await requireUser(req);
+    if (!ads) return sendJson(res, 200, { ads: [] });
+    const list = await ads.list({ activeOnly: true });
+    sendJson(res, 200, { ads: await Promise.all(list.map(adOut)) });
   }
 
   // --- profiles ---
@@ -82,7 +106,7 @@ export function createSocial(deps) {
 
   async function viewProfile(req, res, userId) {
     const me = await requireUser(req);
-    const p = await profiles.get(userId);
+    const p = await ensureProfile(userId);
     if (!p) throw new HttpError(404, 'No profile yet.');
     const state = await connState(me.id, userId);
     const [profile, userPosts] = await Promise.all([
@@ -132,7 +156,7 @@ export function createSocial(deps) {
   async function requestConn(req, res, target) {
     const me = await requireUser(req);
     if (me.id === target) throw new HttpError(400, 'You can’t connect with yourself.');
-    if (!(await profiles.get(target))) throw new HttpError(404, 'No such person.');
+    if (!(await ensureProfile(target))) throw new HttpError(404, 'No such person.');
     const existing = await connections.between(me.id, target);
     if (existing?.status === 'accepted') throw new HttpError(409, 'You’re already connected.');
     if (existing?.status === 'pending' && existing.requester !== me.id) {
@@ -318,6 +342,7 @@ export function createSocial(deps) {
     if (pathname === '/api/posts' && m === 'POST') return (await createPost(req, res), true);
     if (pathname === '/api/posts/search' && m === 'GET') return (await searchPosts(req, res, url), true);
     if (pathname === '/api/feed' && m === 'GET') return (await feed(req, res, url), true);
+    if (pathname === '/api/ads' && m === 'GET') return (await listAds(req, res), true);
     if (pathname === '/api/dm' && m === 'GET') return (await conversations(req, res), true);
 
     let mm;

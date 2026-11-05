@@ -4,7 +4,7 @@ import { checkConfig, config } from './config.js';
 import { createMemoryMessageStore, mongoMessageStore } from './db/messageStore.js';
 import { connectMongoUserStore, createMemoryUserStore, seedAdmin } from './db/userStore.js';
 import { createMemoryActivityStore, mongoActivityStore } from './db/activityStore.js';
-import { connectSocialStores } from './db/socialStore.js';
+import { connectSocialStores, createMemorySocialStores } from './db/socialStore.js';
 import { hashPassword } from './auth/password.js';
 
 const log = (...args) => console.log(new Date().toISOString().slice(11, 19), ...args);
@@ -34,10 +34,18 @@ if (config.mongoUri) {
   store = createMemoryUserStore();
   messages = createMemoryMessageStore({ retentionDays: config.chatRetentionDays });
   activity = createMemoryActivityStore();
+  social = createMemorySocialStores();
 }
 
 // Make sure the admin dashboard has an account to sign in with.
-await seedAdmin(store, { email: config.adminEmail, password: config.adminPassword, name: config.adminName }, hashPassword, log);
+const adminUser = await seedAdmin(store, { email: config.adminEmail, password: config.adminPassword, name: config.adminName }, hashPassword, log);
+// The admin account is created directly in the user store, bypassing the normal
+// registration hook — so it has no social profile. Without one, other members
+// can't find it, send it a connection request, or message it. Create it here.
+if (social && adminUser) {
+  await social.profiles.upsert(adminUser.id, { name: adminUser.name });
+  log(`social ensured profile for admin account ${adminUser.email ?? adminUser.id}`);
+}
 if (config.isProd && config.adminPassword === 'admin')
   console.warn('  ⚠  Admin password is the default "admin" — set ADMIN_PASSWORD to something private.');
 

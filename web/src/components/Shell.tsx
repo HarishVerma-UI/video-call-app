@@ -1,11 +1,12 @@
 import { generateRoomId, normalizeRoomId, type AuthUser } from '@vca/shared';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { AdminView } from './AdminView';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
-import { ChatIcon, LogsIcon, PeopleIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { ChatIcon, LogsIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
 import { LogsView } from './LogsView';
 import { MeetView } from './MeetView';
 import { ModeToggle } from './ModeToggle';
@@ -74,9 +75,9 @@ export function useRoute(): [Route, (r: Route, replace?: boolean) => void] {
   return [route, go];
 }
 
+// People + Feed are merged into the Home feed, so People is no longer a separate rail item.
 const RAIL: { view: Route['view']; label: string; icon: ReactNode; testId: string }[] = [
-  { view: 'feed', label: 'Feed', icon: <SparkIcon />, testId: 'rail-feed' },
-  { view: 'people', label: 'People', icon: <PeopleIcon />, testId: 'rail-people' },
+  { view: 'feed', label: 'Home', icon: <SparkIcon />, testId: 'rail-feed' },
   { view: 'network', label: 'Network', icon: <UserIcon />, testId: 'rail-network' },
   { view: 'messages', label: 'Messages', icon: <ChatIcon />, testId: 'rail-messages' },
   { view: 'meet', label: 'Meet', icon: <VideoIcon />, testId: 'rail-meet' },
@@ -92,7 +93,22 @@ interface Props {
 }
 
 export function Shell({ user, media, route, go, notice, onJoin }: Props) {
+  const { api } = useAuth();
   const [query, setQuery] = useState('');
+  const [pendingReqs, setPendingReqs] = useState(0);
+
+  const loadRequests = useCallback(() => {
+    api.listRequests().then(({ requests }) => setPendingReqs(requests.length)).catch(() => {});
+  }, [api]);
+  useEffect(() => {
+    loadRequests();
+    const t = setInterval(loadRequests, 30000);
+    return () => clearInterval(t);
+  }, [loadRequests]);
+  // Refresh the badge whenever the user visits the network page (where requests are actioned).
+  useEffect(() => {
+    if (route.view === 'network') loadRequests();
+  }, [route.view, loadRequests]);
 
   const search = (e: FormEvent) => {
     e.preventDefault();
@@ -135,6 +151,13 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           />
         </form>
         <div className="titlebar__end">
+          <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
+            <ChatIcon width={20} height={20} />
+          </button>
+          <button className="titlebar__icon" onClick={() => go({ view: 'network' })} aria-label={pendingReqs > 0 ? `Requests (${pendingReqs} pending)` : 'Requests'} title="Connection requests" data-testid="top-requests">
+            <UserIcon width={20} height={20} />
+            {pendingReqs > 0 && <span className="titlebar__badge">{pendingReqs > 9 ? '9+' : pendingReqs}</span>}
+          </button>
           <ModeToggle />
           <button className="titlebar__me" onClick={() => go({ view: 'profile' })} data-testid="open-profile" aria-label="Your profile" title={user.name}>
             <Avatar id={user.id} name={user.name} size={32} />

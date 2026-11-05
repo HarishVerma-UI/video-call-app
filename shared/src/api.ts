@@ -114,6 +114,17 @@ export interface Post {
   createdAt: string | null;
 }
 
+export interface Ad {
+  id: string;
+  title: string;
+  body: string;
+  imageKey?: string | null;
+  imageUrl: string | null;
+  linkUrl: string;
+  active: boolean;
+  createdAt: string | null;
+}
+
 export interface DmMessage {
   id: string;
   from: string;
@@ -175,6 +186,13 @@ export interface ApiClient {
   adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
   adminStats(): Promise<AdminStats>;
+
+  // --- ads (admin manages; everyone sees active ones in the feed) ---
+  ads(): Promise<{ ads: Ad[] }>;
+  adminListAds(): Promise<{ ads: Ad[] }>;
+  adminCreateAd(input: { title: string; body?: string; linkUrl?: string; imageKey?: string | null; active?: boolean }): Promise<{ ad: Ad }>;
+  adminUpdateAd(id: string, patch: { title?: string; body?: string; linkUrl?: string; imageKey?: string | null; active?: boolean }): Promise<{ ad: Ad }>;
+  adminDeleteAd(id: string): Promise<{ ok: boolean; id: string }>;
 
   /** Your recent calls, newest first. */
   calls(): Promise<{ calls: CallRecord[] }>;
@@ -257,6 +275,11 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
     adminStats: () => request('GET', '/api/admin/stats'),
+    ads: () => request('GET', '/api/ads'),
+    adminListAds: () => request('GET', '/api/admin/ads'),
+    adminCreateAd: (input) => request('POST', '/api/admin/ads', input),
+    adminUpdateAd: (id, patch) => request('PATCH', `/api/admin/ads/${encodeURIComponent(id)}`, patch),
+    adminDeleteAd: (id) => request('DELETE', `/api/admin/ads/${encodeURIComponent(id)}`),
     calls: () => request('GET', '/api/calls'),
     chats: () => request('GET', '/api/chats'),
     sendRoomMessage: (roomId, text) => request('POST', `/api/rooms/${encodeURIComponent(roomId)}/messages`, { text }),

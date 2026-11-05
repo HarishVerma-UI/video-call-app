@@ -1,9 +1,10 @@
-import { ApiError, type ActiveRoom, type AdminStats, type AuthUser, type UserRole } from '@vca/shared';
+import { ApiError, type ActiveRoom, type Ad, type AdminStats, type AuthUser, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
+import { uploadFile } from '../upload';
 
 type Draft = { name: string; email: string; password: string; role: UserRole };
 
@@ -206,6 +207,154 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AuthUser; isSelf: boolean
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── ads manager ──────────────────────────────────────── */
+
+function AdForm({ editing, onClose, onSaved }: { editing: Ad | null; onClose: () => void; onSaved: () => void }) {
+  const { api } = useAuth();
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [body, setBody] = useState(editing?.body ?? '');
+  const [linkUrl, setLinkUrl] = useState(editing?.linkUrl ?? '');
+  const [active, setActive] = useState(editing?.active ?? true);
+  const [imageKey, setImageKey] = useState<string | null>(editing?.imageKey ?? null);
+  const [preview, setPreview] = useState<string | null>(editing?.imageUrl ?? null);
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const onImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setErr(null);
+    try {
+      const key = await uploadFile(api, 'post', file);
+      setImageKey(key);
+      setPreview(URL.createObjectURL(file));
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) { setErr('A title is required.'); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      const payload = { title: title.trim(), body: body.trim(), linkUrl: linkUrl.trim(), imageKey, active };
+      if (editing) await api.adminUpdateAd(editing.id, payload);
+      else await api.adminCreateAd(payload);
+      onSaved();
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Could not save the ad.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={editing ? 'Edit ad' : 'New ad'} onClick={onClose}>
+      <form className="modal__card card" onClick={(e: MouseEvent) => e.stopPropagation()} onSubmit={submit} noValidate>
+        <header className="card__head">
+          <div>
+            <h2>{editing ? 'Edit ad' : 'New ad'}</h2>
+            <p>Ads appear in the member feed sidebar.</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
+        </header>
+        <Line name="ad-title" label="Title" type="text" autoComplete="off" value={title} onChange={setTitle} />
+        <div className="line">
+          <label htmlFor="ad-body">Body</label>
+          <div className="line__row">
+            <textarea id="ad-body" className="pp-textarea" rows={2} maxLength={500} value={body} onChange={(e) => setBody(e.target.value)} />
+          </div>
+          <span className="line__rule" />
+        </div>
+        <Line name="ad-link" label="Link URL (optional) — https://…" type="text" autoComplete="off" value={linkUrl} onChange={setLinkUrl} />
+        <div className="line">
+          <label>Image (optional)</label>
+          {preview && <img src={preview} alt="" className="admin-ads__thumb" />}
+          <div className="line__row">
+            <button type="button" className="btn btn--secondary btn--small" onClick={() => fileInput.current?.click()} disabled={uploading}>
+              {uploading ? 'Uploading…' : preview ? 'Change image' : 'Upload image'}
+            </button>
+            <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void onImage(e)} />
+          </div>
+          <span className="line__rule" />
+        </div>
+        <label className="admin-ads__active"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active (visible in the feed)</label>
+        {err && <p className="form-msg" role="alert">{err}</p>}
+        <div className="modal__actions">
+          <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={busy || uploading}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create ad'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AdsManager() {
+  const { api } = useAuth();
+  const [ads, setAds] = useState<Ad[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Ad | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const load = useCallback(() => {
+    api.adminListAds().then(({ ads }) => setAds(ads)).catch(() => setAds([]));
+  }, [api]);
+  useEffect(() => load(), [load]);
+
+  const toggle = async (ad: Ad) => {
+    setErr(null);
+    try { await api.adminUpdateAd(ad.id, { active: !ad.active }); load(); } catch (ex) { setErr(ex instanceof ApiError ? ex.message : 'Could not update the ad.'); }
+  };
+  const remove = async (ad: Ad) => {
+    if (!window.confirm(`Delete ad “${ad.title}”?`)) return;
+    setErr(null);
+    try { await api.adminDeleteAd(ad.id); load(); } catch (ex) { setErr(ex instanceof ApiError ? ex.message : 'Could not delete the ad.'); }
+  };
+
+  return (
+    <div className="card admin-dash__ads">
+      <header className="card__head">
+        <h2>Ads Manager</h2>
+        <button className="btn btn--primary btn--small" onClick={() => { setEditing(null); setShowForm(true); }} data-testid="add-ad">
+          <PlusIcon width={16} height={16} /> New Ad
+        </button>
+      </header>
+      {err && <p className="form-msg" role="alert">{err}</p>}
+      {ads === null ? (
+        <div className="skeleton-list" aria-hidden="true"><i /></div>
+      ) : ads.length === 0 ? (
+        <p className="card__empty">No ads yet. Create one to show it in the member feed.</p>
+      ) : (
+        <ul className="admin-ads__list">
+          {ads.map((ad) => (
+            <li key={ad.id} className={`admin-ads__item${ad.active ? '' : ' is-hidden'}`}>
+              {ad.imageUrl && <img src={ad.imageUrl} alt="" className="admin-ads__thumb" />}
+              <div className="admin-ads__text">
+                <strong>{ad.title}</strong>
+                {ad.body && <span>{ad.body}</span>}
+                {ad.linkUrl && <a href={ad.linkUrl} target="_blank" rel="noreferrer">{ad.linkUrl}</a>}
+              </div>
+              <div className="admin-ads__actions">
+                <button className="link-btn" onClick={() => void toggle(ad)} title={ad.active ? 'Click to hide' : 'Click to show'}>{ad.active ? 'Active' : 'Hidden'}</button>
+                <button className="link-btn" onClick={() => { setEditing(ad); setShowForm(true); }} aria-label="Edit ad"><PencilIcon width={14} height={14} /></button>
+                <button className="link-btn admin-dir__danger" onClick={() => void remove(ad)} aria-label="Delete ad"><TrashIcon width={14} height={14} /></button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {showForm && <AdForm editing={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
     </div>
   );
 }
@@ -413,6 +562,9 @@ export function AdminView() {
           </div>
         </div>
       </div>
+
+      {/* ─ ads manager ─ */}
+      <AdsManager />
 
       {showForm && <UserForm editing={editing} selfId={user?.id ?? ''} onClose={() => setShowForm(false)} onSaved={onSaved} />}
     </section>

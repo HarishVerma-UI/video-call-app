@@ -98,7 +98,7 @@ export function createApp(
   });
   const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social });
   const media = createMedia(config.s3 ?? {}, log);
-  const socialApi = createSocial({ ...social, media, requireUser: auth.requireUser, log });
+  const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, log });
   let signaling;
 
   const cors = (req) => {

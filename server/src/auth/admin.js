@@ -148,6 +148,60 @@ export function createAdmin(opts) {
     sendJson(res, 200, { ok: true, id });
   }
 
+  // --- Ads: admin-managed promos shown in the member feed ---
+  const adStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  function adPatchFrom(body, { partial }) {
+    const patch = {};
+    if (!partial || body.title !== undefined) patch.title = adStr(body.title, 120);
+    if (!partial || body.body !== undefined) patch.body = adStr(body.body, 500);
+    if (!partial || body.linkUrl !== undefined) patch.linkUrl = adStr(body.linkUrl, 500);
+    if (!partial || body.imageKey !== undefined) patch.imageKey = typeof body.imageKey === 'string' ? body.imageKey.slice(0, 300) : null;
+    if (!partial || body.active !== undefined) patch.active = body.active !== false;
+    if (patch.linkUrl && !/^https?:\/\//i.test(patch.linkUrl)) {
+      throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { linkUrl: 'Link must start with http:// or https://' } });
+    }
+    return patch;
+  }
+
+  async function listAds(req, res) {
+    await requireAdmin(req);
+    if (!opts.social?.ads) return sendJson(res, 200, { ads: [] });
+    const ads = await opts.social.ads.list({ activeOnly: false });
+    sendJson(res, 200, { ads });
+  }
+
+  async function createAd(req, res) {
+    await requireAdmin(req);
+    if (!opts.social?.ads) throw new HttpError(503, 'Ads are not available.');
+    const body = await readJson(req);
+    const patch = adPatchFrom(body, { partial: false });
+    if (!patch.title) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { title: 'A title is required.' } });
+    const ad = await opts.social.ads.create(patch);
+    opts.log?.(`admin  created ad ${ad.id}`);
+    sendJson(res, 201, { ad });
+  }
+
+  async function updateAd(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.ads) throw new HttpError(503, 'Ads are not available.');
+    const body = await readJson(req);
+    const patch = adPatchFrom(body, { partial: true });
+    if (patch.title !== undefined && !patch.title) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { title: 'A title is required.' } });
+    const ad = await opts.social.ads.update(id, patch);
+    if (!ad) throw new HttpError(404, 'Ad not found.');
+    opts.log?.(`admin  updated ad ${id}`);
+    sendJson(res, 200, { ad });
+  }
+
+  async function deleteAd(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.ads) throw new HttpError(503, 'Ads are not available.');
+    const ok = await opts.social.ads.remove(id);
+    if (!ok) throw new HttpError(404, 'Ad not found.');
+    opts.log?.(`admin  deleted ad ${id}`);
+    sendJson(res, 200, { ok: true, id });
+  }
+
   async function statsHandler(req, res) {
     await requireAdmin(req);
     const [users, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
@@ -174,9 +228,14 @@ export function createAdmin(opts) {
     if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res, url);
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
+    else if (pathname === '/api/admin/ads' && req.method === 'GET') await listAds(req, res);
+    else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
     else {
+      const adMatch = pathname.match(/^\/api\/admin\/ads\/([^/]+)$/);
       const m = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
-      if (m && req.method === 'PATCH') await updateUser(req, res, decodeURIComponent(m[1]));
+      if (adMatch && req.method === 'PATCH') await updateAd(req, res, decodeURIComponent(adMatch[1]));
+      else if (adMatch && req.method === 'DELETE') await deleteAd(req, res, decodeURIComponent(adMatch[1]));
+      else if (m && req.method === 'PATCH') await updateUser(req, res, decodeURIComponent(m[1]));
       else if (m && req.method === 'DELETE') await deleteUser(req, res, decodeURIComponent(m[1]));
       else throw new HttpError(404, 'Not found');
     }

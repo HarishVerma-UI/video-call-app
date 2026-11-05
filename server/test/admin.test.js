@@ -97,3 +97,51 @@ test('duplicate email is rejected on admin create', async () => {
   res = await api(t.base, 'POST', '/api/admin/users', { name: 'Second', email, password: 'secret-123' }, admin.token);
   assert.equal(res.status, 409);
 });
+
+test('ads: admin CRUD and members see only active ads', async () => {
+  const admin = await registerUser(t.base, 'Ads Admin');
+  await t.store.setRole(admin.user.id, 'admin');
+  const member = await registerUser(t.base, 'Ads Member');
+
+  // non-admin cannot manage ads
+  let res = await api(t.base, 'GET', '/api/admin/ads', null, member.token);
+  assert.equal(res.status, 403);
+
+  // create an active ad and an inactive one
+  res = await api(t.base, 'POST', '/api/admin/ads', { title: 'Buy our thing', body: 'Great deal', linkUrl: 'https://example.com', active: true }, admin.token);
+  assert.equal(res.status, 201);
+  const activeId = res.body.ad.id;
+  assert.equal(res.body.ad.title, 'Buy our thing');
+  assert.equal(res.body.ad.active, true);
+
+  res = await api(t.base, 'POST', '/api/admin/ads', { title: 'Hidden ad', active: false }, admin.token);
+  assert.equal(res.status, 201);
+  const hiddenId = res.body.ad.id;
+
+  // admin list shows both
+  res = await api(t.base, 'GET', '/api/admin/ads', null, admin.token);
+  assert.equal(res.status, 200);
+  assert.ok(res.body.ads.some((a) => a.id === activeId));
+  assert.ok(res.body.ads.some((a) => a.id === hiddenId));
+
+  // members' feed-ads endpoint shows only the active one
+  res = await api(t.base, 'GET', '/api/ads', null, member.token);
+  assert.equal(res.status, 200);
+  assert.ok(res.body.ads.some((a) => a.id === activeId), 'active ad is visible to members');
+  assert.ok(!res.body.ads.some((a) => a.id === hiddenId), 'inactive ad is hidden from members');
+
+  // bad link is rejected
+  res = await api(t.base, 'POST', '/api/admin/ads', { title: 'Bad link', linkUrl: 'javascript:alert(1)' }, admin.token);
+  assert.equal(res.status, 400);
+
+  // update + delete
+  res = await api(t.base, 'PATCH', `/api/admin/ads/${activeId}`, { title: 'Updated title', active: false }, admin.token);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ad.title, 'Updated title');
+  assert.equal(res.body.ad.active, false);
+
+  res = await api(t.base, 'DELETE', `/api/admin/ads/${hiddenId}`, null, admin.token);
+  assert.equal(res.status, 200);
+  res = await api(t.base, 'GET', '/api/admin/ads', null, admin.token);
+  assert.ok(!res.body.ads.some((a) => a.id === hiddenId), 'deleted ad is gone');
+});
