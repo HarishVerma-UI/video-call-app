@@ -75,8 +75,11 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
               {requests.map((p) => (
                 <li key={p.userId}>
                   <button className="net-list__who" onClick={() => openUser(p.userId)}>
-                    <ProfileAvatar profile={p} size={40} />
-                    <span><strong>{p.name || 'Member'}</strong><span>{p.headline || '—'}</span></span>
+                    <ProfileAvatar profile={p} size={44} />
+                    <span className="net-list__meta">
+                      <strong>{p.name || 'Member'}</strong>
+                      {p.headline && <span className="net-list__headline">{p.headline}</span>}
+                    </span>
                   </button>
                   <span className="net-list__actions">
                     <button className="btn btn--primary btn--small" onClick={() => void accept(p.userId)}>Accept</button>
@@ -105,14 +108,18 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
               {connections.map((p) => (
                 <li key={p.userId}>
                   <button className="net-list__who" onClick={() => openUser(p.userId)}>
-                    <ProfileAvatar profile={p} size={40} />
-                    <span>
+                    <ProfileAvatar profile={p} size={44} />
+                    <span className="net-list__meta">
                       <strong>{p.name || 'Member'}</strong>
-                      <span>{p.headline || '—'}</span>
-                      {roleBadges(p).map((b) => <span key={b} className="pill pill--role">{b}</span>)}
+                      {p.headline && <span className="net-list__headline">{p.headline}</span>}
+                      {roleBadges(p).length > 0 && (
+                        <span className="net-list__badges">
+                          {roleBadges(p).map((b) => <span key={b} className="pill pill--role">{b}</span>)}
+                        </span>
+                      )}
                     </span>
                   </button>
-                  <button className="btn btn--secondary btn--small" onClick={() => openMessages(p.userId)}>Message</button>
+                  <button className="btn btn--secondary btn--small net-list__cta" onClick={() => openMessages(p.userId)}>Message</button>
                 </li>
               ))}
             </ul>
