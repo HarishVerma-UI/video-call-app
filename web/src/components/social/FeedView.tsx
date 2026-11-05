@@ -124,12 +124,12 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
         </>
       )}
       <div className="post__actions">
-        <button className={`post__action-btn${post.likedByMe ? ' is-on' : ''}`} onClick={() => void like()}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={post.likedByMe ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
-          {post.likeCount > 0 ? `${post.likeCount} ` : ''}{post.likedByMe ? 'Unlike' : 'Like'}
+        <button className={`post__action-btn${post.likedByMe ? ' is-on' : ''}`} onClick={() => void like()} aria-pressed={post.likedByMe}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill={post.likedByMe ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+          {post.likeCount} Like{post.likeCount !== 1 ? 's' : ''}
         </button>
         <button className="post__action-btn" onClick={() => setShowComments((s) => !s)}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
           {post.comments.length} Comment{post.comments.length !== 1 ? 's' : ''}
         </button>
       </div>
@@ -138,11 +138,17 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
           {post.comments.length > 0 && (
             <ul className="post__comments">
               {post.comments.map((c) => (
-                <li key={c.id}>
-                  <strong>{c.name}</strong> {c.text}
+                <li key={c.id} className="post__comment-row">
+                  <ProfileAvatar profile={{ userId: c.userId, name: c.name }} size={32} />
+                  <div className="post__comment-body">
+                    <div className="post__comment-main">
+                      <strong>{c.name}</strong> <span className="post__comment-text">{c.text}</span>
+                    </div>
+                    <time className="post__comment-time">{ago(c.ts)}</time>
+                  </div>
                   {(c.userId === me || post.authorId === me || isAdmin) && (
                     <button className="link-btn post__comment-del" onClick={() => void delComment(c.id)} aria-label="Delete comment" title="Delete comment">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
                   )}
                 </li>
@@ -150,8 +156,13 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
             </ul>
           )}
           <form className="post__comment" onSubmit={addComment}>
-            <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment..." aria-label="Write a comment" />
-            <button className="btn btn--primary btn--small" type="submit" disabled={!comment.trim()}>
+            <div className="post__comment-field">
+              <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment…" aria-label="Write a comment" />
+              <button type="button" className="post__comment-emoji" onClick={() => setComment((c) => `${c}🙂`)} aria-label="Add emoji" title="Add emoji">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
+              </button>
+            </div>
+            <button className="btn btn--primary post__comment-send" type="submit" disabled={!comment.trim()}>
               Send
             </button>
           </form>

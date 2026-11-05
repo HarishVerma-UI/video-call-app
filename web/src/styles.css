@@ -2681,10 +2681,25 @@ svg {
 .post__actions { display: flex; gap: 16px; align-items: center; color: var(--muted); font-size: 0.88rem; padding: 8px 0; border-top: 1px solid var(--line); margin-top: 8px; }
 .post__like { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; }
 .post__like.is-on { color: var(--spark); }
-.post__comments { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.post__comments li { font-size: 0.9rem; }
-.post__comment { display: flex; gap: 8px; margin-top: 8px; }
-.post__comment input { flex: 1; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); color: var(--text); padding: 6px 10px; font: inherit; }
+.post__comments { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* comment row: avatar · (name + text, then timestamp) · delete */
+.post__comment-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 2px; }
+.post__comment-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.post__comment-main { font-size: 0.92rem; line-height: 1.35; }
+.post__comment-main strong { font-weight: 600; }
+.post__comment-text { color: var(--text); }
+.post__comment-time { color: var(--faint); font-size: 0.76rem; }
+.post__comment-del { color: var(--muted); opacity: 0; transition: opacity 0.12s; flex: none; }
+.post__comment-row:hover .post__comment-del { opacity: 1; }
+
+/* comment composer: rounded field with an emoji button, then a filled Send */
+.post__comment { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.post__comment-field { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 6px 4px 14px; }
+.post__comment-field:focus-within { border-color: var(--accent); }
+.post__comment-field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--text); font: inherit; padding: 6px 0; }
+.post__comment-emoji { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; color: var(--muted); background: none; border: 0; cursor: pointer; flex: none; }
+.post__comment-emoji:hover { color: var(--accent); background: var(--surface-3); }
+.post__comment-send { flex: none; border-radius: 10px; padding: 9px 20px; font-weight: 600; }
 
 /* network */
 .net-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
