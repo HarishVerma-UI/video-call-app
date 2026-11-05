@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEv
 import { useAuth } from '../../auth/AuthContext';
 import { ago } from '../../format';
 import { uploadFile } from '../../upload';
-import { ConnectButton, ProfileAvatar, roleBadges } from './common';
+import { ConnectButton, EmojiPicker, ProfileAvatar, roleBadges } from './common';
 
 type FeedNav = {
   openUser: (id: string) => void;
@@ -158,9 +158,7 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
           <form className="post__comment" onSubmit={addComment}>
             <div className="post__comment-field">
               <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment…" aria-label="Write a comment" />
-              <button type="button" className="post__comment-emoji" onClick={() => setComment((c) => `${c}🙂`)} aria-label="Add emoji" title="Add emoji">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
-              </button>
+              <EmojiPicker onPick={(em) => setComment((c) => c + em)} />
             </div>
             <button className="btn btn--primary post__comment-send" type="submit" disabled={!comment.trim()}>
               Send
@@ -405,6 +403,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                 {uploading ? 'Uploading...' : 'Add photo'}
               </button>
+              <EmojiPicker className="post-composer__action post-composer__action--emoji" onPick={(em) => setText((t) => t + em)} />
             </div>
             <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void onImage(e)} />
             <button className="btn btn--primary btn--small" type="submit" disabled={busy || uploading || (!text.trim() && !imageKey)} data-testid="submit-post">
