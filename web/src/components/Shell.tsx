@@ -1,5 +1,5 @@
 import { generateRoomId, normalizeRoomId, type AuthUser } from '@vca/shared';
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { AdminView } from './AdminView';
@@ -11,7 +11,7 @@ import { LogsView } from './LogsView';
 import { MeetView } from './MeetView';
 import { ModeToggle } from './ModeToggle';
 import { ProfileView } from './ProfileView';
-import { Avatar } from './RoomBadge';
+import { ProfileAvatar } from './social/common';
 import { FeedView } from './social/FeedView';
 import { MessagesView } from './social/MessagesView';
 import { NetworkView } from './social/NetworkView';
@@ -93,8 +93,8 @@ interface Props {
 }
 
 export function Shell({ user, media, route, go, notice, onJoin }: Props) {
-  const { api } = useAuth();
-  const [query, setQuery] = useState('');
+  const { api, photoUrl } = useAuth();
+  const [search, setSearch] = useState('');
   const [pendingReqs, setPendingReqs] = useState(0);
 
   const loadRequests = useCallback(() => {
@@ -110,12 +110,11 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
     if (route.view === 'network') loadRequests();
   }, [route.view, loadRequests]);
 
-  const search = (e: FormEvent) => {
-    e.preventDefault();
-    const id = normalizeRoomId(query);
-    if (!id) return;
-    setQuery('');
-    go({ view: 'chat', room: id });
+  // One global search for posts + people. Typing jumps to the Home feed, which
+  // shows the results.
+  const onSearch = (v: string) => {
+    setSearch(v);
+    if (v && route.view !== 'feed') go({ view: 'feed' });
   };
 
   const open = (view: Route['view']) => {
@@ -140,15 +139,21 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           <Aperture open={0.42} className="mark" />
           <span>Huddle</span>
         </a>
-        <form className="titlebar__search" onSubmit={search} role="search">
+        <form className="titlebar__search" onSubmit={(e) => e.preventDefault()} role="search">
           <SearchIcon width={16} height={16} />
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Go to a room: type its code and press Enter"
-            aria-label="Go to a room by code"
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            placeholder="Search posts and people"
+            aria-label="Search posts and people"
             spellCheck={false}
+            data-testid="global-search"
           />
+          {search && (
+            <button type="button" className="titlebar__search-clear" onClick={() => setSearch('')} aria-label="Clear search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          )}
         </form>
         <div className="titlebar__end">
           <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
@@ -160,7 +165,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           </button>
           <ModeToggle />
           <button className="titlebar__me" onClick={() => go({ view: 'profile' })} data-testid="open-profile" aria-label="Your profile" title={user.name}>
-            <Avatar id={user.id} name={user.name} size={32} />
+            <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={32} />
             <i className="presence" />
           </button>
         </div>
@@ -207,7 +212,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           aria-current={route.view === 'profile' ? 'page' : undefined}
           data-testid="rail-profile"
         >
-          <Avatar id={user.id} name={user.name} size={26} />
+          <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={26} />
           <span>Profile</span>
         </button>
       </nav>
@@ -229,7 +234,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'profile' && <ProfileView />}
         {route.view === 'admin' && <AdminView />}
         {route.view === 'logs' && <LogsView />}
-        {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} />}
+        {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
         {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
         {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} startCall={(roomId) => onJoin(roomId)} />}

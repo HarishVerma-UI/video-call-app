@@ -9,7 +9,7 @@ type Msg = { ok: boolean; text: string } | null;
 const toList = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
 
 export function ProfessionalProfile() {
-  const { api, user } = useAuth();
+  const { api, user, refreshPhoto } = useAuth();
   const [p, setP] = useState<Profile | null>(null);
   const [headline, setHeadline] = useState('');
   const [bio, setBio] = useState('');
@@ -83,6 +83,7 @@ export function ProfessionalProfile() {
       const photoKey = await uploadFile(api, 'photo', file);
       const { profile } = await api.saveProfile({ ...fields(), photoKey });
       fill(profile);
+      void refreshPhoto(); // update the avatar everywhere (titlebar, feed composer, rail)
     } catch (err) {
       setMsg({ ok: false, text: err instanceof ApiError ? err.message : (err as Error).message });
     } finally {

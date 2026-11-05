@@ -231,8 +231,9 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
 
 /* ── Feed page ── */
 
-export function FeedView({ openUser, openMeet }: { openUser: (id: string) => void; openMeet: () => void }) {
-  const { api, user } = useAuth();
+export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUser: (id: string) => void; openMeet: () => void; query: string; onQueryChange: (v: string) => void }) {
+  const { api, user, photoUrl } = useAuth();
+  const searchQuery = query;
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
@@ -242,7 +243,6 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Post[] | null>(null);
   const [peopleResults, setPeopleResults] = useState<Profile[] | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -364,21 +364,12 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
   return (
     <section className="feed-layout" aria-label="Feed" data-testid="feed">
       <div className="feed-main">
-        <div className="feed-search card">
-          <svg className="feed-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-          <input
-            className="feed-search__input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search posts and people..."
-            aria-label="Search posts and people"
-          />
-          {searchQuery && (
-            <button className="link-btn feed-search__clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
-          )}
-        </div>
+        {searchQuery.trim() && (
+          <div className="feed-results-head">
+            <span>Results for “{searchQuery.trim()}”</span>
+            <button className="link-btn" onClick={() => onQueryChange('')}>Clear</button>
+          </div>
+        )}
 
         {searchQuery.trim() && peopleResults && peopleResults.length > 0 && (
           <div className="card feed-people">
@@ -391,7 +382,7 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
 
         <form className="card post-composer" onSubmit={submit}>
           <div className="post-composer__top">
-            <ProfileAvatar profile={{ userId: user.id, name: user.name }} size={40} />
+            <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={40} />
             <textarea className="pp-textarea post-composer__input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Share an update, a question, or a win..." />
           </div>
           {uploading && <p className="form-msg">Uploading image...</p>}
