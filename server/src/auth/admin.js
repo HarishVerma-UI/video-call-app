@@ -129,9 +129,9 @@ export function createAdmin(opts) {
 
   async function deleteUser(req, res, id) {
     const admin = await requireAdmin(req);
-    if (id === admin.id) throw new HttpError(400, ‘You can’t delete your own account while signed in.’, { code: ‘self-delete’ });
+    if (id === admin.id) throw new HttpError(400, 'You can’t delete your own account while signed in.', { code: 'self-delete' });
     const target = await opts.store.findById(id);
-    if (!target) throw new HttpError(404, ‘User not found.’);
+    if (!target) throw new HttpError(404, 'User not found.');
     await opts.store.remove(id);
     // Cascade: remove social data for the deleted user
     if (opts.social) {
