@@ -1,4 +1,4 @@
-import { generateRoomId, type Conversation, type DmMessage } from '@vca/shared';
+import { generateRoomId, type Conversation, type DmMessage, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { ago } from '../../format';
@@ -7,6 +7,7 @@ import { ProfileAvatar } from './common';
 export function MessagesView({ initialUser, startCall }: { initialUser?: string; startCall?: (roomId: string) => void }) {
   const { api, user } = useAuth();
   const [convs, setConvs] = useState<Conversation[] | null>(null);
+  const [connections, setConnections] = useState<Profile[]>([]);
   const [active, setActive] = useState<string | null>(initialUser ?? null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [headerName, setHeaderName] = useState('');
@@ -22,6 +23,11 @@ export function MessagesView({ initialUser, startCall }: { initialUser?: string;
     api.conversations().then(({ conversations }) => setConvs(conversations)).catch(() => setConvs([]));
   }, [api]);
   useEffect(() => loadConvs(), [loadConvs]);
+
+  // Your connections — people you can start a conversation with.
+  useEffect(() => {
+    api.listConnections().then(({ connections: c }) => setConnections(c)).catch(() => {});
+  }, [api]);
 
   const loadThread = useCallback(async (other: string) => {
     try {
@@ -93,33 +99,64 @@ export function MessagesView({ initialUser, startCall }: { initialUser?: string;
         </div>
         {convs === null ? (
           <div className="skeleton-list" aria-hidden="true"><i /></div>
-        ) : convs.length === 0 ? (
-          <p className="card__empty">No messages yet.</p>
         ) : (
           <>
-            <ul>
-              {convs.slice(0, convPage * CONV_PAGE_SIZE).map((c) => (
-                <li key={c.other}>
-                  <button className={`messages__conv${active === c.other ? ' is-on' : ''}`} onClick={() => setActive(c.other)}>
-                    <div className="messages__conv-avatar">
-                      <ProfileAvatar profile={c.profile} size={40} />
-                    </div>
-                    <span className="messages__conv-text">
-                      <span className="messages__conv-top">
-                        <strong>{c.profile.name || 'Member'}</strong>
-                        <time>{ago(c.last.ts)}</time>
+            {convs.length > 0 && (
+              <ul>
+                {convs.slice(0, convPage * CONV_PAGE_SIZE).map((c) => (
+                  <li key={c.other}>
+                    <button className={`messages__conv${active === c.other ? ' is-on' : ''}`} onClick={() => setActive(c.other)}>
+                      <div className="messages__conv-avatar">
+                        <ProfileAvatar profile={c.profile} size={40} />
+                      </div>
+                      <span className="messages__conv-text">
+                        <span className="messages__conv-top">
+                          <strong>{c.profile.name || 'Member'}</strong>
+                          <time>{ago(c.last.ts)}</time>
+                        </span>
+                        <span className="messages__conv-preview">{c.last.text}</span>
                       </span>
-                      <span className="messages__conv-preview">{c.last.text}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {convs.length > convPage * CONV_PAGE_SIZE && (
               <button className="btn btn--secondary btn--small btn--full" onClick={() => setConvPage((p) => p + 1)} style={{ margin: '0.5rem' }}>
                 Show more conversations
               </button>
             )}
+
+            {/* People you know — start a new conversation with a connection. */}
+            {(() => {
+              const convIds = new Set((convs ?? []).map((c) => c.other));
+              const startable = connections.filter((p) => !convIds.has(p.userId)).slice(0, 20);
+              if (convs.length === 0 && startable.length === 0)
+                return <p className="card__empty">No messages yet. Connect with people to start chatting.</p>;
+              if (startable.length === 0) return null;
+              return (
+                <div className="messages__people">
+                  <h3 className="messages__people-title">People you know</h3>
+                  <ul>
+                    {startable.map((p) => (
+                      <li key={p.userId}>
+                        <button className={`messages__conv${active === p.userId ? ' is-on' : ''}`} onClick={() => setActive(p.userId)}>
+                          <div className="messages__conv-avatar">
+                            <ProfileAvatar profile={p} size={40} />
+                          </div>
+                          <span className="messages__conv-text">
+                            <span className="messages__conv-top">
+                              <strong>{p.name || 'Member'}</strong>
+                            </span>
+                            {p.headline && <span className="messages__conv-preview">{p.headline}</span>}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </>
         )}
       </aside>

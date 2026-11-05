@@ -1036,6 +1036,14 @@ svg {
   background: transparent;
   color: var(--text);
 }
+.titlebar__search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  flex: none;
+}
+.titlebar__search-clear:hover { color: var(--text); }
 .titlebar__end {
   justify-self: end;
   display: flex;
@@ -2708,6 +2716,11 @@ svg {
 .messages__conv.is-on { background: var(--surface-2); }
 .messages__conv-text { display: flex; flex-direction: column; overflow: hidden; }
 .messages__conv-text span { color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.messages__people { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.messages__people-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 6px; padding: 0 8px; }
+
+/* feed search results header (search lives in the top bar now) */
+.feed-results-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 8px; font-size: 0.9rem; color: var(--muted); }
 .messages__thread { display: flex; flex-direction: column; min-height: 420px; }
 .messages__head { font-weight: 600; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .messages__scroll { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 0; }

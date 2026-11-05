@@ -27,6 +27,10 @@ interface AuthValue {
   changePassword: (currentPassword: string | null, newPassword: string) => Promise<void>;
   /** Re-read the user (e.g. after a change elsewhere). */
   refreshUser: () => Promise<void>;
+  /** The signed-in user's profile photo URL (null if none). Shown in avatars app-wide. */
+  photoUrl: string | null;
+  /** Re-read the signed-in user's profile photo (call after uploading a new one). */
+  refreshPhoto: () => Promise<void>;
   /** Message to show on the sign-in page (e.g. "session expired"). */
   notice: string | null;
 }
@@ -84,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [status, setStatus] = useState<Status>(() => (session ? 'checking' : 'signed-out'));
   const [notice, setNotice] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(session?.token ?? null);
   tokenRef.current = session?.token ?? null;
 
@@ -91,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     save(null);
     setSession(null);
     setStatus('signed-out');
+    setPhotoUrl(null);
     setNotice(reason ?? null);
   }, []);
 
@@ -146,6 +152,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-in');
   }, []);
 
+  const refreshPhoto = useCallback(async () => {
+    try {
+      const { profile } = await api.myProfile();
+      setPhotoUrl(profile.photoUrl ?? null);
+    } catch {
+      /* ignore — avatars fall back to initials */
+    }
+  }, [api]);
+
+  // Load the signed-in user's profile photo once, so avatars app-wide can show it.
+  const signedIn = status === 'signed-in';
+  useEffect(() => {
+    if (signedIn) void refreshPhoto();
+  }, [signedIn, refreshPhoto]);
+
   const value: AuthValue = {
     status,
     user: status === 'signed-in' ? session?.user ?? null : null,
@@ -179,6 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
+    photoUrl,
+    refreshPhoto,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
