@@ -2701,6 +2701,41 @@ svg {
 .post__comment-emoji:hover { color: var(--accent); background: var(--surface-3); }
 .post__comment-send { flex: none; border-radius: 10px; padding: 9px 20px; font-weight: 600; }
 
+/* emoji picker popover */
+.emoji-pick { position: relative; display: inline-flex; flex: none; }
+.emoji-pick__pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 232px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+.emoji-pick__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.emoji-pick__item:hover { background: var(--surface-3); }
+.post-composer__action--emoji { padding: 4px 8px; }
+
 /* network */
 .net-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .net-list li { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--line); }
