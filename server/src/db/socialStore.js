@@ -79,7 +79,7 @@ export function createMemoryProfileStore() {
     async getMany(userIds) {
       return userIds.map((u) => byUser.get(u)).filter(Boolean).map((p) => ({ ...p }));
     },
-    async search({ q = '', role = '', limit = 30, exclude } = {}) {
+    async search({ q = '', role = '', limit = 30, skip = 0, exclude } = {}) {
       const needle = q.trim().toLowerCase();
       let list = [...byUser.values()];
       if (exclude) list = list.filter((p) => p.userId !== exclude);
@@ -89,7 +89,11 @@ export function createMemoryProfileStore() {
         list = list.filter((p) =>
           [p.name, p.headline, p.location, ...(p.skills ?? [])].join(' ').toLowerCase().includes(needle),
         );
-      return list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, limit).map((p) => ({ ...p }));
+      const sorted = list.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      return { items: sorted.slice(skip, skip + limit).map((p) => ({ ...p })), total: sorted.length };
+    },
+    async remove(userId) {
+      return byUser.delete(userId);
     },
   };
 }
@@ -109,7 +113,7 @@ function mongoProfileStore(col) {
     async getMany(userIds) {
       return (await col.find({ _id: { $in: userIds } }).toArray()).map(toP);
     },
-    async search({ q = '', role = '', limit = 30, exclude } = {}) {
+    async search({ q = '', role = '', limit = 30, skip = 0, exclude } = {}) {
       const filter = {};
       if (exclude) filter._id = { $ne: exclude };
       if (role === 'mentor') filter.mentor = true;
@@ -119,7 +123,15 @@ function mongoProfileStore(col) {
         const rx = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
         filter.$or = [{ name: rx }, { headline: rx }, { location: rx }, { skills: rx }];
       }
-      return (await col.find(filter).sort({ updatedAt: -1 }).limit(limit).toArray()).map(toP);
+      const [items, total] = await Promise.all([
+        col.find(filter).sort({ updatedAt: -1 }).skip(skip).limit(limit).toArray(),
+        col.countDocuments(filter),
+      ]);
+      return { items: items.map(toP), total };
+    },
+    async remove(userId) {
+      const res = await col.deleteOne({ _id: userId });
+      return res.deletedCount > 0;
     },
   };
 }
@@ -160,6 +172,11 @@ export function createMemoryConnectionStore() {
       const c = byPair.get(pairKey(a, b));
       return !!c && c.status === 'accepted';
     },
+    async removeByUser(userId) {
+      for (const [key, c] of byPair) {
+        if (c.users.includes(userId)) byPair.delete(key);
+      }
+    },
   };
 }
 
@@ -196,6 +213,9 @@ function mongoConnectionStore(col) {
     async areConnected(a, b) {
       return !!(await col.findOne({ _id: pairKey(a, b), status: 'accepted' }));
     },
+    async removeByUser(userId) {
+      await col.deleteMany({ users: userId });
+    },
   };
 }
 
@@ -212,6 +232,13 @@ export function createMemoryPostStore() {
     async byId(id) {
       const p = byId.get(id);
       return p ? { ...p } : null;
+    },
+    async update(id, patch) {
+      const p = byId.get(id);
+      if (!p) return null;
+      if (patch.text !== undefined) p.text = patch.text;
+      p.updatedAt = now();
+      return { ...p };
     },
     async feed(authorIds, { before, limit = 20 } = {}) {
       let list = [...byId.values()];
@@ -231,8 +258,27 @@ export function createMemoryPostStore() {
       p.comments.push({ id: id12(), userId, name, text, ts: Date.now() });
       return { ...p };
     },
+    async removeComment(postId, commentId) {
+      const p = byId.get(postId);
+      if (!p) return null;
+      p.comments = p.comments.filter((c) => c.id !== commentId);
+      return { ...p };
+    },
+    async searchText(q, { before, limit = 20 } = {}) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      let list = [...byId.values()].filter((p) => rx.test(p.text));
+      if (before) list = list.filter((p) => new Date(p.createdAt).getTime() < before);
+      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, limit).map((p) => ({ ...p }));
+    },
     async remove(id) {
       return byId.delete(id);
+    },
+    async removeByAuthor(authorId) {
+      const removed = [];
+      for (const [id, p] of byId) {
+        if (p.authorId === authorId) { byId.delete(id); removed.push(p); }
+      }
+      return removed;
     },
   };
 }
@@ -250,6 +296,15 @@ function mongoPostStore(col, ObjectId) {
     async byId(id) {
       const _id = oid(id);
       return _id ? toPost(await col.findOne({ _id })) : null;
+    },
+    async update(id, patch) {
+      const _id = oid(id);
+      if (!_id) return null;
+      const set = {};
+      if (patch.text !== undefined) set.text = patch.text;
+      set.updatedAt = now();
+      await col.updateOne({ _id }, { $set: set });
+      return toPost(await col.findOne({ _id }));
     },
     async feed(authorIds, { before, limit = 20 } = {}) {
       const filter = authorIds ? { authorId: { $in: authorIds } } : {};
@@ -271,11 +326,28 @@ function mongoPostStore(col, ObjectId) {
       await col.updateOne({ _id }, { $push: { comments: { id: id12(), userId, name, text, ts: Date.now() } } });
       return toPost(await col.findOne({ _id }));
     },
+    async removeComment(postId, commentId) {
+      const _id = oid(postId);
+      if (!_id) return null;
+      await col.updateOne({ _id }, { $pull: { comments: { id: commentId } } });
+      return toPost(await col.findOne({ _id }));
+    },
+    async searchText(q, { before, limit = 20 } = {}) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const filter = { text: rx };
+      if (before) filter.createdAt = { $lt: new Date(before) };
+      return (await col.find(filter).sort({ createdAt: -1 }).limit(limit).toArray()).map(toPost);
+    },
     async remove(id) {
       const _id = oid(id);
       if (!_id) return false;
       const res = await col.deleteOne({ _id });
       return res.deletedCount > 0;
+    },
+    async removeByAuthor(authorId) {
+      const docs = await col.find({ authorId }).toArray();
+      if (docs.length) await col.deleteMany({ authorId });
+      return docs.map(toPost);
     },
   };
 }
@@ -307,6 +379,11 @@ export function createMemoryDmStore() {
       }
       return out.sort((x, y) => y.last.ts - x.last.ts);
     },
+    async removeByUser(userId) {
+      for (const [key, arr] of byConv) {
+        if (arr.some((m) => m.from === userId || m.to === userId)) byConv.delete(key);
+      }
+    },
   };
 }
 
@@ -336,6 +413,9 @@ function mongoDmStore(col) {
         ])
         .toArray();
       return docs.map((d) => ({ other: d.last.from === userId ? d.last.to : d.last.from, last: toM(d.last) }));
+    },
+    async removeByUser(userId) {
+      await col.deleteMany({ $or: [{ from: userId }, { to: userId }] });
     },
   };
 }

@@ -29,7 +29,7 @@ function passwordError(pw) {
 const roleOk = (r) => r === 'user' || r === 'admin';
 
 /**
- * @param {{ store: any, requireUser: (req)=>Promise<any>, log?: Function, getStats?: ()=>object }} opts
+ * @param {{ store: any, requireUser: (req)=>Promise<any>, log?: Function, getStats?: ()=>object, social?: object }} opts
  */
 export function createAdmin(opts) {
   async function requireAdmin(req) {
@@ -38,10 +38,14 @@ export function createAdmin(opts) {
     return user;
   }
 
-  async function listUsers(req, res) {
+  async function listUsers(req, res, url) {
     await requireAdmin(req);
-    const [users, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
-    sendJson(res, 200, { users: users.map(publicUser), total });
+    const page = Math.max(1, Number(url?.searchParams?.get('page')) || 1);
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams?.get('limit')) || 20));
+    const skip = (page - 1) * limit;
+    const [allUsers, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
+    const paged = allUsers.slice(skip, skip + limit);
+    sendJson(res, 200, { users: paged.map(publicUser), total, page, limit });
   }
 
   async function createUser(req, res) {
@@ -129,6 +133,17 @@ export function createAdmin(opts) {
     const target = await opts.store.findById(id);
     if (!target) throw new HttpError(404, 'User not found.');
     await opts.store.remove(id);
+    // Cascade: remove social data for the deleted user
+    if (opts.social) {
+      const { profiles, connections, posts, dms } = opts.social;
+      await Promise.all([
+        profiles?.remove?.(id),
+        connections?.removeByUser?.(id),
+        posts?.removeByAuthor?.(id),
+        dms?.removeByUser?.(id),
+      ].filter(Boolean));
+      opts.log?.(`admin  cascaded social data deletion for ${id}`);
+    }
     opts.log?.(`admin  deleted ${target.email || target.id}`);
     sendJson(res, 200, { ok: true, id });
   }
@@ -154,9 +169,9 @@ export function createAdmin(opts) {
   }
 
   /** Returns true if the request was an admin route (and has been answered). */
-  async function handle(req, res, pathname) {
+  async function handle(req, res, pathname, url) {
     if (!pathname.startsWith('/api/admin/')) return false;
-    if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res);
+    if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res, url);
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
     else {

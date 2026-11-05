@@ -203,6 +203,9 @@ export interface ApiClient {
   likePost(id: string): Promise<{ post: Post }>;
   commentPost(id: string, text: string): Promise<{ post: Post }>;
   deletePost(id: string): Promise<{ ok: boolean }>;
+  editPost(id: string, text: string): Promise<{ post: Post }>;
+  deleteComment(postId: string, commentId: string): Promise<{ post: Post }>;
+  searchPosts(q: string, page?: number): Promise<{ posts: Post[] }>;
   dmThread(userId: string): Promise<{ messages: DmMessage[] }>;
   sendDm(userId: string, text: string): Promise<{ message: DmMessage }>;
   conversations(): Promise<{ conversations: Conversation[] }>;
@@ -287,6 +290,13 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     likePost: (id) => request('POST', `/api/posts/${encodeURIComponent(id)}/like`, {}),
     commentPost: (id, text) => request('POST', `/api/posts/${encodeURIComponent(id)}/comments`, { text }),
     deletePost: (id) => request('DELETE', `/api/posts/${encodeURIComponent(id)}`),
+    editPost: (id, text) => request('PATCH', `/api/posts/${encodeURIComponent(id)}`, { text }),
+    deleteComment: (postId, commentId) => request('DELETE', `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`),
+    searchPosts: (q, page) => {
+      const params = new URLSearchParams({ q });
+      if (page !== undefined) params.set('page', String(page));
+      return request('GET', `/api/posts/search?${params.toString()}`);
+    },
     dmThread: (userId) => request('GET', `/api/dm/${encodeURIComponent(userId)}`),
     sendDm: (userId, text) => request('POST', `/api/dm/${encodeURIComponent(userId)}`, { text }),
     conversations: () => request('GET', '/api/dm'),

@@ -394,21 +394,21 @@ export function AdminView() {
         <div className="card admin-dash__resources">
           <header className="card__head"><h2>Quick Resources</h2></header>
           <div className="admin-resources__grid">
-            <a className="admin-resources__item" href="/people" onClick={(e: MouseEvent) => { e.preventDefault(); }}>
+            <a className="admin-resources__item" href="/people">
               <PeopleIcon width={22} height={22} />
               <span>Browse Users</span>
             </a>
-            <a className="admin-resources__item" href="/network" onClick={(e: MouseEvent) => { e.preventDefault(); }}>
+            <a className="admin-resources__item" href="/network">
               <UserIcon width={22} height={22} />
               <span>Connections</span>
             </a>
-            <a className="admin-resources__item" href="/meet" onClick={(e: MouseEvent) => { e.preventDefault(); }}>
+            <a className="admin-resources__item" href="/meet">
               <VideoIcon width={22} height={22} />
               <span>Active Call Monitor</span>
             </a>
-            <a className="admin-resources__item" href="/" onClick={(e: MouseEvent) => { e.preventDefault(); }}>
+            <a className="admin-resources__item" href="/logs">
               <ShieldIcon width={22} height={22} />
-              <span>Server Health</span>
+              <span>Server Logs</span>
             </a>
           </div>
         </div>
