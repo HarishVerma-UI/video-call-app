@@ -123,7 +123,10 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
       {/* Right sidebar: People You May Know */}
       <aside className="network-sidebar" aria-label="Suggestions">
         <div className="sidebar-card">
-          <h3 className="sidebar-card__title">People You May Know</h3>
+          <h3 className="sidebar-card__title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>
+            People you may know
+          </h3>
           {(() => {
             const known = suggestions.filter((s) => s.connection === 'none');
             if (known.length === 0) return <p className="sidebar-card__empty">No suggestions yet.</p>;
@@ -132,7 +135,7 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
                 {known.slice(0, 8).map((p) => (
                   <li key={p.userId} className="sidebar-people__item">
                     <button className="post__author-link" onClick={() => openUser(p.userId)}>
-                      <ProfileAvatar profile={p} size={34} />
+                      <ProfileAvatar profile={p} size={46} />
                       <span className="sidebar-people__text">
                         <strong>{p.name || 'Member'}</strong>
                         {p.headline && <em>{p.headline}</em>}

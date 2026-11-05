@@ -187,7 +187,7 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
             {suggestions.slice(0, 5).map((p) => (
               <li key={p.userId} className="sidebar-people__item">
                 <button className="post__author-link" onClick={() => nav.openUser(p.userId)}>
-                  <ProfileAvatar profile={p} size={34} />
+                  <ProfileAvatar profile={p} size={46} />
                   <span className="sidebar-people__text">
                     <strong>{p.name || 'Member'}</strong>
                     {p.headline && <em>{p.headline}</em>}
