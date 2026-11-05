@@ -1,13 +1,16 @@
-import type { Profile } from '@vca/shared';
+import type { ConnectionState, Profile } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { ProfileAvatar, roleBadges } from './common';
+import { ConnectButton, ProfileAvatar, roleBadges } from './common';
 
 export function NetworkView({ openUser, openMessages }: { openUser: (id: string) => void; openMessages: (id: string) => void }) {
   const { api } = useAuth();
   const [requests, setRequests] = useState<Profile[] | null>(null);
   const [connections, setConnections] = useState<Profile[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
+
+  const onConn = (id: string, connection: ConnectionState) =>
+    setSuggestions((xs) => xs.map((p) => (p.userId === id ? { ...p, connection } : p)));
 
   const load = useCallback(async () => {
     try {
@@ -23,7 +26,7 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
   useEffect(() => {
     void load();
     // Load suggested people
-    api.searchPeople({}).then(({ people }) => setSuggestions(people.slice(0, 5))).catch(() => {});
+    api.searchPeople({}).then(({ people }) => setSuggestions(people)).catch(() => {});
   }, [load, api]);
 
   const accept = async (id: string) => {
@@ -121,23 +124,26 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
       <aside className="network-sidebar" aria-label="Suggestions">
         <div className="sidebar-card">
           <h3 className="sidebar-card__title">People You May Know</h3>
-          {suggestions.length === 0 ? (
-            <p className="sidebar-card__empty">No suggestions yet.</p>
-          ) : (
-            <ul className="sidebar-card__list">
-              {suggestions.filter((s) => s.connection === 'none').slice(0, 5).map((p) => (
-                <li key={p.userId} className="sidebar-card__person">
-                  <button className="sidebar-card__person-btn" onClick={() => openUser(p.userId)}>
-                    <ProfileAvatar profile={p} size={32} />
-                    <span>
-                      <strong>{p.name || 'Member'}</strong>
-                      <span>{p.headline || ''}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {(() => {
+            const known = suggestions.filter((s) => s.connection === 'none');
+            if (known.length === 0) return <p className="sidebar-card__empty">No suggestions yet.</p>;
+            return (
+              <ul className="sidebar-people">
+                {known.slice(0, 8).map((p) => (
+                  <li key={p.userId} className="sidebar-people__item">
+                    <button className="post__author-link" onClick={() => openUser(p.userId)}>
+                      <ProfileAvatar profile={p} size={34} />
+                      <span className="sidebar-people__text">
+                        <strong>{p.name || 'Member'}</strong>
+                        {p.headline && <em>{p.headline}</em>}
+                      </span>
+                    </button>
+                    <ConnectButton profile={p} api={api} onChange={(s) => onConn(p.userId, s)} />
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
         </div>
         <div className="sidebar-card sidebar-card--cta">
           <h3 className="sidebar-card__title">Grow Your Network</h3>
