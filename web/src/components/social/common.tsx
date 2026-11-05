@@ -38,7 +38,7 @@ export function ConnectButton({ profile, api, onChange }: { profile: Profile; ap
     );
   return (
     <button className="btn btn--primary btn--small" disabled={busy} onClick={() => void act(() => api.requestConnect(profile.userId))}>
-      Connect
+      + Connect
     </button>
   );
 }
