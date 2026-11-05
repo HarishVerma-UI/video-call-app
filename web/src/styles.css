@@ -2687,12 +2687,17 @@ svg {
 .post__comment input { flex: 1; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); color: var(--text); padding: 6px 10px; font: inherit; }
 
 /* network */
-.net-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.net-list li { display: flex; align-items: center; gap: 10px; }
-.net-list__who { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; background: none; border: 0; text-align: left; cursor: pointer; color: inherit; }
-.net-list__who > span { display: flex; flex-direction: column; }
-.net-list__who > span > span { color: var(--muted); font-size: 0.85rem; }
-.net-list__actions { display: flex; gap: 6px; }
+.net-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.net-list li { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--line); }
+.net-list li:first-child { border-top: 0; }
+.net-list__who { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; background: none; border: 0; text-align: left; cursor: pointer; color: inherit; padding: 2px; border-radius: var(--r-sm); }
+.net-list__who:hover { background: var(--surface-2); }
+.net-list__meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.net-list__meta > strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-list__headline { color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net-list__badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.net-list__cta { flex: none; margin-left: auto; }
+.net-list__actions { display: flex; gap: 6px; flex: none; margin-left: auto; }
 
 /* person profile */
 .person-hero { display: flex; gap: 16px; align-items: flex-start; }
