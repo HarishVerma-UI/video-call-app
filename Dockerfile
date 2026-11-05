@@ -28,13 +28,19 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     WEB_DIST=/app/web/dist
 WORKDIR /app
+# su-exec lets the entrypoint fix the bind-mounted uploads dir as root, then
+# drop to the unprivileged "node" user to run the server.
+RUN apk add --no-cache su-exec
 COPY --from=server-deps /app/server/node_modules server/node_modules
 COPY server/package.json server/package.json
 COPY server/src server/src
 COPY --from=web /src/web/dist web/dist
-RUN mkdir -p /app/uploads && chown node:node /app/uploads
-USER node
+COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN mkdir -p /app/uploads && chown node:node /app/uploads && chmod +x /usr/local/bin/docker-entrypoint.sh
+# NOTE: we intentionally do NOT `USER node` here — the entrypoint starts as
+# root to chown the mounted uploads volume, then execs the server as node.
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server/src/index.js"]
