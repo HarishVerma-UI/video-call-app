@@ -1,12 +1,18 @@
 # Huddle: group video meetings with chat (React · React Native · Node.js · MongoDB)
 
 Private group video meetings for up to 10 people, on **web, Android and iOS**,
-built from scratch on **WebRTC**. The app is laid out like **Microsoft Teams**
-(a left app rail with Meet, Chat, Calls and Profile), with a camera-lens twist.
-You **sign in with your email and password**, or with **Google or GitHub**, and
-an **admin dashboard** lets an administrator see everyone who has registered and
-manage accounts. No paid video vendor is involved: the Node.js server only
-introduces people to each other, and audio and video flow directly between devices.
+built from scratch on **WebRTC** — now wrapped in a **professional network** with
+a Facebook-style home feed, profiles, connections, direct messages and
+admin-managed ads. You **sign in with your email and password**, or with
+**Google or GitHub**, and an **admin dashboard** lets an administrator manage
+accounts and the ads shown in the feed. No paid video vendor is involved: the
+Node.js server only introduces people to each other, and audio and video flow
+directly between devices.
+
+The web app is laid out like a social network: a top bar with **one search for
+posts and people** plus Messages and connection-request shortcuts, a left rail
+(**Home, Network, Messages, Meet**, and Admin/Logs for admins), and a centered
+feed with a "people you may know" and sponsored sidebar.
 
 > **▶ Live demo: [harish007.duckdns.org](https://harish007.duckdns.org)**
 > Create an account and start a meeting. It's best with two
@@ -56,51 +62,64 @@ server, with HTTPS at [harish007.duckdns.org](https://harish007.duckdns.org).
   With credentials missing, the corresponding button is hidden.
 - **Admin dashboard.** An account with the **admin** role gets an **Admin** tab
   that lists everyone who has registered, with full create / edit / delete and
-  the ability to change a user's role. On first start the server seeds an admin
-  account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (default **admin / admin** — change
-  the password before going live). Admins can't delete themselves or drop their
-  own admin role, so you can't lock yourself out.
+  the ability to change a user's role, plus an **Ads Manager** for the promo cards
+  shown in the feed. On first start the server seeds an admin account from
+  `ADMIN_EMAIL` / `ADMIN_PASSWORD` (default **admin / admin** — change the password
+  before going live) and gives it a social profile so it can be connected to and
+  messaged like anyone else. Admins can't delete themselves or drop their own admin
+  role, so you can't lock yourself out.
+- **Demo data.** `node server/src/seed.js` (or `docker compose exec app node
+  server/src/seed.js`) fills the network with 30 sample users, profiles, photos
+  and posts so the feed isn't empty — handy for a demo.
 
-## Growing into a professional network (round one)
+## The professional network
 
-Huddle is being extended from a video-call app into a **professional network where job
-seekers find mentors and guidance**. Round one adds the following — the **server and tests
-are complete**; the web UI is in progress:
+Huddle grew from a video-call app into a **professional network where job seekers
+find mentors and guidance** — the **server, web UI and tests are in place**:
 
 - **Professional profiles & CV** — photo, headline, bio, location, skills, experience,
   education, mobile, and a CV upload. A **partial profile** (photo, name, headline, skills)
   is visible to anyone; private details (mobile, CV, full experience) unlock only after a
-  connection is **accepted**.
+  connection is **accepted**. The CV is downloadable by accepted connections.
 - **Connections** — request, accept or decline; connections unlock full profiles and messaging.
-- **Posts & feed** — post text and a photo, like and comment; your home feed shows posts from
-  you and your connections.
-- **Direct messages** — 1:1 chat between connected users.
-- **Mentorship** — "request guidance" from a mentor, then chat and start a **live video call**
-  (reusing the existing WebRTC calls).
+  A **pending-request badge** sits in the top bar, and someone you've already requested is
+  hidden from people search.
+- **Facebook-style home feed** — the Feed and People pages are merged into one centered Home.
+  Post text and a photo, like, **comment**, **edit** and **delete** your own posts and comments;
+  click any post author to open their profile. A sidebar shows **People you may know** (with
+  Connect buttons) and **Sponsored** ads.
+- **One unified search** in the top bar searches **posts and people together**.
+- **Direct messages** — 1:1 chat between connected users; the Messages page lists your
+  connections ("people you know") so you can start a conversation, and you can jump straight
+  into a **live video call** from a thread.
+- **Admin-managed ads** — admins create/edit/delete promo cards (title, body, link, image,
+  active toggle) in the dashboard; active ones render in every member's feed.
+- **Your profile photo shows everywhere** — top bar, rail and feed composer update the moment
+  you upload a new one.
 
 ### Design
 
-- **Media on S3.** In production, photos, CVs and post images upload straight from the browser to **Amazon S3**
-  via short-lived **presigned URLs**, so large files never pass through the Node server. The
-  bucket stays fully private: reads use short-lived presigned GET links, and a CV is only
-  readable by accepted connections.
-- **Local media in development.** Without S3 credentials, the development server stores uploads
-  under `server/uploads/`. This local-file fallback is disabled in production.
-  For production S3 uploads, configure the bucket's CORS policy to allow `PUT` from your app's
-  HTTPS origin (for example `https://your-domain.example`).
+- **Static media folder (default).** Uploads (photos, CVs, post images) are written to an
+  `uploads/` folder and served from a **stable `/media/<key>` URL** that never expires, so
+  images keep working in the UI indefinitely. The folder is a Docker volume in production, so
+  files survive restarts. Uploads use short-lived **signed PUTs**; a 10 MB limit and file-type
+  checks are enforced.
+- **Amazon S3 (optional).** Set `S3_BUCKET`/`AWS_*` and uploads go straight to S3 via presigned
+  URLs instead of the local folder — configure the bucket's CORS to allow `PUT` from your app's
+  HTTPS origin.
 - **Partial visibility is enforced on the server** — every profile response is shaped by the
   viewer's connection state, so private fields are never sent to strangers.
 - **Reuse over rebuild.** The mentorship session is the existing WebRTC call; direct messages
   extend the chat system; accounts, roles and the admin dashboard carry over unchanged.
-- **Data** lives in MongoDB collections: `profiles`, `connections`, `posts`, `dms`.
-
-The full plan, phases and open decisions live in the product-requirements doc.
+- **Data** lives in MongoDB collections: `profiles`, `connections`, `posts`, `dms`, `ads`.
+  Deleting a user cascades to their profile, connections, posts and DMs.
 
 ## Design: Teams, with a lens
 
-- **Layout like Teams:** title bar with a room search, a left **app rail**
-  (Meet, Chat, Calls, Profile), a list pane, and the main stage. On phones the
-  rail becomes a bottom tab bar.
+- **Layout like a social network:** a top bar with **one search for posts and
+  people** (plus Messages and connection-request shortcuts), a left **app rail**
+  (Home, Network, Messages, Meet — Admin and Logs for admins), a centered feed,
+  and the meeting stage. On phones the rail becomes a bottom tab bar.
 - **Meetings like Teams:** a top bar with Chat, People, Camera, Mic, Share and a
   red **Leave** button; chat and people open as side panels.
 - **The creative part:** a calm **indigo** for actions and a warm **amber
@@ -135,6 +154,14 @@ The full plan, phases and open decisions live in the product-requirements doc.
 
 **Calls**
 - Your call history: room, who was there, when, how long, and **Call again**
+
+**Network, feed & messages**
+- **Profiles** with photo, headline, bio, skills, experience, education and a CV; private fields unlock only for accepted connections
+- **Connections**: request / accept / decline, a top-bar pending-request badge, and "People you may know" with Connect buttons
+- **Home feed**: post text + photo, like, comment, edit and delete; click an author to view their profile; infinite scroll
+- **One search** for posts and people; **direct messages** between connections with a live-video-call button
+- **Ads**: admins manage promo cards in the dashboard; active ads appear in the member feed
+- **Uploads** (photos, CVs, post images) served from a stable `/media/...` URL, or Amazon S3 when configured
 
 ## Project layout
 
@@ -234,7 +261,11 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | GET | `/api/admin/users` | Bearer (admin) | → `{ users, total }` |
 | POST | `/api/admin/users` | Bearer (admin) | `{ name, email, password, role? }` → `201 { user }` |
 | PATCH | `/api/admin/users/:id` | Bearer (admin) | `{ name?, email?, role?, password? }` → `{ user }` |
-| DELETE | `/api/admin/users/:id` | Bearer (admin) | → `{ ok, id }` (you can't delete yourself) |
+| DELETE | `/api/admin/users/:id` | Bearer (admin) | → `{ ok, id }` (cascades to their social data; you can't delete yourself) |
+| GET | `/api/admin/ads` | Bearer (admin) | → `{ ads }` (all ads) |
+| POST | `/api/admin/ads` | Bearer (admin) | `{ title, body?, linkUrl?, imageKey?, active? }` → `201 { ad }` |
+| PATCH | `/api/admin/ads/:id` | Bearer (admin) | ad fields → `{ ad }` |
+| DELETE | `/api/admin/ads/:id` | Bearer (admin) | → `{ ok, id }` |
 | GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, people, maxPeers, full }` |
 | POST | `/api/rooms/:id/messages` | Bearer | `{ text }` → `201 { message }`; also sent live to people in the meeting |
 | GET | `/api/chats` | Bearer | → `{ chats }`: your rooms, last message, who's in the meeting now |
@@ -246,7 +277,7 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 Errors are `{ error, code?, fields? }`. `fields` holds per-field messages for
 forms (e.g. `{ email: "Already registered…" }`).
 
-### Professional network API (round one)
+### Professional network API
 
 All require a Bearer token. Profile responses are shaped by the viewer's connection state.
 
@@ -255,20 +286,25 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | GET | `/api/profile/me` | → `{ profile }` (your full profile) |
 | PUT | `/api/profile` | profile fields → `{ profile }` |
 | GET | `/api/profile/:userId` | → `{ profile, posts }` (partial unless connected) |
-| GET | `/api/people?q=&role=` | → `{ people }` (search; `role` = `mentor`/`mentee`) |
-| POST | `/api/media/upload-url` | `{ kind, contentType }` → `{ uploadUrl, key }` (S3 presigned; `kind` = `photo`/`cv`/`post`) |
+| GET | `/api/people?q=&role=&page=&limit=` | → `{ people, page, limit, total }` (search; `role` = `mentor`/`mentee`; excludes pending requests) |
+| POST | `/api/media/upload-url` | `{ kind, contentType }` → `{ uploadUrl, key }` (`kind` = `photo`/`cv`/`post`; local signed PUT, or S3 presigned when configured) |
+| GET | `/media/:key` | → the uploaded file, served statically (local mode; no signature, no expiry) |
 | POST | `/api/connections/:userId/request` | → `{ status }` |
 | POST | `/api/connections/:userId/accept` | → `{ status }` |
 | POST | `/api/connections/:userId/decline` | → `{ status }` |
-| GET | `/api/connections` | → `{ connections }` |
+| GET | `/api/connections?page=&limit=` | → `{ connections, page, limit, total }` |
 | GET | `/api/connections/requests` | → `{ requests }` (incoming) |
 | POST | `/api/posts` | `{ text, imageKey? }` → `201 { post }` |
 | GET | `/api/feed?before=<ts>` | → `{ posts }` (you + your connections) |
+| GET | `/api/posts/search?q=&page=` | → `{ posts }` (full-text post search) |
 | POST | `/api/posts/:id/like` | → `{ post }` (toggles) |
 | POST | `/api/posts/:id/comments` | `{ text }` → `{ post }` |
-| DELETE | `/api/posts/:id` | → `{ ok }` (author or admin) |
+| PATCH | `/api/posts/:id` | `{ text }` → `{ post }` (edit your own post) |
+| DELETE | `/api/posts/:id` | → `{ ok }` (author or admin; also deletes the image file) |
+| DELETE | `/api/posts/:postId/comments/:commentId` | → `{ post }` (comment author, post author or admin) |
+| GET | `/api/ads` | → `{ ads }` (active ads for the feed) |
 | GET | `/api/dm` | → `{ conversations }` |
-| GET | `/api/dm/:userId` | → `{ messages }` (connections only) |
+| GET | `/api/dm/:userId?page=&limit=&before=` | → `{ messages }` (connections only) |
 | POST | `/api/dm/:userId` | `{ text }` → `201 { message }` (connections only) |
 
 ## Scripts
@@ -278,7 +314,7 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | `npm run dev` | server + web with hot reload |
 | `npm run db` | start MongoDB in Docker |
 | `npm run dev:server` / `dev:web` / `dev:mobile` | one at a time |
-| `npm test` | server tests (auth, admin + social providers, JWT, passwords, MongoDB stores, signaling, chat, calls) |
+| `npm test` | server tests (auth, admin, ads, profiles/connections/posts/DMs, media, JWT, passwords, MongoDB stores, signaling, chat, calls) |
 | `npm run build` | production web build |
 | `npm start` | production server (serves `web/dist`) |
 
@@ -290,8 +326,8 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | server | `JWT_SECRET`, `JWT_EXPIRES_IN` | dev-only secret (required in prod), `7d` |
 | server | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | `admin`, `admin`, `Administrator` — the seeded admin account (change the password before going live) |
 | server | `APP_URL`, `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `FACEBOOK_CLIENT_ID`/`_SECRET` | social login: public base URL for callbacks and provider credentials (unset → that button is hidden) |
-| server | `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 for production photo/CV/post uploads; configure bucket CORS to allow `PUT` from your app's origin |
-| server | `LOCAL_MEDIA_DIR` | development upload storage directory (default `server/uploads/`; production always requires S3) |
+| server | `LOCAL_MEDIA_DIR` | folder where photo/CV/post uploads are stored and served from `/media/...` (default `server/uploads/`; a Docker volume in production). Used whenever S3 is not configured |
+| server | `AWS_REGION`, `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | optional: send uploads to Amazon S3 instead of the local folder; configure bucket CORS to allow `PUT` from your app's origin |
 | server | `TURN_URLS`, `TURN_SECRET`, `TURN_TTL_SEC`, `STUN_URLS` | no TURN, `12h` credentials, Google STUN (set by `deploy/` automatically) |
 | server | `CHAT_RETENTION_DAYS` | `30` (MongoDB deletes older messages on its own) |
 | server | `PORT`, `HOST`, `MAX_PEERS`, `ALLOWED_ORIGINS`, `TRUST_PROXY`, `WEB_DIST` | `3001`, `0.0.0.0`, `10`, `*`, `false`, `../web/dist` |
@@ -302,8 +338,11 @@ Each folder has a `.env.example`.
 
 ## What's tested
 
-- **Server (49 tests):**
+- **Server:**
   - **Accounts & admin:** register / sign-in validation, duplicate emails, new accounts defaulting to the `user` role, the social-providers endpoint, and the admin API — list, create, update and delete users, role changes, and the guards that stop an admin from deleting or demoting themselves.
+  - **Professional network:** profiles and partial visibility, connections (request / accept / decline / remove, idempotent requests), posts & feed (create, like, comment, before-paging), direct messages (connections only), and a regression test that a **profile-less account like the seeded admin can still receive and accept connection requests**.
+  - **Ads:** admin create / edit / delete, and that only *active* ads reach members' feeds.
+  - **Media:** local uploads saved and served from the static `/media/...` URL (no signature, no expiry), with path-traversal and bad-key rejections, content-type and 10 MB limits.
   - JWT tampering, expiry, wrong key or audience, and `alg: none`; salted password hashes; sign-up/sign-in validation, duplicate emails, rate limits.
   - Meetings: a token is required, names can't be spoofed, room cap, relay, chat, mute state.
   - Profile changes; saved chat (history, paging, retention); Chat and Calls tabs (last message, who's in the meeting, sending from outside a meeting reaches people inside, call history with names).
@@ -322,5 +361,6 @@ Each folder has a `.env.example`.
 - [x] **Step 2**: deployment with HTTPS, TURN (coturn) with short-lived credentials, MongoDB backups ([DEPLOY.md](./DEPLOY.md))
 - [x] Profile editing and saved call chat (web + mobile)
 - [x] **Email + password and social login** (Google / GitHub / Facebook), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
-- [ ] Forgot-password email, refresh tokens, direct messages
+- [x] **Professional network**: profiles + CV, connections with partial visibility, a merged Facebook-style home feed with unified post/people search, **direct messages**, admin-managed **ads**, and static-folder media uploads
+- [ ] Forgot-password email, refresh tokens
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)
