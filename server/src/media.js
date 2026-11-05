@@ -16,7 +16,6 @@ const ALLOWED = {
   cv: DOC_EXT,
 };
 const MAX_LOCAL_UPLOAD_BYTES = 10 * 1024 * 1024;
-const LOCAL_URL_TTL_SEC = 3600;
 const LOCAL_KEY = /^(photo|post|cv)\/[a-f0-9]{24}\/\d+-[a-f0-9]{12}\.(jpg|png|webp|gif|pdf|doc|docx)$/;
 
 let clientPromise = null;
@@ -76,15 +75,14 @@ export function createMedia(s3 = {}, log = () => {}) {
     return { uploadUrl, key };
   }
 
-  /** A short-lived URL for viewing/downloading an object. null when unset. */
+  /** A URL for viewing/downloading an object. null when unset.
+   *  Local mode returns a STABLE static path (/media/<key>) that never expires,
+   *  so images and files keep working in the UI indefinitely. */
   async function viewUrl(key, { expiresIn = 3600, download } = {}) {
     if (!key) return null;
     if (localDirectory) {
-      const expires = Math.floor(Date.now() / 1000) + Math.min(expiresIn, LOCAL_URL_TTL_SEC);
-      const filename = download ?? '';
-      const signature = localSignature('GET', key, expires, '', filename);
-      const params = new URLSearchParams({ key, expires: String(expires), download: filename, signature });
-      return `/api/media/local/view?${params}`;
+      const base = `/media/${key}`;
+      return download ? `${base}?download=${encodeURIComponent(download)}` : base;
     }
     if (!s3Configured) return null;
     const client = await getClient(s3);
@@ -98,19 +96,17 @@ export function createMedia(s3 = {}, log = () => {}) {
   }
 
   async function handleLocal(req, res, url) {
-    const operation = url.pathname.match(/^\/api\/media\/local\/(upload|view)$/)?.[1];
-    if (!operation || !localDirectory) return false;
+    if (!localDirectory) return false;
 
-    const key = url.searchParams.get('key') ?? '';
-    const expires = Number(url.searchParams.get('expires'));
-    const signature = url.searchParams.get('signature') ?? '';
-    const contentType = url.searchParams.get('contentType') ?? '';
-    const download = url.searchParams.get('download') ?? '';
-    if (!LOCAL_KEY.test(key) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)) {
-      throw new HttpError(403, 'This upload or media link has expired. Please try again.');
-    }
-
-    if (operation === 'upload') {
+    // --- Upload: signed PUT to /api/media/local/upload (protects writes) ---
+    if (url.pathname === '/api/media/local/upload') {
+      const key = url.searchParams.get('key') ?? '';
+      const expires = Number(url.searchParams.get('expires'));
+      const signature = url.searchParams.get('signature') ?? '';
+      const contentType = url.searchParams.get('contentType') ?? '';
+      if (!LOCAL_KEY.test(key) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)) {
+        throw new HttpError(403, 'This upload link has expired. Please try again.');
+      }
       if (req.method !== 'PUT' || !Object.hasOwn(ALLOWED[key.split('/')[0]], contentType) || req.headers['content-type'] !== contentType) {
         throw new HttpError(400, 'Invalid upload request.');
       }
@@ -136,33 +132,39 @@ export function createMedia(s3 = {}, log = () => {}) {
       return true;
     }
 
-    if (req.method !== 'GET' || !validLocalSignature(signature, localSignature('GET', key, expires, '', download))) {
-      throw new HttpError(403, 'This media link is invalid or expired.');
-    }
-    const extension = path.extname(key).toLowerCase();
-    const contentTypeForFile = Object.entries(ALLOWED)
-      .flatMap(([, extensions]) => Object.entries(extensions))
-      .find(([, ext]) => ext === extension)?.[0];
-    if (!contentTypeForFile) throw new HttpError(404, 'Media not found.');
+    // --- View: stable static serving at /media/<key> (no signature, no expiry) ---
+    if (url.pathname.startsWith('/media/')) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
+      const key = decodeURIComponent(url.pathname.slice('/media/'.length));
+      if (!LOCAL_KEY.test(key)) throw new HttpError(404, 'Media not found.');
+      const extension = path.extname(key).toLowerCase();
+      const contentTypeForFile = Object.entries(ALLOWED)
+        .flatMap(([, extensions]) => Object.entries(extensions))
+        .find(([, ext]) => ext === extension)?.[0];
+      if (!contentTypeForFile) throw new HttpError(404, 'Media not found.');
 
-    const filePath = path.resolve(localDirectory, key);
-    if (!filePath.startsWith(`${localDirectory}${path.sep}`)) throw new HttpError(404, 'Media not found.');
-    let data;
-    try {
-      data = await fs.readFile(filePath);
-    } catch (err) {
-      if (err?.code === 'ENOENT') throw new HttpError(404, 'Media not found.');
-      throw err;
+      const filePath = path.resolve(localDirectory, key);
+      if (!filePath.startsWith(`${localDirectory}${path.sep}`)) throw new HttpError(404, 'Media not found.');
+      let data;
+      try {
+        data = await fs.readFile(filePath);
+      } catch (err) {
+        if (err?.code === 'ENOENT') throw new HttpError(404, 'Media not found.');
+        throw err;
+      }
+      const download = url.searchParams.get('download') ?? '';
+      res.writeHead(200, {
+        'Content-Type': contentTypeForFile,
+        'Content-Length': data.length,
+        'Content-Disposition': download ? `attachment; filename="${path.basename(download).replace(/["\\\r\n]/g, '_')}"` : 'inline',
+        'Cache-Control': 'public, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(req.method === 'HEAD' ? undefined : data);
+      return true;
     }
-    res.writeHead(200, {
-      'Content-Type': contentTypeForFile,
-      'Content-Length': data.length,
-      'Content-Disposition': download ? `attachment; filename="${path.basename(download).replace(/["\\\r\n]/g, '_')}"` : 'inline',
-      'Cache-Control': 'private, max-age=300',
-      'X-Content-Type-Options': 'nosniff',
-    });
-    res.end(data);
-    return true;
+
+    return false;
   }
 
   /** Delete an uploaded file by its storage key. Best-effort — errors are logged, not thrown. */

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { api, registerUser, startTestApp } from './helpers.js';
+import { hashPassword } from '../src/auth/password.js';
 
 let t;
 before(async () => (t = await startTestApp()));
@@ -259,6 +260,40 @@ test('auth required: social endpoints reject unauthenticated requests', async ()
 
   const people = await api(t.base, 'GET', '/api/people', null, null);
   assert.equal(people.status, 401);
+});
+
+test('connections: a profile-less account (e.g. seeded admin) can receive and accept requests', async () => {
+  // Mirror how the admin account is bootstrapped: created straight in the user
+  // store with no social profile. Previously a request to it 404'd ("No such
+  // person.") and it could never be received or accepted.
+  const adminEmail = `admin-${Date.now()}@example.com`;
+  const admin = await t.store.create({
+    name: 'Site Admin',
+    email: adminEmail,
+    passwordHash: await hashPassword('correct-horse-1'),
+    role: 'admin',
+  });
+
+  const member = await registerUser(t.base, 'Member Sending');
+  await api(t.base, 'PUT', '/api/profile', {}, member.token);
+
+  // The member can send a connection request to the profile-less admin.
+  const reqRes = await api(t.base, 'POST', `/api/connections/${admin.id}/request`, {}, member.token);
+  assert.equal(reqRes.status, 200);
+  assert.equal(reqRes.body.status, 'pending_outgoing');
+
+  // The admin signs in and sees the incoming request.
+  const login = await api(t.base, 'POST', '/api/auth/login', { email: adminEmail, password: 'correct-horse-1' });
+  assert.equal(login.status, 200);
+  const adminToken = login.body.token;
+
+  const reqs = await api(t.base, 'GET', '/api/connections/requests', null, adminToken);
+  assert.ok(reqs.body.requests.some((p) => p.userId === member.user.id), 'admin receives the request');
+
+  // The admin can accept it.
+  const acc = await api(t.base, 'POST', `/api/connections/${member.user.id}/accept`, {}, adminToken);
+  assert.equal(acc.status, 200);
+  assert.equal(acc.body.status, 'connected');
 });
 
 test('feed: before param filters older posts', async () => {

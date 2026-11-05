@@ -420,6 +420,89 @@ function mongoDmStore(col) {
   };
 }
 
+// ===================== ADS (admin-managed promos shown in the feed) =====================
+export function publicAd(a) {
+  if (!a) return null;
+  return {
+    id: a.id,
+    title: a.title ?? '',
+    body: a.body ?? '',
+    imageKey: a.imageKey ?? null,
+    linkUrl: a.linkUrl ?? '',
+    active: a.active !== false,
+    createdAt: iso(a.createdAt),
+  };
+}
+
+const AD_FIELDS = ['title', 'body', 'imageKey', 'linkUrl', 'active'];
+
+export function createMemoryAdStore() {
+  const byId = new Map();
+  return {
+    kind: 'memory',
+    async create({ title, body, imageKey, linkUrl, active }) {
+      const ad = { id: id12(), title: title ?? '', body: body ?? '', imageKey: imageKey ?? null, linkUrl: linkUrl ?? '', active: active !== false, createdAt: now() };
+      byId.set(ad.id, ad);
+      return { ...ad };
+    },
+    async list({ activeOnly = false } = {}) {
+      let list = [...byId.values()];
+      if (activeOnly) list = list.filter((a) => a.active !== false);
+      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
+    },
+    async byId(id) {
+      const a = byId.get(id);
+      return a ? { ...a } : null;
+    },
+    async update(id, patch) {
+      const a = byId.get(id);
+      if (!a) return null;
+      for (const k of AD_FIELDS) if (patch[k] !== undefined) a[k] = patch[k];
+      a.updatedAt = now();
+      return { ...a };
+    },
+    async remove(id) {
+      return byId.delete(id);
+    },
+  };
+}
+
+function mongoAdStore(col, ObjectId) {
+  const oid = (id) => (typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : null);
+  const toAd = (d) => d && { id: d._id.toString(), title: d.title, body: d.body, imageKey: d.imageKey ?? null, linkUrl: d.linkUrl ?? '', active: d.active !== false, createdAt: d.createdAt };
+  return {
+    kind: 'mongodb',
+    async create({ title, body, imageKey, linkUrl, active }) {
+      const doc = { title: title ?? '', body: body ?? '', imageKey: imageKey ?? null, linkUrl: linkUrl ?? '', active: active !== false, createdAt: now() };
+      const res = await col.insertOne(doc);
+      return toAd({ ...doc, _id: res.insertedId });
+    },
+    async list({ activeOnly = false } = {}) {
+      const filter = activeOnly ? { active: { $ne: false } } : {};
+      return (await col.find(filter).sort({ createdAt: -1 }).toArray()).map(toAd);
+    },
+    async byId(id) {
+      const _id = oid(id);
+      return _id ? toAd(await col.findOne({ _id })) : null;
+    },
+    async update(id, patch) {
+      const _id = oid(id);
+      if (!_id) return null;
+      const set = {};
+      for (const k of AD_FIELDS) if (patch[k] !== undefined) set[k] = patch[k];
+      set.updatedAt = now();
+      await col.updateOne({ _id }, { $set: set });
+      return toAd(await col.findOne({ _id }));
+    },
+    async remove(id) {
+      const _id = oid(id);
+      if (!_id) return false;
+      const res = await col.deleteOne({ _id });
+      return res.deletedCount > 0;
+    },
+  };
+}
+
 // ===================== wiring =====================
 export async function connectSocialStores(db, log = () => {}) {
   const { ObjectId } = await import('mongodb');
@@ -427,12 +510,14 @@ export async function connectSocialStores(db, log = () => {}) {
   const connections = mongoConnectionStore(db.collection('connections'));
   const posts = mongoPostStore(db.collection('posts'), ObjectId);
   const dms = mongoDmStore(db.collection('dms'));
+  const ads = mongoAdStore(db.collection('ads'), ObjectId);
   await db.collection('profiles').createIndex({ updatedAt: -1 }, { name: 'profiles_recent' });
   await db.collection('connections').createIndex({ users: 1 }, { name: 'connections_users' });
   await db.collection('posts').createIndex({ authorId: 1, createdAt: -1 }, { name: 'posts_author' });
   await db.collection('dms').createIndex({ convId: 1, ts: -1 }, { name: 'dms_conv' });
-  log('social stores ready (profiles, connections, posts, dms)');
-  return { profiles, connections, posts, dms };
+  await db.collection('ads').createIndex({ createdAt: -1 }, { name: 'ads_recent' });
+  log('social stores ready (profiles, connections, posts, dms, ads)');
+  return { profiles, connections, posts, dms, ads };
 }
 
 export function createMemorySocialStores() {
@@ -441,5 +526,6 @@ export function createMemorySocialStores() {
     connections: createMemoryConnectionStore(),
     posts: createMemoryPostStore(),
     dms: createMemoryDmStore(),
+    ads: createMemoryAdStore(),
   };
 }

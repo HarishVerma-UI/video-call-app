@@ -1,14 +1,32 @@
-import { ApiError, type ApiClient, type Post, type Profile } from '@vca/shared';
+import { ApiError, type Ad, type ApiClient, type ConnectionState, type Post, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { ago } from '../../format';
 import { uploadFile } from '../../upload';
-import { ProfileAvatar } from './common';
+import { ConnectButton, ProfileAvatar, roleBadges } from './common';
 
 type FeedNav = {
   openUser: (id: string) => void;
   openMeet: () => void;
 };
+
+/* ── People result row (shown in search + "people you may know") ── */
+
+function PersonRow({ profile, api, nav, onConn }: { profile: Profile; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void }) {
+  return (
+    <li className="people-row">
+      <button className="people-row__main" onClick={() => nav.openUser(profile.userId)}>
+        <ProfileAvatar profile={profile} size={44} />
+        <span className="people-row__text">
+          <strong>{profile.name || 'Member'}</strong>
+          {profile.headline && <span className="people-row__headline">{profile.headline}</span>}
+          {roleBadges(profile).length > 0 && <span className="people-row__roles">{roleBadges(profile).join(' · ')}</span>}
+        </span>
+      </button>
+      <ConnectButton profile={profile} api={api} onChange={(s) => onConn(profile.userId, s)} />
+    </li>
+  );
+}
 
 /* ── Post card ── */
 
@@ -145,7 +163,7 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
 
 /* ── Right sidebar ── */
 
-function FeedSidebar({ connections, nav }: { connections: Profile[]; nav: FeedNav }) {
+function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void }) {
   return (
     <aside className="feed-sidebar" aria-label="Feed sidebar">
       <div className="sidebar-card">
@@ -156,26 +174,57 @@ function FeedSidebar({ connections, nav }: { connections: Profile[]; nav: FeedNa
         <p className="sidebar-card__empty">No active video calls right now.</p>
         <button className="btn btn--primary btn--small btn--full" onClick={() => nav.openMeet()}>Start a Huddle</button>
       </div>
+
       <div className="sidebar-card">
         <h3 className="sidebar-card__title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /></svg>
-          Recent Connections
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>
+          People you may know
         </h3>
-        {connections.length === 0 ? (
-          <p className="sidebar-card__empty">Connect with people to see them here.</p>
+        {suggestions.length === 0 ? (
+          <p className="sidebar-card__empty">No suggestions right now.</p>
         ) : (
-          <ul className="sidebar-card__list">
-            {connections.slice(0, 8).map((c) => (
-              <li key={c.userId} className="sidebar-card__person">
-                <button className="post__author-link" onClick={() => nav.openUser(c.userId)}>
-                  <ProfileAvatar profile={c} size={28} />
-                  <span>{c.name || 'Member'}</span>
+          <ul className="sidebar-people">
+            {suggestions.slice(0, 5).map((p) => (
+              <li key={p.userId} className="sidebar-people__item">
+                <button className="post__author-link" onClick={() => nav.openUser(p.userId)}>
+                  <ProfileAvatar profile={p} size={34} />
+                  <span className="sidebar-people__text">
+                    <strong>{p.name || 'Member'}</strong>
+                    {p.headline && <em>{p.headline}</em>}
+                  </span>
                 </button>
+                <ConnectButton profile={p} api={api} onChange={(s) => onConn(p.userId, s)} />
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {ads.length > 0 && (
+        <div className="sidebar-card">
+          <h3 className="sidebar-card__title sidebar-card__title--sponsored">Sponsored</h3>
+          <ul className="sidebar-ads">
+            {ads.map((ad) => {
+              const inner = (
+                <>
+                  {ad.imageUrl && <img className="sidebar-ads__img" src={ad.imageUrl} alt="" loading="lazy" />}
+                  <strong className="sidebar-ads__title">{ad.title}</strong>
+                  {ad.body && <span className="sidebar-ads__body">{ad.body}</span>}
+                </>
+              );
+              return (
+                <li key={ad.id} className="sidebar-ads__item">
+                  {ad.linkUrl ? (
+                    <a href={ad.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="sidebar-ads__link">{inner}</a>
+                  ) : (
+                    <div className="sidebar-ads__link">{inner}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </aside>
   );
 }
@@ -185,7 +234,8 @@ function FeedSidebar({ connections, nav }: { connections: Profile[]; nav: FeedNa
 export function FeedView({ openUser, openMeet }: { openUser: (id: string) => void; openMeet: () => void }) {
   const { api, user } = useAuth();
   const [posts, setPosts] = useState<Post[] | null>(null);
-  const [connections, setConnections] = useState<Profile[]>([]);
+  const [suggestions, setSuggestions] = useState<Profile[]>([]);
+  const [ads, setAds] = useState<Ad[]>([]);
   const [text, setText] = useState('');
   const [imageKey, setImageKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -194,6 +244,7 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
   const [err, setErr] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Post[] | null>(null);
+  const [peopleResults, setPeopleResults] = useState<Profile[] | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -206,20 +257,30 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
       setPosts(p);
       setHasMore(p.length >= 10);
     }).catch(() => setPosts([]));
-    api.listConnections().then(({ connections: c }) => setConnections(c)).catch(() => {});
+    // "People you may know": anyone not yet connected (server already excludes pending).
+    api.searchPeople({}).then(({ people }) => setSuggestions(people.filter((p) => p.connection === 'none'))).catch(() => {});
+    api.ads().then(({ ads: a }) => setAds(a)).catch(() => {});
   }, [api]);
 
-  // Debounced search
+  // Debounced unified search: posts AND people.
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const q = searchQuery.trim();
+    if (!q) {
       setSearchResults(null);
+      setPeopleResults(null);
       return;
     }
     const t = setTimeout(() => {
-      api.searchPosts(searchQuery.trim()).then(({ posts: p }) => setSearchResults(p)).catch(() => setSearchResults([]));
+      api.searchPosts(q).then(({ posts: p }) => setSearchResults(p)).catch(() => setSearchResults([]));
+      api.searchPeople({ q }).then(({ people }) => setPeopleResults(people)).catch(() => setPeopleResults([]));
     }, 300);
     return () => clearTimeout(t);
   }, [api, searchQuery]);
+
+  const onConn = (id: string, connection: ConnectionState) => {
+    setSuggestions((xs) => xs.map((p) => (p.userId === id ? { ...p, connection } : p)));
+    setPeopleResults((xs) => (xs ? xs.map((p) => (p.userId === id ? { ...p, connection } : p)) : xs));
+  };
 
   const loadMore = useCallback(async () => {
     if (!posts || posts.length === 0 || loadingMore.current || !hasMore) return;
@@ -304,12 +365,13 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
     <section className="feed-layout" aria-label="Feed" data-testid="feed">
       <div className="feed-main">
         <div className="feed-search card">
+          <svg className="feed-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input
             className="feed-search__input"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search posts..."
-            aria-label="Search posts"
+            placeholder="Search posts and people..."
+            aria-label="Search posts and people"
           />
           {searchQuery && (
             <button className="link-btn feed-search__clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
@@ -317,6 +379,15 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
             </button>
           )}
         </div>
+
+        {searchQuery.trim() && peopleResults && peopleResults.length > 0 && (
+          <div className="card feed-people">
+            <h3 className="feed-people__title">People</h3>
+            <ul className="people-list">
+              {peopleResults.map((p) => <PersonRow key={p.userId} profile={p} api={api} nav={nav} onConn={onConn} />)}
+            </ul>
+          </div>
+        )}
 
         <form className="card post-composer" onSubmit={submit}>
           <div className="post-composer__top">
@@ -343,16 +414,21 @@ export function FeedView({ openUser, openMeet }: { openUser: (id: string) => voi
         {displayPosts === null ? (
           <div className="skeleton-list" aria-hidden="true"><i /><i /></div>
         ) : displayPosts.length === 0 ? (
-          <p className="card card__empty">{searchQuery ? 'No posts match your search.' : 'No posts yet. Share something, or connect with people to see theirs.'}</p>
+          <p className="card card__empty">
+            {searchQuery
+              ? (peopleResults && peopleResults.length > 0 ? 'No posts match — see people above.' : 'Nothing matches your search.')
+              : 'No posts yet. Share something, or connect with people to see theirs.'}
+          </p>
         ) : (
           <>
+            {searchQuery.trim() && <h3 className="feed-people__title feed-people__title--posts">Posts</h3>}
             {displayPosts.map((p) => <PostCard key={p.id} post={p} api={api} me={user.id} isAdmin={user.role === 'admin'} onChange={update} onDelete={remove} nav={nav} />)}
             {!searchQuery && hasMore && <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />}
           </>
         )}
       </div>
 
-      <FeedSidebar connections={connections} nav={nav} />
+      <FeedSidebar suggestions={suggestions} ads={ads} api={api} nav={nav} onConn={onConn} />
     </section>
   );
 }

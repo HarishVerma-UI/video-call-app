@@ -98,7 +98,10 @@ export const config = {
     bucket: process.env.S3_BUCKET || '',
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    localDirectory: process.env.LOCAL_MEDIA_DIR || (isProd ? '' : path.resolve(here, '../uploads')),
+    // Where uploaded files (photos, CVs, post images) are stored on disk and
+    // served from statically. Used whenever S3 is not configured — in both dev
+    // and production — so uploads work out of the box. Override with LOCAL_MEDIA_DIR.
+    localDirectory: process.env.LOCAL_MEDIA_DIR || path.resolve(here, '../uploads'),
     /** Public base URL for publicly-readable objects (photos, post images). Defaults to the standard bucket URL. */
     publicBaseUrl: (process.env.S3_PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
   },

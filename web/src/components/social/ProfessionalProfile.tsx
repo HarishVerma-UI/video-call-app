@@ -153,7 +153,14 @@ export function ProfessionalProfile() {
       </div>
 
       <div className="pp-cv">
-        <span>{p.hasCv ? `CV: ${p.cvName || 'uploaded'}` : 'No CV uploaded'}</span>
+        <span>
+          {p.hasCv ? 'CV: ' : 'No CV uploaded'}
+          {p.hasCv && p.cvUrl ? (
+            <a href={p.cvUrl} target="_blank" rel="noopener noreferrer">{p.cvName || 'View CV'}</a>
+          ) : p.hasCv ? (
+            p.cvName || 'uploaded'
+          ) : null}
+        </span>
         <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()}>
           {busyCv ? 'Uploading…' : p.hasCv ? 'Replace CV' : 'Upload CV'}
         </button>
