@@ -357,9 +357,9 @@ export function createMemoryDmStore() {
   const byConv = new Map();
   return {
     kind: 'memory',
-    async send({ from, fromName, to, text }) {
+    async send({ from, fromName, to, text, roomId }) {
       const convId = pairKey(from, to);
-      const m = { id: id12(), convId, from, fromName, to, text, ts: Date.now() };
+      const m = { id: id12(), convId, from, fromName, to, text, roomId: roomId ?? null, ts: Date.now() };
       const arr = byConv.get(convId) ?? [];
       arr.push(m);
       byConv.set(convId, arr);
@@ -388,11 +388,11 @@ export function createMemoryDmStore() {
 }
 
 function mongoDmStore(col) {
-  const toM = (d) => d && { id: d._id.toString(), convId: d.convId, from: d.from, fromName: d.fromName, to: d.to, text: d.text, ts: d.ts };
+  const toM = (d) => d && { id: d._id.toString(), convId: d.convId, from: d.from, fromName: d.fromName, to: d.to, text: d.text, roomId: d.roomId ?? null, ts: d.ts };
   return {
     kind: 'mongodb',
-    async send({ from, fromName, to, text }) {
-      const doc = { convId: pairKey(from, to), from, fromName, to, text, ts: Date.now() };
+    async send({ from, fromName, to, text, roomId }) {
+      const doc = { convId: pairKey(from, to), from, fromName, to, text, roomId: roomId ?? null, ts: Date.now() };
       const res = await col.insertOne(doc);
       return toM({ ...doc, _id: res.insertedId });
     },
@@ -512,6 +512,7 @@ export function publicNotification(n) {
     actorId: n.actorId,
     actorName: n.actorName ?? '',
     postId: n.postId ?? null,
+    roomId: n.roomId ?? null,
     text: n.text ?? '',
     read: !!n.read,
     ts: typeof n.ts === 'number' ? n.ts : new Date(n.ts ?? now()).getTime(),
@@ -522,8 +523,8 @@ export function createMemoryNotificationStore() {
   const byUser = new Map(); // userId -> array (newest first)
   return {
     kind: 'memory',
-    async add({ userId, kind, actorId, actorName, postId, text }) {
-      const n = { id: id12(), userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, text: text ?? '', read: false, ts: Date.now() };
+    async add({ userId, kind, actorId, actorName, postId, roomId, text }) {
+      const n = { id: id12(), userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, roomId: roomId ?? null, text: text ?? '', read: false, ts: Date.now() };
       const list = byUser.get(userId) ?? [];
       list.unshift(n);
       byUser.set(userId, list.slice(0, 200));
@@ -545,8 +546,8 @@ export function createMemoryNotificationStore() {
 function mongoNotificationStore(col) {
   return {
     kind: 'mongodb',
-    async add({ userId, kind, actorId, actorName, postId, text }) {
-      const doc = { userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, text: text ?? '', read: false, ts: Date.now() };
+    async add({ userId, kind, actorId, actorName, postId, roomId, text }) {
+      const doc = { userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, roomId: roomId ?? null, text: text ?? '', read: false, ts: Date.now() };
       const res = await col.insertOne(doc);
       return { id: res.insertedId.toString(), ...doc };
     },

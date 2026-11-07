@@ -157,7 +157,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           )}
         </form>
         <div className="titlebar__end">
-          <NotificationBell onOpenPost={() => go({ view: 'feed' })} />
+          <NotificationBell onOpenPost={() => go({ view: 'feed' })} onJoinCall={onJoin} />
           <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
             <ChatIcon width={20} height={20} />
           </button>

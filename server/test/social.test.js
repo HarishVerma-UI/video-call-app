@@ -337,6 +337,34 @@ test('notifications: commenting and liking notify the post author (not yourself)
   assert.equal(res.body.unread, 0, 'unread cleared after marking read');
 });
 
+test('call invite: posts a call message in the DM thread and notifies the callee', async () => {
+  const a = await registerUser(t.base, 'Caller A');
+  const b = await registerUser(t.base, 'Callee B');
+  await api(t.base, 'PUT', '/api/profile', {}, a.token);
+  await api(t.base, 'PUT', '/api/profile', {}, b.token);
+  // connect them
+  await api(t.base, 'POST', `/api/connections/${b.user.id}/request`, {}, a.token);
+  await api(t.base, 'POST', `/api/connections/${a.user.id}/accept`, {}, b.token);
+
+  const roomId = 'swift-comet-999';
+  const res = await api(t.base, 'POST', `/api/call/${b.user.id}/invite`, { roomId }, a.token);
+  assert.equal(res.status, 201);
+  assert.equal(res.body.message.roomId, roomId);
+
+  // B sees a call message in the thread, carrying the room
+  const thread = await api(t.base, 'GET', `/api/dm/${a.user.id}`, null, b.token);
+  assert.ok(thread.body.messages.some((m) => m.roomId === roomId), 'call message is in the thread');
+
+  // B gets a live-style 'call' notification with the roomId
+  const notifs = await api(t.base, 'GET', '/api/notifications', null, b.token);
+  assert.ok(notifs.body.notifications.some((n) => n.kind === 'call' && n.roomId === roomId), 'call notification created');
+
+  // you can't call a non-connection
+  const stranger = await registerUser(t.base, 'Stranger');
+  const bad = await api(t.base, 'POST', `/api/call/${stranger.user.id}/invite`, { roomId }, a.token);
+  assert.equal(bad.status, 403);
+});
+
 test('stats: total users count is returned', async () => {
   const u = await registerUser(t.base, 'Counter');
   const res = await api(t.base, 'GET', '/api/stats', null, u.token);

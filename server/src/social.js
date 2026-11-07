@@ -27,10 +27,10 @@ export function createSocial(deps) {
   // Push a live notification to a user (no-op until signaling is attached).
   const notify = deps.notify ?? (() => 0);
 
-  async function emitNotification(recipientId, { kind, actor, postId, text }) {
+  async function emitNotification(recipientId, { kind, actor, postId, roomId, text }) {
     if (!notifications || !recipientId || recipientId === actor.id) return;
     try {
-      const n = await notifications.add({ userId: recipientId, kind, actorId: actor.id, actorName: actor.name, postId, text });
+      const n = await notifications.add({ userId: recipientId, kind, actorId: actor.id, actorName: actor.name, postId, roomId, text });
       notify(recipientId, { type: 'notification', notification: publicNotification(n), unread: await notifications.unreadCount(recipientId) });
     } catch (err) {
       log('notification failed', err);
@@ -343,6 +343,19 @@ export function createSocial(deps) {
     sendJson(res, 201, { message: m });
   }
 
+  // Start a call with a connection: drop a "call" message (with the room) into the
+  // DM thread and push a live notification, so they know even if they missed the ring.
+  async function startCall(req, res, other) {
+    const me = await requireUser(req);
+    if (me.id === other) throw new HttpError(400, 'You can’t call yourself.');
+    if (!(await connections.areConnected(me.id, other))) throw new HttpError(403, 'You can only call your connections.');
+    const roomId = str((await readJson(req)).roomId, 64);
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(roomId)) throw new HttpError(400, 'Invalid room.');
+    const message = await dms.send({ from: me.id, fromName: me.name, to: other, text: '📞 Started a video call', roomId });
+    void emitNotification(other, { kind: 'call', actor: me, roomId, text: '' });
+    sendJson(res, 201, { ok: true, message });
+  }
+
   async function conversations(req, res) {
     const me = await requireUser(req);
     const convs = await dms.conversations(me.id);
@@ -390,6 +403,7 @@ export function createSocial(deps) {
     if ((mm = pathname.match(/^\/api\/posts\/([^/]+)$/)) && m === 'DELETE') return (await deletePost(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'GET') return (await dmThread(req, res, decodeURIComponent(mm[1]), url), true);
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'POST') return (await dmSend(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/call\/([^/]+)\/invite$/)) && m === 'POST') return (await startCall(req, res, decodeURIComponent(mm[1])), true);
 
     return false;
   }
