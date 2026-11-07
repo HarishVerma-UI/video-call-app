@@ -135,6 +135,7 @@ textarea {
   color: inherit;
 }
 button {
+  text-align: start;
   cursor: pointer;
   border: 0;
   background: none;
@@ -2877,7 +2878,7 @@ svg {
 .feed-main { display: flex; flex-direction: column; gap: 0; max-width: 680px; }
 
 /* feed sidebar */
-.feed-sidebar { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 26px; align-self: start; }
+.feed-sidebar { display: flex; flex-direction: column; gap: 14px; position: sticky; align-self: start; }
 
 /* sidebar card (shared: feed, network) */
 .sidebar-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
