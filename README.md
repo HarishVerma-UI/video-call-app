@@ -97,6 +97,29 @@ find mentors and guidance** — the **server, web UI and tests are in place**:
 - **Your profile photo shows everywhere** — top bar, rail and feed composer update the moment
   you upload a new one.
 
+### Real-time (presence, notifications & calling)
+
+A persistent **presence WebSocket** opens on sign-in (separate from the per-call connection),
+so signed-in members get live pushes wherever they are:
+
+- **Notifications** — likes and comments on your posts, and incoming calls, push live to a
+  **top-bar bell** with an unread badge and dropdown (you're never notified about your own
+  actions). Backed by a `notifications` store, so they persist and show a history.
+- **Real-time 1:1 calling** — starting a call **rings** the other person: they get a
+  full-screen incoming-call prompt (ring tone + pulse) with **Accept / Decline**, anywhere in
+  the app. Decline / offline / cancel come back to the caller as a toast; a missed call
+  auto-dismisses.
+- **Calling from a conversation also persists** — a "📞 Started a video call" message with a
+  **Join** button lands in the DM thread, plus a **call notification**, so the callee finds
+  out and can join even if they missed the live ring.
+- **Add people mid-call** — the in-call People panel lists your connections with a **Ring**
+  button to pull them into the current room (1:1 → group).
+- **Live member count** on the home sidebar.
+- **Camera & mic are only requested when you call** (the Meet or in-call screens) — never on
+  sign-in or while browsing the feed.
+- **Registered-only join** — the signaling layer authenticates the token before admitting
+  anyone to a room, and room links require sign-in.
+
 ### Design
 
 - **Static media folder (default).** Uploads (photos, CVs, post images) are written to an
@@ -303,9 +326,19 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | DELETE | `/api/posts/:id` | → `{ ok }` (author or admin; also deletes the image file) |
 | DELETE | `/api/posts/:postId/comments/:commentId` | → `{ post }` (comment author, post author or admin) |
 | GET | `/api/ads` | → `{ ads }` (active ads for the feed) |
+| GET | `/api/stats` | → `{ totalUsers, online }` (community stats for the home) |
+| GET | `/api/notifications` | → `{ notifications, unread }` (your like/comment/call notifications) |
+| POST | `/api/notifications/read` | → `{ ok }` (mark all read) |
 | GET | `/api/dm` | → `{ conversations }` |
 | GET | `/api/dm/:userId?page=&limit=&before=` | → `{ messages }` (connections only) |
 | POST | `/api/dm/:userId` | `{ text }` → `201 { message }` (connections only) |
+| POST | `/api/call/:userId/invite` | `{ roomId }` → `201 { ok, message }` (posts a call message in the DM + notifies; connections only) |
+
+**Presence WebSocket** (`/ws`, same endpoint as signalling): after connecting, send
+`{ type: "hello", token }` to register for live pushes without joining a call. The server then
+delivers `{ type: "notification", … }` and call invites. Call signalling messages:
+`invite` / `invite-cancel` / `invite-decline` `{ to, roomId }` → the target receives
+`incoming-call` / `call-cancelled` / `call-declined`.
 
 ## Scripts
 
@@ -342,6 +375,7 @@ Each folder has a `.env.example`.
   - **Accounts & admin:** register / sign-in validation, duplicate emails, new accounts defaulting to the `user` role, the social-providers endpoint, and the admin API — list, create, update and delete users, role changes, and the guards that stop an admin from deleting or demoting themselves.
   - **Professional network:** profiles and partial visibility, connections (request / accept / decline / remove, idempotent requests), posts & feed (create, like, comment, before-paging), direct messages (connections only), and a regression test that a **profile-less account like the seeded admin can still receive and accept connection requests**.
   - **Ads:** admin create / edit / delete, and that only *active* ads reach members' feeds.
+  - **Notifications & calling:** a like/comment notifies the post author (and not yourself), mark-read clears the unread count, the community user count, and that calling a connection posts a call message in the DM thread with the room plus a `call` notification (and rejects calling a non-connection).
   - **Media:** local uploads saved and served from the static `/media/...` URL (no signature, no expiry), with path-traversal and bad-key rejections, content-type and 10 MB limits.
   - JWT tampering, expiry, wrong key or audience, and `alg: none`; salted password hashes; sign-up/sign-in validation, duplicate emails, rate limits.
   - Meetings: a token is required, names can't be spoofed, room cap, relay, chat, mute state.
@@ -362,5 +396,6 @@ Each folder has a `.env.example`.
 - [x] Profile editing and saved call chat (web + mobile)
 - [x] **Email + password and social login** (Google / GitHub / Facebook), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
 - [x] **Professional network**: profiles + CV, connections with partial visibility, a merged Facebook-style home feed with unified post/people search, **direct messages**, admin-managed **ads**, and static-folder media uploads
+- [x] **Real-time**: a presence WebSocket powering live like/comment/call **notifications**, **1:1 calling with ring/accept**, add-people-mid-call, call-from-a-conversation (join link + notification), a live member count, and camera/mic requested only when calling
 - [ ] Forgot-password email, refresh tokens
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)
