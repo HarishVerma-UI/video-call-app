@@ -1,11 +1,12 @@
 import { generateRoomId, normalizeRoomId, type AuthUser, type ChatSummary } from '@vca/shared';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { roomUrl } from '../config';
 import { names, roomTitle, shortWhen } from '../format';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { useShutter } from '../theme';
 import { Aperture } from './Aperture';
-import { CamIcon, CamOffIcon, ChatIcon, MicIcon, MicOffIcon, PlusIcon, SparkIcon, VideoIcon } from './Icons';
+import { CamIcon, CamOffIcon, ChatIcon, LinkIcon, MicIcon, MicOffIcon, PlusIcon, SparkIcon, VideoIcon } from './Icons';
 import { Avatar, RoomBadge } from './RoomBadge';
 
 interface Props {
@@ -32,6 +33,18 @@ export function MeetView({ user, media, room, setRoom, notice, onJoin, openChat 
   const [roomPeople, setRoomPeople] = useState<string[] | null>(null);
   const [full, setFull] = useState(false);
   const [chats, setChats] = useState<ChatSummary[] | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = async () => {
+    if (!room) return;
+    try {
+      await navigator.clipboard.writeText(roomUrl(room));
+    } catch {
+      /* clipboard blocked — the link is still visible in the address bar after joining */
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
   const videoRef = useRef<HTMLVideoElement>(null);
   const shutter = useShutter();
 
@@ -249,6 +262,9 @@ export function MeetView({ user, media, room, setRoom, notice, onJoin, openChat 
               <>
                 <button className="btn btn--primary btn--big" onClick={() => onJoin(room)} disabled={!media.ready || full} data-testid="join-now">
                   Join now
+                </button>
+                <button className="btn btn--secondary btn--big" onClick={() => void copyLink()} title="Copy the invite link">
+                  <LinkIcon width={18} height={18} /> {copied ? 'Link copied!' : 'Copy link'}
                 </button>
                 <button className="btn btn--secondary btn--big" onClick={() => openChat(room)}>
                   <ChatIcon width={18} height={18} /> Open chat
