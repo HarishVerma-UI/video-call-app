@@ -127,10 +127,12 @@ export interface Ad {
 
 export interface Notification {
   id: string;
-  kind: 'like' | 'comment';
+  kind: 'like' | 'comment' | 'call';
   actorId: string;
   actorName: string;
   postId: string | null;
+  /** For a 'call' notification: the room to join. */
+  roomId?: string | null;
   text: string;
   read: boolean;
   ts: number;
@@ -142,6 +144,8 @@ export interface DmMessage {
   fromName: string;
   to: string;
   text: string;
+  /** Present on a call message: the room to join. */
+  roomId?: string | null;
   ts: number;
 }
 export interface Conversation {
@@ -242,6 +246,8 @@ export interface ApiClient {
   searchPosts(q: string, page?: number): Promise<{ posts: Post[] }>;
   dmThread(userId: string): Promise<{ messages: DmMessage[] }>;
   sendDm(userId: string, text: string): Promise<{ message: DmMessage }>;
+  /** Start a call with a connection: posts a call message in the thread and notifies them. */
+  startCall(userId: string, roomId: string): Promise<{ ok: boolean; message: DmMessage }>;
   conversations(): Promise<{ conversations: Conversation[] }>;
 
   // --- server logs (admin only) ---
@@ -341,6 +347,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     },
     dmThread: (userId) => request('GET', `/api/dm/${encodeURIComponent(userId)}`),
     sendDm: (userId, text) => request('POST', `/api/dm/${encodeURIComponent(userId)}`, { text }),
+    startCall: (userId, roomId) => request('POST', `/api/call/${encodeURIComponent(userId)}/invite`, { roomId }),
     conversations: () => request('GET', '/api/dm'),
     logs: (opts = {}) => {
       const q = new URLSearchParams();

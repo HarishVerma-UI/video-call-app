@@ -29,7 +29,7 @@ export function App() {
 
 /** Camera is only requested after sign-in. */
 function SignedInApp() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, api } = useAuth();
   const presence = usePresence();
   const media = useLocalMedia();
   const [route, go] = useRoute();
@@ -61,13 +61,15 @@ function SignedInApp() {
     setCall({ roomId });
   }, [go]);
 
-  // Start a 1:1 call: ring the person, then enter the room to wait for them.
+  // Start a 1:1 call: ring the person (live), drop a call message + notification
+  // in case they missed the ring, then enter the room to wait for them.
   const callUser = useCallback((userId: string, name: string) => {
     const roomId = generateRoomId();
     presence.send({ type: 'invite', to: userId, roomId });
+    void api.startCall(userId, roomId).catch(() => {});
     flash(`Calling ${name || 'them'}…`);
     join(roomId);
-  }, [presence, join, flash]);
+  }, [presence, api, join, flash]);
 
   // Live call signalling over the presence channel.
   useEffect(() => {
@@ -151,7 +153,7 @@ function SignedInApp() {
     <Shell user={user} media={media} route={route} go={go} notice={notice} onJoin={join} />
   );
   return (
-    <CallingContext.Provider value={{ callUser }}>
+    <CallingContext.Provider value={{ callUser, joinRoom: join }}>
       {content}
       {callToast && <div className="call-toast" role="status">{callToast}</div>}
       {incoming && <IncomingCallModal fromName={incoming.fromName} fromId={incoming.from} onAccept={acceptIncoming} onDecline={declineIncoming} />}

@@ -2790,6 +2790,15 @@ svg {
 
 .invite-box__note { display: block; margin-top: 8px; color: var(--muted); font-size: 0.78rem; }
 
+/* notification: join-call button */
+.notif__join { align-self: flex-start; margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* DM call message bubble */
+.bubble--call { display: flex; align-items: center; gap: 10px; background: var(--accent-soft) !important; border: 1px solid var(--accent); }
+.bubble__call-icon { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.bubble__call-text { display: flex; flex-direction: column; gap: 6px; }
+.bubble__call-text .btn { align-self: flex-start; }
+
 /* DM header call button */
 .messages__call-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: var(--accent); color: #fff; border: 0; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
 .messages__call-btn:hover { filter: brightness(1.08); }

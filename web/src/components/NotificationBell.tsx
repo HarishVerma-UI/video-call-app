@@ -4,8 +4,8 @@ import { useAuth } from '../auth/AuthContext';
 import { ago } from '../format';
 import { usePresence, type PresenceMessage } from '../presence';
 
-/** Top-bar bell: live like/comment notifications with an unread badge. */
-export function NotificationBell({ onOpenPost }: { onOpenPost?: (postId: string) => void }) {
+/** Top-bar bell: live like/comment/call notifications with an unread badge. */
+export function NotificationBell({ onOpenPost, onJoinCall }: { onOpenPost?: (postId: string) => void; onJoinCall?: (roomId: string) => void }) {
   const { api } = useAuth();
   const { subscribe } = usePresence();
   const [items, setItems] = useState<Notification[]>([]);
@@ -54,7 +54,7 @@ export function NotificationBell({ onOpenPost }: { onOpenPost?: (postId: string)
     }
   };
 
-  const text = (n: Notification) => (n.kind === 'like' ? 'liked your post' : 'commented on your post');
+  const text = (n: Notification) => (n.kind === 'like' ? 'liked your post' : n.kind === 'call' ? 'is calling you' : 'commented on your post');
 
   return (
     <div className="notif" ref={ref}>
@@ -71,12 +71,18 @@ export function NotificationBell({ onOpenPost }: { onOpenPost?: (postId: string)
             <ul className="notif__list">
               {items.map((n) => (
                 <li key={n.id} className={`notif__item${n.read ? '' : ' is-unread'}`}>
-                  <button className="notif__row" onClick={() => { setOpen(false); if (n.postId && onOpenPost) onOpenPost(n.postId); }}>
-                    <span className={`notif__dot notif__dot--${n.kind}`} aria-hidden="true">{n.kind === 'like' ? '♥' : '💬'}</span>
+                  <button className="notif__row" onClick={() => { setOpen(false); if (n.kind !== 'call' && n.postId && onOpenPost) onOpenPost(n.postId); }}>
+                    <span className={`notif__dot notif__dot--${n.kind}`} aria-hidden="true">{n.kind === 'like' ? '♥' : n.kind === 'call' ? '📞' : '💬'}</span>
                     <span className="notif__text">
                       <strong>{n.actorName || 'Someone'}</strong> {text(n)}
                       {n.text && <span className="notif__snippet">“{n.text}”</span>}
                       <time className="notif__time">{ago(n.ts)}</time>
+                      {n.kind === 'call' && n.roomId && (
+                        <button className="btn btn--primary btn--small notif__join" onClick={(e) => { e.stopPropagation(); setOpen(false); onJoinCall?.(n.roomId as string); }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                          Join call
+                        </button>
+                      )}
                     </span>
                   </button>
                 </li>

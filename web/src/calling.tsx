@@ -4,6 +4,8 @@ import { ProfileAvatar } from './components/social/common';
 export interface CallingApi {
   /** Ring a specific user and enter the call room to wait for them. */
   callUser: (userId: string, name: string) => void;
+  /** Join an existing room (e.g. from a call message or notification). */
+  joinRoom: (roomId: string) => void;
 }
 
 export const CallingContext = createContext<CallingApi | null>(null);

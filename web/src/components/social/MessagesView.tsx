@@ -7,7 +7,7 @@ import { ProfileAvatar } from './common';
 
 export function MessagesView({ initialUser }: { initialUser?: string }) {
   const { api, user } = useAuth();
-  const { callUser } = useCalling();
+  const { callUser, joinRoom } = useCalling();
   const [convs, setConvs] = useState<Conversation[] | null>(null);
   const [connections, setConnections] = useState<Profile[]>([]);
   const [active, setActive] = useState<string | null>(initialUser ?? null);
@@ -186,12 +186,25 @@ export function MessagesView({ initialUser }: { initialUser?: string }) {
                   {loadingOlder ? 'Loading...' : 'Load older messages'}
                 </button>
               )}
-              {messages.map((m) => (
-                <div key={m.id} className={`bubble${m.from === user.id ? ' bubble--mine' : ''}`}>
-                  <span className="bubble__text">{m.text}</span>
-                  <time className="bubble__time">{ago(m.ts)}</time>
-                </div>
-              ))}
+              {messages.map((m) =>
+                m.roomId ? (
+                  <div key={m.id} className={`bubble bubble--call${m.from === user.id ? ' bubble--mine' : ''}`}>
+                    <span className="bubble__call-icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                    </span>
+                    <span className="bubble__call-text">
+                      <strong>{m.from === user.id ? 'You started a video call' : `${m.fromName || 'They'} started a video call`}</strong>
+                      <button className="btn btn--primary btn--small" onClick={() => m.roomId && joinRoom(m.roomId)}>Join call</button>
+                    </span>
+                    <time className="bubble__time">{ago(m.ts)}</time>
+                  </div>
+                ) : (
+                  <div key={m.id} className={`bubble${m.from === user.id ? ' bubble--mine' : ''}`}>
+                    <span className="bubble__text">{m.text}</span>
+                    <time className="bubble__time">{ago(m.ts)}</time>
+                  </div>
+                ),
+              )}
             </div>
             {err && <p className="form-msg" role="alert">{err}</p>}
             <form className="messages__send" onSubmit={send}>
