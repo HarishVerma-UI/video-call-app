@@ -4,7 +4,7 @@
 
 import { HttpError, readJson, sendJson } from './http.js';
 import { MediaError } from './media.js';
-import { publicAd, publicPost, publicProfile } from './db/socialStore.js';
+import { publicAd, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const arr = (v, maxItems, maxLen) => (Array.isArray(v) ? v.slice(0, maxItems).map((x) => str(x, maxLen)).filter(Boolean) : []);
@@ -23,7 +23,19 @@ function entries(v, keys, maxItems = 20) {
  * @param {{ profiles, connections, posts, dms, media, requireUser, log? }} deps
  */
 export function createSocial(deps) {
-  const { profiles, connections, posts, dms, media, requireUser, users, ads } = deps;
+  const { profiles, connections, posts, dms, media, requireUser, users, ads, notifications } = deps;
+  // Push a live notification to a user (no-op until signaling is attached).
+  const notify = deps.notify ?? (() => 0);
+
+  async function emitNotification(recipientId, { kind, actor, postId, text }) {
+    if (!notifications || !recipientId || recipientId === actor.id) return;
+    try {
+      const n = await notifications.add({ userId: recipientId, kind, actorId: actor.id, actorName: actor.name, postId, text });
+      notify(recipientId, { type: 'notification', notification: publicNotification(n), unread: await notifications.unreadCount(recipientId) });
+    } catch (err) {
+      log('notification failed', err);
+    }
+  }
   const log = deps.log ?? (() => {});
 
   // Some accounts (e.g. the seeded admin) are created directly in the user store
@@ -234,6 +246,10 @@ export function createSocial(deps) {
     const me = await requireUser(req);
     const post = await posts.toggleLike(id, me.id);
     if (!post) throw new HttpError(404, 'Post not found.');
+    // Only notify on a new like (not an un-like), and never for liking your own post.
+    if ((post.likes ?? []).includes(me.id)) {
+      void emitNotification(post.authorId, { kind: 'like', actor: me, postId: post.id, text: post.text?.slice(0, 80) ?? '' });
+    }
     sendJson(res, 200, { post: await postOut(post, me.id) });
   }
 
@@ -243,7 +259,21 @@ export function createSocial(deps) {
     if (!text) throw new HttpError(400, 'Write a comment first.');
     const post = await posts.addComment(id, { userId: me.id, name: me.name, text });
     if (!post) throw new HttpError(404, 'Post not found.');
+    void emitNotification(post.authorId, { kind: 'comment', actor: me, postId: post.id, text: text.slice(0, 80) });
     sendJson(res, 200, { post: await postOut(post, me.id) });
+  }
+
+  async function listNotifications(req, res) {
+    const me = await requireUser(req);
+    if (!notifications) return sendJson(res, 200, { notifications: [], unread: 0 });
+    const [list, unread] = await Promise.all([notifications.list(me.id, { limit: 30 }), notifications.unreadCount(me.id)]);
+    sendJson(res, 200, { notifications: list.map(publicNotification), unread });
+  }
+
+  async function readNotifications(req, res) {
+    const me = await requireUser(req);
+    if (notifications) await notifications.markAllRead(me.id);
+    sendJson(res, 200, { ok: true });
   }
 
   async function deletePost(req, res, id) {
@@ -343,6 +373,8 @@ export function createSocial(deps) {
     if (pathname === '/api/posts/search' && m === 'GET') return (await searchPosts(req, res, url), true);
     if (pathname === '/api/feed' && m === 'GET') return (await feed(req, res, url), true);
     if (pathname === '/api/ads' && m === 'GET') return (await listAds(req, res), true);
+    if (pathname === '/api/notifications' && m === 'GET') return (await listNotifications(req, res), true);
+    if (pathname === '/api/notifications/read' && m === 'POST') return (await readNotifications(req, res), true);
     if (pathname === '/api/dm' && m === 'GET') return (await conversations(req, res), true);
 
     let mm;

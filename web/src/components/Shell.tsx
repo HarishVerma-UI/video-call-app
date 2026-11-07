@@ -13,6 +13,7 @@ import { ModeToggle } from './ModeToggle';
 import { ProfileView } from './ProfileView';
 import { ProfileAvatar } from './social/common';
 import { FeedView } from './social/FeedView';
+import { NotificationBell } from './NotificationBell';
 import { MessagesView } from './social/MessagesView';
 import { NetworkView } from './social/NetworkView';
 import { PeopleView } from './social/PeopleView';
@@ -156,6 +157,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           )}
         </form>
         <div className="titlebar__end">
+          <NotificationBell onOpenPost={() => go({ view: 'feed' })} />
           <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
             <ChatIcon width={20} height={20} />
           </button>

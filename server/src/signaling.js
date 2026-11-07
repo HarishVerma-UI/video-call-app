@@ -25,6 +25,31 @@ export function attachSignaling(httpServer, options) {
   const log = options.log ?? (() => {});
   /** @type {Map<string, Map<string, Client>>} roomId -> (clientId -> client) */
   const rooms = new Map();
+  /** @type {Map<string, Set<Client>>} userId -> presence connections (signed-in, not necessarily in a call) */
+  const presence = new Map();
+
+  /** Push a payload to every live presence connection of a user. Returns how many got it. */
+  function notifyUser(userId, payload) {
+    const set = presence.get(userId);
+    if (!set) return 0;
+    let n = 0;
+    for (const c of set) {
+      if (c.ws.readyState === c.ws.OPEN) {
+        c.ws.send(JSON.stringify(payload));
+        n++;
+      }
+    }
+    return n;
+  }
+  const isOnline = (userId) => presence.has(userId);
+
+  function dropPresence(client) {
+    if (!client.userId) return;
+    const set = presence.get(client.userId);
+    if (!set) return;
+    set.delete(client);
+    if (set.size === 0) presence.delete(client.userId);
+  }
 
   const wss = new WebSocketServer({
     server: httpServer,
@@ -98,6 +123,45 @@ export function attachSignaling(httpServer, options) {
       const msg = parseClientMessage(raw.toString());
       if (!msg) {
         send(client, { type: 'error', code: 'bad-request', message: 'Invalid message.' });
+        return;
+      }
+
+      if (msg.type === 'hello') {
+        let user = null;
+        try {
+          user = await options.userFromToken(msg.token);
+        } catch (err) {
+          log('presence auth failed', err);
+        }
+        if (!user) {
+          send(client, { type: 'error', code: 'unauthorized', message: 'Your session has expired. Please sign in again.' });
+          return;
+        }
+        if (ws.readyState !== ws.OPEN) return;
+        client.userId = user.id;
+        client.name = user.name;
+        let set = presence.get(user.id);
+        if (!set) {
+          set = new Set();
+          presence.set(user.id, set);
+        }
+        set.add(client);
+        send(client, { type: 'hello-ok', userId: user.id });
+        log(`hello  presence user=${user.id} conns=${set.size}`);
+        return;
+      }
+
+      // Call invites travel over the presence channel to a specific user.
+      if (msg.type === 'invite' || msg.type === 'invite-cancel' || msg.type === 'invite-decline') {
+        if (!client.userId) {
+          send(client, { type: 'error', code: 'unauthorized', message: 'Sign in first.' });
+          return;
+        }
+        if (msg.to === client.userId) return; // can't ring yourself
+        const payloadType = msg.type === 'invite' ? 'incoming-call' : msg.type === 'invite-cancel' ? 'call-cancelled' : 'call-declined';
+        const n = notifyUser(msg.to, { type: payloadType, from: client.userId, fromName: client.name, roomId: msg.roomId });
+        // Let the caller know if the callee isn't reachable right now.
+        if (msg.type === 'invite') send(client, { type: 'invite-status', to: msg.to, roomId: msg.roomId, delivered: n > 0 });
         return;
       }
 
@@ -215,8 +279,14 @@ export function attachSignaling(httpServer, options) {
       }
     });
 
-    ws.on('close', () => leaveRoom(client));
-    ws.on('error', () => leaveRoom(client));
+    ws.on('close', () => {
+      leaveRoom(client);
+      dropPresence(client);
+    });
+    ws.on('error', () => {
+      leaveRoom(client);
+      dropPresence(client);
+    });
   });
 
   // Drop connections that stopped answering pings (closed laptop, lost network…).
@@ -242,6 +312,8 @@ export function attachSignaling(httpServer, options) {
 
   return {
     wss,
+    notifyUser,
+    isOnline,
     stats: () => ({
       rooms: rooms.size,
       participants: [...rooms.values()].reduce((n, r) => n + r.size, 0),

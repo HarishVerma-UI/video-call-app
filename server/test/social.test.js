@@ -308,3 +308,38 @@ test('feed: before param filters older posts', async () => {
   const older = await api(t.base, 'GET', `/api/feed?before=${ts}`, null, a.token);
   assert.ok(older.body.posts.every((p) => p.text !== 'Post two'), 'before filter excludes newer post');
 });
+
+test('notifications: commenting and liking notify the post author (not yourself)', async () => {
+  const author = await registerUser(t.base, 'Notify Author');
+  const actor = await registerUser(t.base, 'Notify Actor');
+  await api(t.base, 'PUT', '/api/profile', {}, author.token);
+  const post = await api(t.base, 'POST', '/api/posts', { text: 'Notify me' }, author.token);
+  const postId = post.body.post.id;
+
+  // actor comments and likes the author's post
+  await api(t.base, 'POST', `/api/posts/${postId}/comments`, { text: 'nice!' }, actor.token);
+  await api(t.base, 'POST', `/api/posts/${postId}/like`, {}, actor.token);
+
+  // author sees two unread notifications
+  let res = await api(t.base, 'GET', '/api/notifications', null, author.token);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.unread, 2, 'author has two unread notifications');
+  assert.ok(res.body.notifications.some((n) => n.kind === 'comment' && n.actorName === 'Notify Actor'));
+  assert.ok(res.body.notifications.some((n) => n.kind === 'like'));
+
+  // the actor does NOT get a notification for their own actions
+  res = await api(t.base, 'GET', '/api/notifications', null, actor.token);
+  assert.equal(res.body.unread, 0, 'actor has no notifications from their own actions');
+
+  // author marks all read
+  await api(t.base, 'POST', '/api/notifications/read', {}, author.token);
+  res = await api(t.base, 'GET', '/api/notifications', null, author.token);
+  assert.equal(res.body.unread, 0, 'unread cleared after marking read');
+});
+
+test('stats: total users count is returned', async () => {
+  const u = await registerUser(t.base, 'Counter');
+  const res = await api(t.base, 'GET', '/api/stats', null, u.token);
+  assert.equal(res.status, 200);
+  assert.ok(typeof res.body.totalUsers === 'number' && res.body.totalUsers >= 1);
+});

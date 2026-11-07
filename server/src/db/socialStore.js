@@ -503,6 +503,67 @@ function mongoAdStore(col, ObjectId) {
   };
 }
 
+// ===================== NOTIFICATIONS (likes/comments on your posts) =====================
+export function publicNotification(n) {
+  if (!n) return null;
+  return {
+    id: n.id,
+    kind: n.kind,
+    actorId: n.actorId,
+    actorName: n.actorName ?? '',
+    postId: n.postId ?? null,
+    text: n.text ?? '',
+    read: !!n.read,
+    ts: typeof n.ts === 'number' ? n.ts : new Date(n.ts ?? now()).getTime(),
+  };
+}
+
+export function createMemoryNotificationStore() {
+  const byUser = new Map(); // userId -> array (newest first)
+  return {
+    kind: 'memory',
+    async add({ userId, kind, actorId, actorName, postId, text }) {
+      const n = { id: id12(), userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, text: text ?? '', read: false, ts: Date.now() };
+      const list = byUser.get(userId) ?? [];
+      list.unshift(n);
+      byUser.set(userId, list.slice(0, 200));
+      return { ...n };
+    },
+    async list(userId, { limit = 30 } = {}) {
+      return (byUser.get(userId) ?? []).slice(0, limit).map((n) => ({ ...n }));
+    },
+    async unreadCount(userId) {
+      return (byUser.get(userId) ?? []).filter((n) => !n.read).length;
+    },
+    async markAllRead(userId) {
+      for (const n of byUser.get(userId) ?? []) n.read = true;
+      return true;
+    },
+  };
+}
+
+function mongoNotificationStore(col) {
+  return {
+    kind: 'mongodb',
+    async add({ userId, kind, actorId, actorName, postId, text }) {
+      const doc = { userId, kind, actorId, actorName: actorName ?? '', postId: postId ?? null, text: text ?? '', read: false, ts: Date.now() };
+      const res = await col.insertOne(doc);
+      return { id: res.insertedId.toString(), ...doc };
+    },
+    async list(userId, { limit = 30 } = {}) {
+      const rows = await col.find({ userId }).sort({ ts: -1 }).limit(limit).toArray();
+      return rows.map((d) => ({ id: d._id.toString(), ...d }));
+    },
+    async unreadCount(userId) {
+      return col.countDocuments({ userId, read: { $ne: true } });
+    },
+    async markAllRead(userId) {
+      await col.updateMany({ userId, read: { $ne: true } }, { $set: { read: true } });
+      return true;
+    },
+  };
+}
+
 // ===================== wiring =====================
 export async function connectSocialStores(db, log = () => {}) {
   const { ObjectId } = await import('mongodb');
@@ -511,13 +572,15 @@ export async function connectSocialStores(db, log = () => {}) {
   const posts = mongoPostStore(db.collection('posts'), ObjectId);
   const dms = mongoDmStore(db.collection('dms'));
   const ads = mongoAdStore(db.collection('ads'), ObjectId);
+  const notifications = mongoNotificationStore(db.collection('notifications'));
   await db.collection('profiles').createIndex({ updatedAt: -1 }, { name: 'profiles_recent' });
   await db.collection('connections').createIndex({ users: 1 }, { name: 'connections_users' });
   await db.collection('posts').createIndex({ authorId: 1, createdAt: -1 }, { name: 'posts_author' });
   await db.collection('dms').createIndex({ convId: 1, ts: -1 }, { name: 'dms_conv' });
   await db.collection('ads').createIndex({ createdAt: -1 }, { name: 'ads_recent' });
-  log('social stores ready (profiles, connections, posts, dms, ads)');
-  return { profiles, connections, posts, dms, ads };
+  await db.collection('notifications').createIndex({ userId: 1, ts: -1 }, { name: 'notifications_user' });
+  log('social stores ready (profiles, connections, posts, dms, ads, notifications)');
+  return { profiles, connections, posts, dms, ads, notifications };
 }
 
 export function createMemorySocialStores() {
@@ -527,5 +590,6 @@ export function createMemorySocialStores() {
     posts: createMemoryPostStore(),
     dms: createMemoryDmStore(),
     ads: createMemoryAdStore(),
+    notifications: createMemoryNotificationStore(),
   };
 }

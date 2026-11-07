@@ -46,6 +46,20 @@ export function parseClientMessage(raw) {
   if (!isObj(msg) || typeof msg.type !== 'string') return null;
 
   switch (msg.type) {
+    case 'hello': {
+      // Opens a persistent presence connection (notifications + call invites),
+      // without joining any call room. Identity comes from the signed token.
+      if (typeof msg.token !== 'string' || !msg.token || msg.token.length > 4096) return null;
+      return { type: 'hello', token: msg.token };
+    }
+    case 'invite':
+    case 'invite-cancel':
+    case 'invite-decline': {
+      // Ring a specific user into (or out of) a call room.
+      if (typeof msg.to !== 'string' || !msg.to || msg.to.length > 64) return null;
+      if (typeof msg.roomId !== 'string' || !ROOM_ID.test(msg.roomId)) return null;
+      return { type: msg.type, to: msg.to, roomId: msg.roomId.toLowerCase() };
+    }
     case 'join': {
       if (typeof msg.roomId !== 'string' || !ROOM_ID.test(msg.roomId)) return null;
       // Who you are comes from the signed token, never from what the client claims.

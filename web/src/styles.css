@@ -2736,6 +2736,42 @@ svg {
 .emoji-pick__item:hover { background: var(--surface-3); }
 .post-composer__action--emoji { padding: 4px 8px; }
 
+/* notification bell + dropdown */
+.notif { position: relative; display: inline-flex; }
+.notif__pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 340px;
+  max-width: 92vw;
+  max-height: 440px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
+}
+.notif__head { padding: 12px 14px; font-weight: 700; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
+.notif__empty { padding: 20px 14px; color: var(--muted); text-align: center; }
+.notif__list { list-style: none; margin: 0; padding: 0; }
+.notif__item { border-bottom: 1px solid var(--line); }
+.notif__item.is-unread { background: var(--accent-soft); }
+.notif__row { display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left; background: none; border: 0; cursor: pointer; color: inherit; padding: 11px 14px; }
+.notif__row:hover { background: var(--surface-2); }
+.notif__dot { flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.notif__dot--like { background: #fde8ef; color: #e0366f; }
+.notif__dot--comment { background: var(--accent-soft); }
+.notif__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 0.9rem; line-height: 1.35; }
+.notif__snippet { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif__time { color: var(--faint); font-size: 0.75rem; }
+
+/* community stat (home sidebar) */
+.community-stat { display: flex; align-items: center; gap: 12px; }
+.community-stat__text { display: flex; flex-direction: column; line-height: 1.2; }
+.community-stat__text strong { font-size: 1.4rem; font-weight: 700; }
+.community-stat__text span { color: var(--muted); font-size: 0.85rem; }
+
 /* network */
 .net-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .net-list li { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--line); }
