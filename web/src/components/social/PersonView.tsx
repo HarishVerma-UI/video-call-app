@@ -41,8 +41,12 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
           <ProfileAvatar profile={profile} size={84} />
           <div className="person-hero__text">
             <h1>{profile.name || 'Member'}</h1>
-            <p>{profile.headline || '—'}{profile.location ? ` · ${profile.location}` : ''}</p>
-            <div>{roleBadges(profile).map((b) => <span key={b} className="pill pill--role">{b}</span>)}</div>
+            {(profile.headline || profile.location) && (
+              <p>{profile.headline || ''}{profile.headline && profile.location ? ' · ' : ''}{profile.location || ''}</p>
+            )}
+            {roleBadges(profile).length > 0 && (
+              <div className="person-hero__badges">{roleBadges(profile).map((b) => <span key={b} className="pill pill--role">{b}</span>)}</div>
+            )}
           </div>
           <div className="person-hero__actions">
             <ConnectButton profile={profile} api={api} onChange={onConn} />
