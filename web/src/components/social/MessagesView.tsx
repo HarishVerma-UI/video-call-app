@@ -1,11 +1,13 @@
-import { generateRoomId, type Conversation, type DmMessage, type Profile } from '@vca/shared';
+import { type Conversation, type DmMessage, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useCalling } from '../../calling';
 import { ago } from '../../format';
 import { ProfileAvatar } from './common';
 
-export function MessagesView({ initialUser, startCall }: { initialUser?: string; startCall?: (roomId: string) => void }) {
+export function MessagesView({ initialUser }: { initialUser?: string }) {
   const { api, user } = useAuth();
+  const { callUser } = useCalling();
   const [convs, setConvs] = useState<Conversation[] | null>(null);
   const [connections, setConnections] = useState<Profile[]>([]);
   const [active, setActive] = useState<string | null>(initialUser ?? null);
@@ -172,8 +174,9 @@ export function MessagesView({ initialUser, startCall }: { initialUser?: string;
             <header className="messages__head">
               <strong>{headerName}</strong>
               <div className="messages__head-actions">
-                <button className="messages__icon-btn" title="Start video call" aria-label="Start video call" onClick={() => startCall?.(generateRoomId())}>
+                <button className="messages__call-btn" title={`Video call ${headerName}`} aria-label={`Video call ${headerName}`} onClick={() => { if (active) callUser(active, headerName); }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                  Call
                 </button>
               </div>
             </header>

@@ -1,4 +1,4 @@
-import { generateRoomId, normalizeRoomId, type AuthUser } from '@vca/shared';
+import { normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
@@ -239,13 +239,12 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
         {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
-        {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} startCall={(roomId) => onJoin(roomId)} />}
+        {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} />}
         {route.view === 'person' && (
           <PersonView
             key={route.id}
             userId={route.id}
             openMessages={(id) => go({ view: 'messages', user: id })}
-            startCall={() => onJoin(generateRoomId())}
             back={() => go({ view: 'people' })}
           />
         )}

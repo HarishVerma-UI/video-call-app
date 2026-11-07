@@ -1,11 +1,13 @@
 import type { ConnectionState, Post, Profile } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useCalling } from '../../calling';
 import { ago } from '../../format';
 import { ConnectButton, ProfileAvatar, roleBadges } from './common';
 
-export function PersonView({ userId, openMessages, startCall, back }: { userId: string; openMessages: (id: string) => void; startCall: () => void; back: () => void }) {
+export function PersonView({ userId, openMessages, back }: { userId: string; openMessages: (id: string) => void; back: () => void }) {
   const { api } = useAuth();
+  const { callUser } = useCalling();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [missing, setMissing] = useState(false);
@@ -46,8 +48,14 @@ export function PersonView({ userId, openMessages, startCall, back }: { userId: 
             <ConnectButton profile={profile} api={api} onChange={onConn} />
             {full && profile.connection !== 'self' && (
               <>
-                <button className="btn btn--secondary btn--small" onClick={() => openMessages(profile.userId)}>Message</button>
-                <button className="btn btn--primary btn--small" onClick={startCall}>Start call</button>
+                <button className="btn btn--secondary btn--small" onClick={() => openMessages(profile.userId)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                  Message
+                </button>
+                <button className="btn btn--primary btn--small" onClick={() => callUser(profile.userId, profile.name)}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                  Video call
+                </button>
               </>
             )}
           </div>
