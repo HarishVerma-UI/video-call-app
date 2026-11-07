@@ -1,4 +1,4 @@
-import { ApiError, colorFor, initials, passwordStrength, type FaceCredential } from '@vca/shared';
+import { ApiError, colorFor, initials, passwordStrength, type Education, type Experience, type FaceCredential, type Profile } from '@vca/shared';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { FaceCancelled } from '../faceUnlock';
@@ -113,6 +113,169 @@ function FaceSection() {
   );
 }
 
+const splitList = (s: string) => s.split(',').map((t) => t.trim()).filter(Boolean);
+
+/** A labelled text input used by the professional-profile editor. */
+function PInput({ label, value, onChangeText, placeholder, multiline }: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string; multiline?: boolean }) {
+  return (
+    <View style={{ gap: 4 }}>
+      <Text style={ps.label}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.faint}
+        multiline={multiline}
+        style={[ps.input, multiline && { minHeight: 76, textAlignVertical: 'top' }]}
+        autoCapitalize="sentences"
+      />
+    </View>
+  );
+}
+
+/** Edit the public professional profile: headline, bio, skills, mentoring, experience and education. */
+function ProfessionalProfile() {
+  const { api } = useAuth();
+  const [loaded, setLoaded] = useState(false);
+  const [headline, setHeadline] = useState('');
+  const [location, setLocation] = useState('');
+  const [bio, setBio] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [skills, setSkills] = useState('');
+  const [focus, setFocus] = useState('');
+  const [mentor, setMentor] = useState(false);
+  const [mentee, setMentee] = useState(false);
+  const [experience, setExperience] = useState<Experience[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+
+  useEffect(() => {
+    api
+      .myProfile()
+      .then(({ profile }) => {
+        setHeadline(profile.headline ?? '');
+        setLocation(profile.location ?? '');
+        setBio(profile.bio ?? '');
+        setMobile(profile.mobile ?? '');
+        setSkills((profile.skills ?? []).join(', '));
+        setFocus((profile.focusAreas ?? []).join(', '));
+        setMentor(!!profile.mentor);
+        setMentee(!!profile.mentee);
+        setExperience(profile.experience ?? []);
+        setEducation(profile.education ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [api]);
+
+  const setExp = (i: number, k: keyof Experience, v: string) => setExperience((xs) => xs.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const setEdu = (i: number, k: keyof Education, v: string) => setEducation((xs) => xs.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const patch: Partial<Profile> = {
+        headline: headline.trim(),
+        location: location.trim(),
+        bio: bio.trim(),
+        mobile: mobile.trim(),
+        skills: splitList(skills),
+        focusAreas: splitList(focus),
+        mentor,
+        mentee,
+        experience: experience.filter((x) => x.title || x.company),
+        education: education.filter((x) => x.school || x.degree),
+      };
+      await api.saveProfile(patch);
+      setMsg({ ok: true, text: 'Profile saved. Your connections will see the update.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Couldn’t save your profile.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return <ActivityIndicator style={{ marginVertical: 24 }} color={theme.primaryText} />;
+
+  return (
+    <View style={ps.wrap}>
+      <Text style={styles.section}>Professional profile</Text>
+      <View style={{ gap: 14 }}>
+        <PInput label="Headline" value={headline} onChangeText={setHeadline} placeholder="e.g. Senior Frontend Engineer" />
+        <PInput label="Location" value={location} onChangeText={setLocation} placeholder="e.g. Bengaluru, India" />
+        <PInput label="About" value={bio} onChangeText={setBio} placeholder="A short bio" multiline />
+        <PInput label="Skills (comma separated)" value={skills} onChangeText={setSkills} placeholder="Angular, TypeScript, RxJS" />
+        <PInput label="Mobile (shown to connections)" value={mobile} onChangeText={setMobile} placeholder="Optional" />
+
+        <View style={ps.switchRow}>
+          <Text style={ps.switchLabel}>Open to mentoring others</Text>
+          <Switch value={mentor} onValueChange={setMentor} trackColor={{ true: theme.primary }} />
+        </View>
+        <View style={ps.switchRow}>
+          <Text style={ps.switchLabel}>Looking for a mentor</Text>
+          <Switch value={mentee} onValueChange={setMentee} trackColor={{ true: theme.primary }} />
+        </View>
+        {(mentor || mentee) && <PInput label="Focus areas (comma separated)" value={focus} onChangeText={setFocus} placeholder="Career growth, System design" />}
+
+        <Text style={ps.subhead}>Experience</Text>
+        {experience.map((x, i) => (
+          <View key={i} style={ps.entry}>
+            <PInput label="Title" value={x.title} onChangeText={(v) => setExp(i, 'title', v)} />
+            <PInput label="Company" value={x.company} onChangeText={(v) => setExp(i, 'company', v)} />
+            <View style={ps.pair}>
+              <View style={{ flex: 1 }}><PInput label="From" value={x.start} onChangeText={(v) => setExp(i, 'start', v)} placeholder="2019" /></View>
+              <View style={{ flex: 1 }}><PInput label="To" value={x.end} onChangeText={(v) => setExp(i, 'end', v)} placeholder="Present" /></View>
+            </View>
+            <Pressable onPress={() => setExperience((xs) => xs.filter((_, j) => j !== i))} hitSlop={8}>
+              <Text style={ps.removeLink}>Remove</Text>
+            </Pressable>
+          </View>
+        ))}
+        <Pressable style={ps.addBtn} onPress={() => setExperience((xs) => [...xs, { title: '', company: '', start: '', end: '', description: '' }])}>
+          <Text style={ps.addText}>+ Add experience</Text>
+        </Pressable>
+
+        <Text style={ps.subhead}>Education</Text>
+        {education.map((x, i) => (
+          <View key={i} style={ps.entry}>
+            <PInput label="School" value={x.school} onChangeText={(v) => setEdu(i, 'school', v)} />
+            <PInput label="Degree" value={x.degree} onChangeText={(v) => setEdu(i, 'degree', v)} />
+            <PInput label="Year" value={x.year} onChangeText={(v) => setEdu(i, 'year', v)} placeholder="2018" />
+            <Pressable onPress={() => setEducation((xs) => xs.filter((_, j) => j !== i))} hitSlop={8}>
+              <Text style={ps.removeLink}>Remove</Text>
+            </Pressable>
+          </View>
+        ))}
+        <Pressable style={ps.addBtn} onPress={() => setEducation((xs) => [...xs, { school: '', degree: '', year: '' }])}>
+          <Text style={ps.addText}>+ Add education</Text>
+        </Pressable>
+      </View>
+
+      {msg && <Text style={[styles.msg, msg.ok && styles.msgOk]}>{msg.text}</Text>}
+      <Pressable style={[styles.primary, saving && { opacity: 0.5 }]} onPress={() => void save()} disabled={saving}>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Save profile</Text>}
+      </Pressable>
+      <Text style={styles.note}>Add a profile photo and CV from the Huddle website — photo and file uploads are coming to the app soon.</Text>
+    </View>
+  );
+}
+
+const ps = StyleSheet.create({
+  wrap: { marginBottom: 20 },
+  label: { color: theme.muted, fontSize: 13, fontFamily: fonts.regular },
+  input: { color: theme.text, fontSize: 16, fontFamily: fonts.regular, backgroundColor: theme.surface2, borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  switchLabel: { flex: 1, color: theme.text, fontSize: 15, fontFamily: fonts.regular },
+  subhead: { color: theme.text, fontSize: 15, fontFamily: fonts.bold, marginTop: 10 },
+  entry: { gap: 10, padding: 12, borderRadius: 12, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
+  pair: { flexDirection: 'row', gap: 10 },
+  removeLink: { color: theme.hotSoft, fontSize: 13, fontFamily: fonts.bold, alignSelf: 'flex-start' },
+  addBtn: { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface2 },
+  addText: { color: theme.primaryText, fontSize: 14, fontFamily: fonts.bold },
+});
+
 /** Edit name, email and password; sign out lives here too. */
 export function ProfileScreen() {
   const { user, updateProfile, changePassword, logout } = useAuth();
@@ -195,7 +358,9 @@ export function ProfileScreen() {
           </View>
         </View>
 
-        <Text style={styles.section}>Details</Text>
+        <ProfessionalProfile />
+
+        <Text style={styles.section}>Account</Text>
         <View style={{ gap: 18 }}>
           <Field label="Name" value={name} onChangeText={setName} error={dErr.name} autoComplete="name" />
           <Field label="Email" value={email} onChangeText={setEmail} error={dErr.email} keyboardType="email-address" autoComplete="email" />
