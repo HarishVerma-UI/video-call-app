@@ -4,8 +4,12 @@ import { mediaDevices, type MediaStream } from 'react-native-webrtc';
 /**
  * Camera + mic for the phone. Asks for permission on first use (the OS prompt
  * text comes from app.json). Falls back to audio-only if the camera is refused.
+ *
+ * `enabled` gates the permission prompt: the camera/mic are only acquired while
+ * it is true (the Meet screen or an active call), so signing in and browsing the
+ * feed, network or messages never triggers a permission prompt.
  */
-export function useLocalStream() {
+export function useLocalStream(enabled = true) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -16,6 +20,16 @@ export function useLocalStream() {
   const ref = useRef<MediaStream | null>(null);
 
   useEffect(() => {
+    // Not on a call/meet screen yet — release the camera and mic.
+    if (!enabled) {
+      ref.current?.getTracks().forEach((t) => t.stop());
+      ref.current?.release?.();
+      ref.current = null;
+      setStream(null);
+      setReady(false);
+      setProblem(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setReady(false);
@@ -49,7 +63,7 @@ export function useLocalStream() {
       ref.current?.release?.();
       ref.current = null;
     };
-  }, [attempt]);
+  }, [attempt, enabled]);
 
   useEffect(() => {
     stream?.getAudioTracks().forEach((t) => (t.enabled = audioOn));
