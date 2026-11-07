@@ -172,7 +172,7 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
 
 /* ── Right sidebar ── */
 
-function FeedSidebar({ suggestions, ads, api, nav, onConn, totalUsers }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void; totalUsers: number | null }) {
+function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void }) {
   return (
     <aside className="feed-sidebar" aria-label="Feed sidebar">
       {totalUsers !== null && (
@@ -255,7 +255,6 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
-  const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [imageKey, setImageKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -279,7 +278,6 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
     // "People you may know": anyone not yet connected (server already excludes pending).
     api.searchPeople({}).then(({ people }) => setSuggestions(people.filter((p) => p.connection === 'none'))).catch(() => {});
     api.ads().then(({ ads: a }) => setAds(a)).catch(() => {});
-    api.stats().then(({ totalUsers: n }) => setTotalUsers(n)).catch(() => {});
   }, [api]);
 
   // Debounced unified search: posts AND people.
@@ -440,7 +438,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
         )}
       </div>
 
-      <FeedSidebar suggestions={suggestions} ads={ads} api={api} nav={nav} onConn={onConn} totalUsers={totalUsers} />
+      <FeedSidebar suggestions={suggestions} ads={ads} api={api} nav={nav} onConn={onConn} />
     </section>
   );
 }
