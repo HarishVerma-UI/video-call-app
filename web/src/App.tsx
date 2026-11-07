@@ -4,6 +4,7 @@ import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
 import { Shell, useRoute } from './components/Shell';
 import { useLocalMedia } from './hooks/useLocalMedia';
+import { PresenceProvider } from './presence';
 
 export function App() {
   const { status } = useAuth();
@@ -17,7 +18,11 @@ export function App() {
   // An invite link like /r/swift-comet-482 survives sign-in: the room is read
   // from the URL again once you're signed in.
   if (status === 'signed-out') return <AuthPage />;
-  return <SignedInApp />;
+  return (
+    <PresenceProvider>
+      <SignedInApp />
+    </PresenceProvider>
+  );
 }
 
 /** Camera is only requested after sign-in. */

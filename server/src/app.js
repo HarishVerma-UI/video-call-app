@@ -98,8 +98,10 @@ export function createApp(
   });
   const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social });
   const media = createMedia(config.s3 ?? {}, log);
-  const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, log });
   let signaling;
+  // Late-bound: signaling is created below, but social only calls notify at request time.
+  const notify = (userId, payload) => signaling?.notifyUser(userId, payload) ?? 0;
+  const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, notify, log });
 
   const cors = (req) => {
     const origin = req.headers.origin;
@@ -152,6 +154,19 @@ export function createApp(
       const q = url.searchParams.get('q') || undefined;
       const limit = Number(url.searchParams.get('limit') || 200) || 200;
       sendJson(res, 200, { logs: logStore.query({ since, level, q, limit }) });
+      return;
+    }
+
+    // Community stats shown on the home feed (any signed-in user).
+    if (path === '/api/stats' && req.method === 'GET') {
+      await auth.requireUser(req);
+      let totalUsers = 0;
+      try {
+        totalUsers = await store.count();
+      } catch (err) {
+        log('user count failed', err);
+      }
+      sendJson(res, 200, { totalUsers, online: signaling ? signaling.stats().participants : 0 });
       return;
     }
 

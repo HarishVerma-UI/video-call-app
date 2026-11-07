@@ -125,6 +125,17 @@ export interface Ad {
   createdAt: string | null;
 }
 
+export interface Notification {
+  id: string;
+  kind: 'like' | 'comment';
+  actorId: string;
+  actorName: string;
+  postId: string | null;
+  text: string;
+  read: boolean;
+  ts: number;
+}
+
 export interface DmMessage {
   id: string;
   from: string;
@@ -189,6 +200,11 @@ export interface ApiClient {
 
   // --- ads (admin manages; everyone sees active ones in the feed) ---
   ads(): Promise<{ ads: Ad[] }>;
+  /** Community stats shown on the home feed. */
+  stats(): Promise<{ totalUsers: number; online: number }>;
+  /** Your recent like/comment notifications, with the unread count. */
+  notifications(): Promise<{ notifications: Notification[]; unread: number }>;
+  markNotificationsRead(): Promise<{ ok: boolean }>;
   adminListAds(): Promise<{ ads: Ad[] }>;
   adminCreateAd(input: { title: string; body?: string; linkUrl?: string; imageKey?: string | null; active?: boolean }): Promise<{ ad: Ad }>;
   adminUpdateAd(id: string, patch: { title?: string; body?: string; linkUrl?: string; imageKey?: string | null; active?: boolean }): Promise<{ ad: Ad }>;
@@ -276,6 +292,9 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
     adminStats: () => request('GET', '/api/admin/stats'),
     ads: () => request('GET', '/api/ads'),
+    stats: () => request('GET', '/api/stats'),
+    notifications: () => request('GET', '/api/notifications'),
+    markNotificationsRead: () => request('POST', '/api/notifications/read', {}),
     adminListAds: () => request('GET', '/api/admin/ads'),
     adminCreateAd: (input) => request('POST', '/api/admin/ads', input),
     adminUpdateAd: (id, patch) => request('PATCH', `/api/admin/ads/${encodeURIComponent(id)}`, patch),

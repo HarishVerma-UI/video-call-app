@@ -172,9 +172,18 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
 
 /* ── Right sidebar ── */
 
-function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void }) {
+function FeedSidebar({ suggestions, ads, api, nav, onConn, totalUsers }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void; totalUsers: number | null }) {
   return (
     <aside className="feed-sidebar" aria-label="Feed sidebar">
+      {totalUsers !== null && (
+        <div className="sidebar-card community-stat">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4F6BED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+          <span className="community-stat__text">
+            <strong>{totalUsers.toLocaleString()}</strong>
+            <span>{totalUsers === 1 ? 'member' : 'members'} on Huddle</span>
+          </span>
+        </div>
+      )}
       <div className="sidebar-card">
         <h3 className="sidebar-card__title">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F6BED" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
@@ -246,6 +255,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [imageKey, setImageKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -269,6 +279,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
     // "People you may know": anyone not yet connected (server already excludes pending).
     api.searchPeople({}).then(({ people }) => setSuggestions(people.filter((p) => p.connection === 'none'))).catch(() => {});
     api.ads().then(({ ads: a }) => setAds(a)).catch(() => {});
+    api.stats().then(({ totalUsers: n }) => setTotalUsers(n)).catch(() => {});
   }, [api]);
 
   // Debounced unified search: posts AND people.
@@ -429,7 +440,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
         )}
       </div>
 
-      <FeedSidebar suggestions={suggestions} ads={ads} api={api} nav={nav} onConn={onConn} />
+      <FeedSidebar suggestions={suggestions} ads={ads} api={api} nav={nav} onConn={onConn} totalUsers={totalUsers} />
     </section>
   );
 }
