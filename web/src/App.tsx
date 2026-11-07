@@ -31,9 +31,10 @@ export function App() {
 function SignedInApp() {
   const { user, token, logout, api } = useAuth();
   const presence = usePresence();
-  const media = useLocalMedia();
   const [route, go] = useRoute();
   const [call, setCall] = useState<{ roomId: string } | null>(null);
+  // Only request camera/mic on the Meet or call screens — never on sign-in or the feed.
+  const media = useLocalMedia(route.view === 'meet' || call !== null);
   const [notice, setNotice] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<{ from: string; fromName: string; roomId: string } | null>(null);
   const [callToast, setCallToast] = useState<string | null>(null);
@@ -148,7 +149,15 @@ function SignedInApp() {
 
   if (!user || !token) return null;
   const content = call ? (
-    <CallRoom roomId={call.roomId} auth={{ token, name: user.name, userId: user.id }} media={media} onLeave={leave} />
+    media.ready ? (
+      <CallRoom roomId={call.roomId} auth={{ token, name: user.name, userId: user.id }} media={media} onLeave={leave} />
+    ) : (
+      <div className="call-preparing" role="status">
+        <div className="call-preparing__spinner" aria-hidden="true" />
+        <p>Setting up your camera and mic…</p>
+        <small>Allow access when your browser asks.</small>
+      </div>
+    )
   ) : (
     <Shell user={user} media={media} route={route} go={go} notice={notice} onJoin={join} />
   );

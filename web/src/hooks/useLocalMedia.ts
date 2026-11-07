@@ -28,8 +28,12 @@ function classify(err: unknown): MediaProblem {
 /**
  * Grab camera + mic, falling back to mic-only and then to nothing, so people
  * without a camera (or who deny it) can still join and listen.
+ *
+ * `enabled` gates the permission prompt: the camera/mic are only requested while
+ * it is true (i.e. on the Meet/call screens), so signing in and browsing the
+ * feed never triggers a permission prompt.
  */
-export function useLocalMedia(): LocalMedia {
+export function useLocalMedia(enabled = true): LocalMedia {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [ready, setReady] = useState(false);
   const [problem, setProblem] = useState<MediaProblem>(null);
@@ -39,6 +43,15 @@ export function useLocalMedia(): LocalMedia {
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
+    // Not on a call/meet screen yet — don't touch the camera or mic.
+    if (!enabled) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setStream(null);
+      setReady(false);
+      setProblem(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setReady(false);
@@ -73,7 +86,7 @@ export function useLocalMedia(): LocalMedia {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [attempt]);
+  }, [attempt, enabled]);
 
   // Keep track.enabled in sync with the toggles (also covers a fresh stream after retry).
   useEffect(() => {
