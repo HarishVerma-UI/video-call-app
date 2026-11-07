@@ -1,10 +1,12 @@
 import type { ConnectionState, Profile } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useCalling } from '../../calling';
 import { ConnectButton, ProfileAvatar, roleBadges } from './common';
 
 export function NetworkView({ openUser, openMessages }: { openUser: (id: string) => void; openMessages: (id: string) => void }) {
   const { api } = useAuth();
+  const { callUser } = useCalling();
   const [requests, setRequests] = useState<Profile[] | null>(null);
   const [connections, setConnections] = useState<Profile[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
@@ -119,7 +121,14 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
                       )}
                     </span>
                   </button>
-                  <button className="btn btn--secondary btn--small net-list__cta" onClick={() => openMessages(p.userId)}>Message</button>
+                  <span className="net-list__actions">
+                    <button className="btn btn--secondary btn--small" onClick={() => openMessages(p.userId)} title="Message" aria-label={`Message ${p.name || 'member'}`}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                    </button>
+                    <button className="btn btn--primary btn--small" onClick={() => callUser(p.userId, p.name)} title="Video call" aria-label={`Video call ${p.name || 'member'}`}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>

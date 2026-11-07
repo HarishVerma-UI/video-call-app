@@ -2766,6 +2766,32 @@ svg {
 .notif__snippet { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notif__time { color: var(--faint); font-size: 0.75rem; }
 
+/* incoming call modal */
+.incoming { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; background: rgba(8, 10, 20, 0.6); backdrop-filter: blur(4px); }
+.incoming__card { background: var(--surface); border-radius: 20px; padding: 32px 28px; width: min(360px, 92vw); text-align: center; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4); }
+.incoming__avatar { display: inline-flex; border-radius: 50%; }
+.incoming__avatar--ring { position: relative; padding: 6px; }
+.incoming__avatar--ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--accent); animation: incoming-pulse 1.4s ease-out infinite; }
+@keyframes incoming-pulse { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.35); opacity: 0; } }
+.incoming__who { margin: 18px 0 24px; display: flex; flex-direction: column; gap: 4px; }
+.incoming__who strong { font-size: 1.3rem; }
+.incoming__who span { color: var(--muted); }
+.incoming__actions { display: flex; gap: 16px; justify-content: center; }
+.incoming__btn { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; border: 0; cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #fff; background: none; }
+.incoming__btn svg { width: 56px; height: 56px; padding: 16px; border-radius: 50%; box-sizing: content-box; }
+.incoming__btn--accept svg { background: #22c55e; }
+.incoming__btn--decline svg { background: #ef4444; }
+.incoming__btn--accept { color: var(--text); }
+.incoming__btn--decline { color: var(--text); }
+.incoming__btn:hover svg { filter: brightness(1.08); }
+
+/* call status toast */
+.call-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 150; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 10px 20px; font-weight: 600; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22); }
+
+/* DM header call button */
+.messages__call-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: var(--accent); color: #fff; border: 0; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
+.messages__call-btn:hover { filter: brightness(1.08); }
+
 /* community stat (home sidebar) */
 .community-stat { display: flex; align-items: center; gap: 12px; }
 .community-stat__text { display: flex; flex-direction: column; line-height: 1.2; }
