@@ -2788,6 +2788,8 @@ svg {
 /* call status toast */
 .call-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 150; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 10px 20px; font-weight: 600; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22); }
 
+.invite-box__note { display: block; margin-top: 8px; color: var(--muted); font-size: 0.78rem; }
+
 /* DM header call button */
 .messages__call-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: var(--accent); color: #fff; border: 0; font-weight: 600; font-size: 0.85rem; cursor: pointer; }
 .messages__call-btn:hover { filter: brightness(1.08); }

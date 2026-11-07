@@ -1,15 +1,17 @@
-import type { Participant } from '@vca/shared';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { Participant, Profile } from '@vca/shared';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { roomUrl } from '../config';
 import { roomTitle } from '../format';
 import { useCall } from '../hooks/useCall';
 import type { LocalMedia } from '../hooks/useLocalMedia';
+import { usePresence } from '../presence';
 import { Aperture } from './Aperture';
 import { ChatPanel } from './ChatPanel';
 import { CamIcon, CamOffIcon, ChatIcon, CloseIcon, LinkIcon, MicIcon, MicOffIcon, PeopleIcon, PhoneOffIcon, ScreenIcon } from './Icons';
 import { ModeToggle } from './ModeToggle';
 import { Avatar } from './RoomBadge';
+import { ProfileAvatar } from './social/common';
 import { VideoTile } from './VideoTile';
 
 interface Props {
@@ -69,7 +71,25 @@ function BarButton(props: {
   );
 }
 
-function PeoplePanel({ participants, roomId, onClose, onCopy }: { participants: Participant[]; roomId: string; onClose: () => void; onCopy: () => void }) {
+function PeoplePanel({
+  participants,
+  roomId,
+  connections,
+  rung,
+  onRing,
+  onClose,
+  onCopy,
+}: {
+  participants: Participant[];
+  roomId: string;
+  connections: Profile[];
+  rung: Set<string>;
+  onRing: (userId: string, name: string) => void;
+  onClose: () => void;
+  onCopy: () => void;
+}) {
+  const inCall = new Set(participants.map((p) => p.userId).filter(Boolean));
+  const addable = connections.filter((c) => !inCall.has(c.userId));
   return (
     <aside className="side-panel" aria-label="People" data-testid="people-panel">
       <header className="side-panel__head">
@@ -86,7 +106,26 @@ function PeoplePanel({ participants, roomId, onClose, onCopy }: { participants: 
             <LinkIcon width={16} height={16} /> Copy
           </button>
         </div>
+        <small className="invite-box__note">Only signed-in members can join.</small>
       </div>
+
+      {addable.length > 0 && (
+        <>
+          <h3 className="side-panel__sub">Add from your connections</h3>
+          <ul className="people">
+            {addable.map((c) => (
+              <li key={c.userId} className="people__row">
+                <ProfileAvatar profile={c} size={32} />
+                <span className="people__name">{c.name || 'Member'}</span>
+                <button className="btn btn--primary btn--small" onClick={() => onRing(c.userId, c.name)} disabled={rung.has(c.userId)}>
+                  {rung.has(c.userId) ? 'Ringing…' : 'Ring'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <h3 className="side-panel__sub">In this meeting ({participants.length})</h3>
       <ul className="people">
         {participants.map((p) => (
@@ -115,11 +154,25 @@ export function CallRoom({ roomId, auth, media, onLeave }: Props) {
     auth,
     media.stream,
   );
-  const { user } = useAuth();
+  const { user, api } = useAuth();
+  const presence = usePresence();
   const [panel, setPanel] = useState<Panel>(null);
   const [unread, setUnread] = useState(0);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [connections, setConnections] = useState<Profile[]>([]);
+  const [rung, setRung] = useState<Set<string>>(() => new Set());
+
+  // Your connections, so you can ring them into this call.
+  useEffect(() => {
+    api.listConnections().then(({ connections: c }) => setConnections(c)).catch(() => {});
+  }, [api]);
+
+  const ringIntoCall = useCallback((userId: string, name: string) => {
+    presence.send({ type: 'invite', to: userId, roomId });
+    setRung((s) => new Set(s).add(userId));
+    setToast(`Ringing ${name || 'them'}…`);
+  }, [presence, roomId]);
   const elapsed = useElapsed(status === 'joined');
   const seenMessages = useRef(0);
   const chatOpen = panel === 'chat';
@@ -312,7 +365,17 @@ export function CallRoom({ roomId, auth, media, onLeave }: Props) {
           onClose={() => setPanel(null)}
         />
       )}
-      {panel === 'people' && <PeoplePanel participants={participants} roomId={roomId} onClose={() => setPanel(null)} onCopy={copyInvite} />}
+      {panel === 'people' && (
+        <PeoplePanel
+          participants={participants}
+          roomId={roomId}
+          connections={connections}
+          rung={rung}
+          onRing={ringIntoCall}
+          onClose={() => setPanel(null)}
+          onCopy={copyInvite}
+        />
+      )}
 
       {toast && (
         <div className="toast" role="status">
