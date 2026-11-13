@@ -3175,3 +3175,11 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
   .jobs__layout { grid-template-columns: 1fr; }
   .jobs__filters { position: static; }
 }
+
+/* profile completion meter */
+.pp-meter { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.pp-meter__track { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.pp-meter__track span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+.pp-meter--ok .pp-meter__track span { background: var(--live); }
+.pp-meter__label { font-size: .8rem; color: var(--muted); }
+.pp-meter--ok .pp-meter__label { color: var(--live); font-weight: 600; }
