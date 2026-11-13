@@ -228,6 +228,12 @@ export function createAdmin(opts) {
     if (!partial || body.requirements !== undefined) patch.requirements = list40(body.requirements, 200);
     if (!partial || body.skills !== undefined) patch.skills = list40(body.skills, 60);
     if (!partial || body.active !== undefined) patch.active = body.active !== false;
+    if (!partial || body.applyUrl !== undefined) {
+      const u = adStr(body.applyUrl, 500);
+      if (u && !/^https?:\/\//i.test(u)) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { applyUrl: 'Link must start with http:// or https://' } });
+      patch.applyUrl = u;
+    }
+    if (!partial || body.source !== undefined) patch.source = adStr(body.source, 80);
     return patch;
   }
 
@@ -261,6 +267,39 @@ export function createAdmin(opts) {
     if (!job) throw new HttpError(404, 'Job not found.');
     opts.log?.(`admin  updated job ${id}`);
     sendJson(res, 200, { job: publicJob(job) });
+  }
+
+  async function importJobs(req, res) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
+    const body = await readJson(req, 4 * 1024 * 1024);
+    const incoming = Array.isArray(body.jobs) ? body.jobs : [];
+    if (!incoming.length) throw new HttpError(400, 'No jobs to import.');
+    if (incoming.length > 500) throw new HttpError(400, 'Import at most 500 jobs at a time.');
+    const existing = await opts.social.jobs.list({ activeOnly: false });
+    const seenUrl = new Set(existing.map((j) => (j.applyUrl || '').toLowerCase()).filter(Boolean));
+    const seenKey = new Set(existing.map((j) => `${(j.title || '').toLowerCase()}@@${(j.company || '').toLowerCase()}`));
+    let created = 0;
+    let skipped = 0;
+    for (const raw of incoming) {
+      let patch;
+      try {
+        patch = jobPatchFrom(raw, { partial: false });
+      } catch {
+        skipped++;
+        continue;
+      }
+      if (!patch.title || !patch.company) { skipped++; continue; }
+      const urlKey = (patch.applyUrl || '').toLowerCase();
+      const key = `${patch.title.toLowerCase()}@@${patch.company.toLowerCase()}`;
+      if ((urlKey && seenUrl.has(urlKey)) || seenKey.has(key)) { skipped++; continue; }
+      await opts.social.jobs.create(patch);
+      if (urlKey) seenUrl.add(urlKey);
+      seenKey.add(key);
+      created++;
+    }
+    opts.log?.(`admin  imported ${created} jobs (${skipped} skipped)`);
+    sendJson(res, 201, { created, skipped });
   }
 
   async function deleteJob(req, res, id) {
@@ -328,6 +367,7 @@ export function createAdmin(opts) {
     else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
     else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
     else if (pathname === '/api/admin/jobs' && req.method === 'POST') await createJob(req, res);
+    else if (pathname === '/api/admin/jobs/import' && req.method === 'POST') await importJobs(req, res);
     else {
       const adMatch = pathname.match(/^\/api\/admin\/ads\/([^/]+)$/);
       const m = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);

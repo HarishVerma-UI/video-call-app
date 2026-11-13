@@ -190,6 +190,10 @@ export interface Job {
   requirements: string[];
   skills: string[];
   active: boolean;
+  /** External application URL. When set, "apply" opens this instead of the in-app flow. */
+  applyUrl: string;
+  /** Where the job came from, e.g. "Remotive" or "Posted by admin". */
+  source: string;
   createdAt: string | null;
   /** 0–100 fit for the signed-in viewer, from skill overlap (list/detail only). */
   matchScore?: number;
@@ -231,6 +235,8 @@ export interface JobInput {
   requirements?: string[];
   skills?: string[];
   active?: boolean;
+  applyUrl?: string;
+  source?: string;
 }
 
 /** Filters for the jobs board. */
@@ -358,6 +364,8 @@ export interface ApiClient {
   adminDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
   adminJobApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
   adminSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
+  /** Bulk-insert jobs (e.g. from the importer), skipping duplicates. */
+  adminImportJobs(jobs: JobInput[]): Promise<{ created: number; skipped: number }>;
 
   // --- server logs (admin only) ---
   logs(opts?: { since?: number; level?: string; q?: string; limit?: number }): Promise<{ logs: { id: number; ts: number; level: string; message: string }[] }>;
@@ -501,6 +509,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminDeleteJob: (id) => request('DELETE', `/api/admin/jobs/${encodeURIComponent(id)}`),
     adminJobApplicants: (jobId) => request('GET', `/api/admin/jobs/${encodeURIComponent(jobId)}/applicants`),
     adminSetApplicationStatus: (id, status) => request('PATCH', `/api/admin/applications/${encodeURIComponent(id)}`, { status }),
+    adminImportJobs: (jobs) => request('POST', '/api/admin/jobs/import', { jobs }),
     logs: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.since !== undefined) q.set('since', String(opts.since));

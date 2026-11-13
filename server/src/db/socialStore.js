@@ -586,6 +586,8 @@ export function publicJob(j) {
     requirements: j.requirements ?? [],
     skills: j.skills ?? [],
     active: j.active !== false,
+    applyUrl: j.applyUrl ?? '',
+    source: j.source ?? '',
     createdAt: iso(j.createdAt),
   };
 }
@@ -603,7 +605,7 @@ export function publicApplication(a) {
   };
 }
 
-const JOB_FIELDS = ['title', 'company', 'category', 'country', 'type', 'experience', 'salaryMin', 'salaryMax', 'salaryCurrency', 'remote', 'description', 'requirements', 'skills', 'active'];
+const JOB_FIELDS = ['title', 'company', 'category', 'country', 'type', 'experience', 'salaryMin', 'salaryMax', 'salaryCurrency', 'remote', 'description', 'requirements', 'skills', 'active', 'applyUrl', 'source'];
 function pickJob(input) {
   return {
     title: input.title ?? '',
@@ -620,6 +622,8 @@ function pickJob(input) {
     requirements: Array.isArray(input.requirements) ? input.requirements : [],
     skills: Array.isArray(input.skills) ? input.skills : [],
     active: input.active !== false,
+    applyUrl: input.applyUrl ?? '',
+    source: input.source ?? '',
   };
 }
 

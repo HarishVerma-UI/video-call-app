@@ -49,6 +49,7 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
         <span>{EXP_LABEL[job.experience]}</span>
         {job.remote ? <span className="job-chip--remote">Remote</span> : job.country ? <span>{job.country}</span> : null}
         {sal && <span className="job-card__salary">{sal}</span>}
+        {job.applyUrl && <span className="job-chip--ext">↗ {job.source || 'External'}</span>}
       </div>
       {job.skills.length > 0 && (
         <div className="job-card__skills">
@@ -172,10 +173,12 @@ function JobDetail({ job, onClose, onApply }: { job: Job; onClose: () => void; o
 
         <div className="modal__actions">
           <button className="btn btn--secondary" onClick={onClose}>Close</button>
-          {job.appliedByMe ? (
+          {job.appliedByMe && !job.applyUrl ? (
             <button className="btn btn--primary" disabled>✓ Applied</button>
           ) : (
-            <button className="btn btn--primary" onClick={onApply} data-testid="open-apply">Apply now</button>
+            <button className="btn btn--primary" onClick={onApply} data-testid="open-apply">
+              {job.applyUrl ? `Apply on ${job.source || 'company site'} ↗` : 'Apply now'}
+            </button>
           )}
         </div>
       </div>
@@ -246,6 +249,19 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
   const markApplied = (jobId: string) => {
     setJobs((cur) => cur?.map((j) => (j.id === jobId ? { ...j, appliedByMe: true } : j)) ?? cur);
     setSelected((s) => (s && s.id === jobId ? { ...s, appliedByMe: true } : s));
+  };
+
+  // External jobs apply on the company's own site; internal jobs open the apply modal.
+  const startApply = (job: Job) => {
+    if (job.applyUrl) {
+      window.open(job.applyUrl, '_blank', 'noopener,noreferrer');
+      void api.applyToJob(job.id).catch(() => {}); // record interest for "My applications"
+      markApplied(job.id);
+      setSelected(null);
+    } else {
+      setApplying(job);
+      setSelected(null);
+    }
   };
 
   return (
@@ -325,7 +341,7 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
         <JobDetail
           job={selected}
           onClose={() => setSelected(null)}
-          onApply={() => { setApplying(selected); setSelected(null); }}
+          onApply={() => startApply(selected)}
         />
       )}
       {applying && (
