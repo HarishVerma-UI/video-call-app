@@ -1,4 +1,4 @@
-import { ApiError, type Education, type Experience, type Profile } from '@vca/shared';
+import { ApiError, profileCompletion, type Education, type Experience, type ParsedCv, type Profile } from '@vca/shared';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { uploadFile } from '../../upload';
@@ -92,16 +92,43 @@ export function ProfessionalProfile() {
     }
   };
 
+  // Overlay parsed CV fields onto the form, only where the field is still empty,
+  // so a member's own edits are never clobbered. Returns what got pre-filled.
+  const applyParsed = (prof: Profile, parsed: ParsedCv | undefined): string[] => {
+    fill(prof);
+    if (!parsed) return [];
+    const filled: string[] = [];
+    if (parsed.headline && !prof.headline) { setHeadline(parsed.headline); filled.push('headline'); }
+    if (parsed.location && !prof.location) { setLocation(parsed.location); filled.push('location'); }
+    if (parsed.phone && !prof.mobile) { setMobile(parsed.phone); filled.push('mobile'); }
+    if (parsed.skills?.length) {
+      const existing = prof.skills ?? [];
+      const merged = Array.from(new Set([...existing, ...parsed.skills]));
+      if (merged.length > existing.length) { setSkills(merged.join(', ')); filled.push('skills'); }
+    }
+    if (parsed.experience?.length && !(prof.experience?.length)) { setExperience(parsed.experience); filled.push('experience'); }
+    if (parsed.education?.length && !(prof.education?.length)) { setEducation(parsed.education); filled.push('education'); }
+    return filled;
+  };
+
   const onCv = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setBusyCv(true);
     setMsg(null);
     try {
+      // Parse for review (best effort), then store the file and persist the CV reference.
+      const parsed = await api.parseCv(file, file.type).then((r) => r.parsed).catch(() => undefined);
       const cvKey = await uploadFile(api, 'cv', file);
       const { profile } = await api.saveProfile({ ...fields(), cvKey, cvName: file.name });
-      fill(profile);
-      setMsg({ ok: true, text: 'CV uploaded.' });
+      const filled = applyParsed(profile, parsed);
+      if (parsed && parsed.lowConfidence && filled.length === 0) {
+        setMsg({ ok: true, text: 'CV uploaded, but we couldn’t read it automatically — add your details below and Save.' });
+      } else if (filled.length) {
+        setMsg({ ok: true, text: `CV uploaded. Pre-filled ${filled.join(', ')} — review and Save.` });
+      } else {
+        setMsg({ ok: true, text: 'CV uploaded.' });
+      }
     } catch (err) {
       setMsg({ ok: false, text: err instanceof ApiError ? err.message : (err as Error).message });
     } finally {
@@ -113,6 +140,8 @@ export function ProfessionalProfile() {
   const setExp = (i: number, patch: Partial<Experience>) => setExperience((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const setEdu = (i: number, patch: Partial<Education>) => setEducation((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
+  const completion = profileCompletion({ headline, bio, location, skills: toList(skills), experience, education, hasPhoto: !!p?.photoUrl });
+
   if (!p || !user) return null;
 
   return (
@@ -123,6 +152,11 @@ export function ProfessionalProfile() {
           <p>This is what mentors and connections see. Private details (mobile, CV) show only to accepted connections.</p>
         </div>
       </header>
+
+      <div className={`pp-meter${completion >= 70 ? ' pp-meter--ok' : ''}`}>
+        <div className="pp-meter__track"><span style={{ width: `${completion}%` }} /></div>
+        <span className="pp-meter__label">{completion}% complete{completion >= 70 ? ' — ready to apply for jobs ✓' : ' — reach 70% to apply for jobs'}</span>
+      </div>
 
       <div className="pp-photo">
         <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl: p.photoUrl }} size={72} />
@@ -162,8 +196,8 @@ export function ProfessionalProfile() {
             p.cvName || 'uploaded'
           ) : null}
         </span>
-        <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()}>
-          {busyCv ? 'Uploading…' : p.hasCv ? 'Replace CV' : 'Upload CV'}
+        <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()} title="We'll read your CV and pre-fill your profile for you to review">
+          {busyCv ? 'Reading CV…' : p.hasCv ? 'Replace CV & auto-fill' : 'Upload CV & auto-fill'}
         </button>
         <input ref={cvInput} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onCv(e)} />
       </div>

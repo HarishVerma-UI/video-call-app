@@ -2,7 +2,8 @@
 // connections (with partial-profile visibility), posts & feed, and direct
 // messages. All routes require a signed-in user.
 
-import { HttpError, readJson, sendJson } from './http.js';
+import { HttpError, readJson, readRaw, sendJson } from './http.js';
+import { parseCv } from './cv.js';
 import { MediaError } from './media.js';
 import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
 
@@ -156,6 +157,21 @@ export function createSocial(deps) {
     const user = await requireUser(req);
     const p = (await profiles.get(user.id)) ?? { userId: user.id, name: user.name };
     sendJson(res, 200, { profile: await profileOut(p, { full: true, state: 'self' }) });
+  }
+
+  // Parse an uploaded CV (raw bytes in the body) into profile fields for review.
+  async function parseCvHandler(req, res) {
+    await requireUser(req);
+    const buf = await readRaw(req);
+    if (!buf.length) throw new HttpError(400, 'No file received.');
+    let parsed;
+    try {
+      parsed = parseCv(buf, req.headers['content-type'] ?? '');
+    } catch (err) {
+      log('cv parse failed', err);
+      parsed = { name: '', email: '', phone: '', location: '', headline: '', skills: [], experience: [], education: [], lowConfidence: true };
+    }
+    sendJson(res, 200, { parsed });
   }
 
   async function saveProfile(req, res) {
@@ -442,6 +458,7 @@ export function createSocial(deps) {
     const m = req.method;
 
     if (pathname === '/api/profile/me' && m === 'GET') return (await myProfile(req, res), true);
+    if (pathname === '/api/profile/cv/parse' && m === 'POST') return (await parseCvHandler(req, res), true);
     if (pathname === '/api/profile' && m === 'PUT') return (await saveProfile(req, res), true);
     if (pathname === '/api/people' && m === 'GET') return (await people(req, res, url), true);
     if (pathname === '/api/media/upload-url' && m === 'POST') return (await uploadUrl(req, res), true);

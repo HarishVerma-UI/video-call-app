@@ -94,6 +94,20 @@ export interface Profile {
   cvUrl?: string | null;
 }
 
+/** Best-effort fields parsed from an uploaded CV, for the member to review. */
+export interface ParsedCv {
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  headline: string;
+  skills: string[];
+  experience: Experience[];
+  education: Education[];
+  /** True when little usable text was found (e.g. a scanned/image PDF). */
+  lowConfidence: boolean;
+}
+
 export interface PostComment {
   id: string;
   userId: string;
@@ -302,6 +316,8 @@ export interface ApiClient {
   // --- professional network ---
   myProfile(): Promise<{ profile: Profile }>;
   saveProfile(input: Partial<Profile> & { photoKey?: string; cvKey?: string; cvName?: string }): Promise<{ profile: Profile }>;
+  /** Parse an uploaded CV file into profile fields for review (nothing is saved). */
+  parseCv(file: Blob, contentType?: string): Promise<{ parsed: ParsedCv }>;
   getProfile(userId: string): Promise<{ profile: Profile; posts: Post[] }>;
   searchPeople(opts?: { q?: string; role?: string }): Promise<{ people: Profile[] }>;
   uploadUrl(input: { kind: 'photo' | 'cv' | 'post'; contentType: string }): Promise<{ uploadUrl: string; key: string }>;
@@ -411,6 +427,29 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     },
     myProfile: () => request('GET', '/api/profile/me'),
     saveProfile: (input) => request('PUT', '/api/profile', input),
+    parseCv: async (file, contentType) => {
+      const token = getToken();
+      let res: Response;
+      try {
+        res = await fetch(`${baseUrl}/api/profile/cv/parse`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': contentType || (file as { type?: string }).type || 'application/octet-stream',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: file,
+        });
+      } catch {
+        throw new ApiError(0, null);
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (res.status === 401 && token) onUnauthorized?.();
+        throw new ApiError(res.status, data);
+      }
+      return data as { parsed: ParsedCv };
+    },
     getProfile: (userId) => request('GET', `/api/profile/${encodeURIComponent(userId)}`),
     searchPeople: (opts = {}) => {
       const q = new URLSearchParams();
