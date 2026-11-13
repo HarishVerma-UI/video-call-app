@@ -389,6 +389,8 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
     remote: editing?.remote ?? false,
     description: editing?.description ?? '',
     active: editing?.active ?? true,
+    applyUrl: editing?.applyUrl ?? '',
+    source: editing?.source ?? '',
   });
   const [requirements, setRequirements] = useState((editing?.requirements ?? []).join('\n'));
   const [skills, setSkills] = useState((editing?.skills ?? []).join(', '));
@@ -470,6 +472,10 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
           <span className="line__rule" />
         </div>
         <Line name="job-skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
+        <div className="job-form__row">
+          <Line name="job-apply" label="Apply URL — opens the company’s site (optional)" type="text" autoComplete="off" value={f.applyUrl ?? ''} onChange={(v) => upd('applyUrl', v)} error={fields.applyUrl} />
+          <Line name="job-source" label="Source (optional)" type="text" autoComplete="off" value={f.source ?? ''} onChange={(v) => upd('source', v)} />
+        </div>
         <div className="job-form__toggles">
           <label className="admin-ads__active"><input type="checkbox" checked={!!f.remote} onChange={(e) => upd('remote', e.target.checked)} /> Remote</label>
           <label className="admin-ads__active"><input type="checkbox" checked={f.active !== false} onChange={(e) => upd('active', e.target.checked)} /> Active (visible on the Jobs tab)</label>

@@ -151,3 +151,45 @@ test('admin can edit and delete a job', async () => {
   assert.equal(del.status, 200);
   assert.equal((await api(t.base, 'GET', `/api/jobs/${jobId}`, null, admin.token)).status, 404);
 });
+
+test('admin bulk-imports external jobs, dedupes, and skips invalid ones', async () => {
+  const jobs = [
+    { title: 'Remote React Dev', company: 'RemoteCo', applyUrl: 'https://remoteco.example/jobs/1', source: 'Remotive', skills: ['React'] },
+    { title: 'Remote React Dev', company: 'RemoteCo', applyUrl: 'https://remoteco.example/jobs/1', source: 'Remotive' }, // dup by applyUrl
+    { title: 'Data Analyst', company: 'DataInc', applyUrl: 'https://datainc.example/apply', source: 'Arbeitnow' },
+    { title: '', company: 'NoTitle' }, // invalid: no title
+    { title: 'Bad URL', company: 'X', applyUrl: 'ftp://nope' }, // invalid: bad scheme
+  ];
+  const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs }, admin.token);
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 2);
+  assert.ok(res.body.skipped >= 3);
+
+  // members see the external apply URL + source
+  const u = await registerUser(t.base, 'External Seeker');
+  const list = await api(t.base, 'GET', '/api/jobs?q=Remote React Dev', null, u.token);
+  const j = list.body.jobs.find((x) => x.title === 'Remote React Dev');
+  assert.ok(j);
+  assert.equal(j.applyUrl, 'https://remoteco.example/jobs/1');
+  assert.equal(j.source, 'Remotive');
+
+  // re-importing the same batch creates nothing new
+  const again = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs }, admin.token);
+  assert.equal(again.body.created, 0);
+});
+
+test('import with dedupe:false inserts a curated batch verbatim (shared careers URL)', async () => {
+  const jobs = [
+    { title: 'UI Developer', company: 'Zoho', applyUrl: 'https://zoho.example/careers', source: 'Zoho' },
+    { title: 'Backend Engineer', company: 'Zoho', applyUrl: 'https://zoho.example/careers', source: 'Zoho' }, // same URL, different role
+  ];
+  const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs, dedupe: false }, admin.token);
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 2);
+});
+
+test('import rejects non-admins', async () => {
+  const u = await registerUser(t.base, 'Not Admin Two');
+  const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs: [{ title: 'x', company: 'y' }] }, u.token);
+  assert.equal(res.status, 403);
+});

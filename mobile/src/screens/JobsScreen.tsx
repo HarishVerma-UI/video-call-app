@@ -10,7 +10,7 @@ import {
   type Profile,
 } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth';
 import { fonts, theme } from '../config';
 
@@ -62,6 +62,7 @@ function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
         <Text style={styles.metaChip}>{TYPE_LABEL[job.type]}</Text>
         {job.remote ? <Text style={[styles.metaChip, { color: theme.live }]}>Remote</Text> : job.country ? <Text style={styles.metaChip}>{job.country}</Text> : null}
         {sal && <Text style={[styles.metaChip, styles.metaSalary]}>{sal}</Text>}
+        {!!job.applyUrl && <Text style={[styles.metaChip, { color: theme.accentText }]}>↗ {job.source || 'External'}</Text>}
       </View>
       {job.appliedByMe && <Text style={styles.applied}>✓ Applied</Text>}
     </Pressable>
@@ -108,8 +109,8 @@ function JobDetail({ job, onClose, onApply }: { job: Job; onClose: () => void; o
               </View>
             )}
           </ScrollView>
-          <Pressable style={[styles.applyBtn, job.appliedByMe && styles.applyBtnDone]} onPress={job.appliedByMe ? undefined : onApply} disabled={job.appliedByMe}>
-            <Text style={styles.applyBtnText}>{job.appliedByMe ? '✓ Applied' : 'Apply now'}</Text>
+          <Pressable style={[styles.applyBtn, job.appliedByMe && !job.applyUrl && styles.applyBtnDone]} onPress={job.appliedByMe && !job.applyUrl ? undefined : onApply} disabled={job.appliedByMe && !job.applyUrl}>
+            <Text style={styles.applyBtnText}>{job.appliedByMe && !job.applyUrl ? '✓ Applied' : job.applyUrl ? `Apply on ${job.source || 'their site'} ↗` : 'Apply now'}</Text>
           </Pressable>
         </View>
       </View>
@@ -203,6 +204,18 @@ export function JobsScreen({ onCompleteProfile }: { onCompleteProfile: () => voi
     setJobs((cur) => cur?.map((j) => (j.id === jobId ? { ...j, appliedByMe: true } : j)) ?? cur);
     setSelected((s) => (s && s.id === jobId ? { ...s, appliedByMe: true } : s));
   };
+  // External jobs open the company's site; internal jobs use the apply modal.
+  const startApply = (job: Job) => {
+    if (job.applyUrl) {
+      void Linking.openURL(job.applyUrl).catch(() => {});
+      void api.applyToJob(job.id).catch(() => {});
+      markApplied(job.id);
+      setSelected(null);
+    } else {
+      setApplying(job);
+      setSelected(null);
+    }
+  };
 
   const header = (
     <View>
@@ -254,7 +267,7 @@ export function JobsScreen({ onCompleteProfile }: { onCompleteProfile: () => voi
             )}
           />
         )}
-        {selected && <JobDetail job={selected} onClose={() => setSelected(null)} onApply={() => { setApplying(selected); setSelected(null); }} />}
+        {selected && <JobDetail job={selected} onClose={() => setSelected(null)} onApply={() => startApply(selected)} />}
         {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(id) => { markApplied(id); setApplying(null); }} onCompleteProfile={onCompleteProfile} />}
       </View>
     );
@@ -270,7 +283,7 @@ export function JobsScreen({ onCompleteProfile }: { onCompleteProfile: () => voi
         ListEmptyComponent={jobs === null ? <ActivityIndicator style={{ marginTop: 24 }} color={theme.primaryText} /> : <Text style={styles.empty}>No jobs match your filters yet.</Text>}
         renderItem={({ item }) => <JobCard job={item} onOpen={() => setSelected(item)} />}
       />
-      {selected && <JobDetail job={selected} onClose={() => setSelected(null)} onApply={() => { setApplying(selected); setSelected(null); }} />}
+      {selected && <JobDetail job={selected} onClose={() => setSelected(null)} onApply={() => startApply(selected)} />}
       {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(id) => { markApplied(id); setApplying(null); }} onCompleteProfile={onCompleteProfile} />}
     </View>
   );
