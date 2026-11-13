@@ -4,13 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, theme } from '../config';
 
-export type TabId = 'home' | 'network' | 'meet' | 'messages' | 'profile';
+export type TabId = 'home' | 'network' | 'jobs' | 'meet' | 'messages' | 'profile';
 
 const TABS: { id: TabId; label: string; glyph: string }[] = [
   { id: 'home', label: 'Home', glyph: '⌂' },
   { id: 'network', label: 'Network', glyph: '◍' },
+  { id: 'jobs', label: 'Jobs', glyph: '▤' },
   { id: 'meet', label: 'Meet', glyph: '▣' },
-  { id: 'messages', label: 'Messages', glyph: '◫' },
+  { id: 'messages', label: 'Chat', glyph: '◫' },
 ];
 
 /** Teams-style bottom tabs; the active one gets the amber spark on top. */

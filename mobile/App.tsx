@@ -17,6 +17,7 @@ import { ChatScreen } from './src/screens/ChatScreen';
 import { FeedScreen } from './src/screens/FeedScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { MessagesScreen } from './src/screens/MessagesScreen';
+import { JobsScreen } from './src/screens/JobsScreen';
 import { NetworkScreen } from './src/screens/NetworkScreen';
 import { PersonScreen } from './src/screens/PersonScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
@@ -208,6 +209,8 @@ function SignedIn() {
     <FeedScreen user={user} onOpenPerson={openPerson} />
   ) : tab === 'network' ? (
     <NetworkScreen onOpenPerson={openPerson} onOpenMessages={openMessages} />
+  ) : tab === 'jobs' ? (
+    <JobsScreen onCompleteProfile={() => changeTab('profile')} />
   ) : tab === 'meet' ? (
     <View style={{ flex: 1 }}>
       <MeetSegment view={meetView} onChange={setMeetView} />
