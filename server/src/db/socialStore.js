@@ -565,6 +565,235 @@ function mongoNotificationStore(col) {
   };
 }
 
+// ===================== JOBS & APPLICATIONS =====================
+const rxEsc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function publicJob(j) {
+  if (!j) return null;
+  return {
+    id: j.id,
+    title: j.title ?? '',
+    company: j.company ?? '',
+    category: j.category ?? 'tech',
+    country: j.country ?? '',
+    type: j.type ?? 'full-time',
+    experience: j.experience ?? 'mid',
+    salaryMin: j.salaryMin ?? null,
+    salaryMax: j.salaryMax ?? null,
+    salaryCurrency: j.salaryCurrency ?? 'USD',
+    remote: !!j.remote,
+    description: j.description ?? '',
+    requirements: j.requirements ?? [],
+    skills: j.skills ?? [],
+    active: j.active !== false,
+    createdAt: iso(j.createdAt),
+  };
+}
+
+export function publicApplication(a) {
+  if (!a) return null;
+  return {
+    id: a.id,
+    jobId: a.jobId,
+    userId: a.userId,
+    userName: a.userName ?? '',
+    note: a.note ?? '',
+    status: a.status ?? 'applied',
+    createdAt: iso(a.createdAt),
+  };
+}
+
+const JOB_FIELDS = ['title', 'company', 'category', 'country', 'type', 'experience', 'salaryMin', 'salaryMax', 'salaryCurrency', 'remote', 'description', 'requirements', 'skills', 'active'];
+function pickJob(input) {
+  return {
+    title: input.title ?? '',
+    company: input.company ?? '',
+    category: input.category ?? 'tech',
+    country: input.country ?? '',
+    type: input.type ?? 'full-time',
+    experience: input.experience ?? 'mid',
+    salaryMin: input.salaryMin ?? null,
+    salaryMax: input.salaryMax ?? null,
+    salaryCurrency: input.salaryCurrency ?? 'USD',
+    remote: !!input.remote,
+    description: input.description ?? '',
+    requirements: Array.isArray(input.requirements) ? input.requirements : [],
+    skills: Array.isArray(input.skills) ? input.skills : [],
+    active: input.active !== false,
+  };
+}
+
+export function createMemoryJobStore() {
+  const jobs = new Map();
+  const apps = new Map();
+  const keep = (j, f) => {
+    if (f.activeOnly && j.active === false) return false;
+    if (f.category && j.category !== f.category) return false;
+    if (f.country && (j.country ?? '').toLowerCase() !== f.country.toLowerCase()) return false;
+    if (f.type && j.type !== f.type) return false;
+    if (f.experience && j.experience !== f.experience) return false;
+    if (f.remote && !j.remote) return false;
+    if (f.q) {
+      const hay = [j.title, j.company, j.description, ...(j.skills ?? []), ...(j.requirements ?? [])].join(' ').toLowerCase();
+      if (!hay.includes(f.q.toLowerCase())) return false;
+    }
+    return true;
+  };
+  return {
+    kind: 'memory',
+    async create(input) {
+      const job = { id: id12(), ...pickJob(input), createdAt: now() };
+      jobs.set(job.id, job);
+      return { ...job };
+    },
+    async list(f = {}) {
+      return [...jobs.values()].filter((j) => keep(j, f)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((j) => ({ ...j }));
+    },
+    async byId(id) {
+      const j = jobs.get(id);
+      return j ? { ...j } : null;
+    },
+    async update(id, patch) {
+      const j = jobs.get(id);
+      if (!j) return null;
+      for (const k of JOB_FIELDS) if (patch[k] !== undefined) j[k] = patch[k];
+      j.updatedAt = now();
+      return { ...j };
+    },
+    async remove(id) {
+      for (const [aid, a] of apps) if (a.jobId === id) apps.delete(aid);
+      return jobs.delete(id);
+    },
+    async apply({ jobId, userId, userName, note }) {
+      const existing = [...apps.values()].find((a) => a.jobId === jobId && a.userId === userId);
+      if (existing) {
+        if (note) existing.note = note;
+        return { ...existing };
+      }
+      const app = { id: id12(), jobId, userId, userName: userName ?? '', note: note ?? '', status: 'applied', createdAt: now() };
+      apps.set(app.id, app);
+      return { ...app };
+    },
+    async hasApplied(jobId, userId) {
+      return [...apps.values()].some((a) => a.jobId === jobId && a.userId === userId);
+    },
+    async applicationsForUser(userId) {
+      return [...apps.values()].filter((a) => a.userId === userId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
+    },
+    async applicationsForJob(jobId) {
+      return [...apps.values()].filter((a) => a.jobId === jobId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
+    },
+    async applicationById(id) {
+      const a = apps.get(id);
+      return a ? { ...a } : null;
+    },
+    async setApplicationStatus(id, status) {
+      const a = apps.get(id);
+      if (!a) return null;
+      a.status = status;
+      a.updatedAt = now();
+      return { ...a };
+    },
+    async applicantCounts() {
+      const counts = {};
+      for (const a of apps.values()) counts[a.jobId] = (counts[a.jobId] ?? 0) + 1;
+      return counts;
+    },
+    async removeApplicationsByUser(userId) {
+      for (const [aid, a] of apps) if (a.userId === userId) apps.delete(aid);
+    },
+  };
+}
+
+function mongoJobStore(jobsCol, appsCol, ObjectId) {
+  const oid = (id) => (typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : null);
+  const toJob = (d) => d && { id: d._id.toString(), ...pickJob(d), createdAt: d.createdAt };
+  const toApp = (d) => d && { id: d._id.toString(), jobId: d.jobId, userId: d.userId, userName: d.userName ?? '', note: d.note ?? '', status: d.status ?? 'applied', createdAt: d.createdAt };
+  const filterFrom = (f) => {
+    const q = {};
+    if (f.activeOnly) q.active = { $ne: false };
+    if (f.category) q.category = f.category;
+    if (f.country) q.country = new RegExp(`^${rxEsc(f.country)}$`, 'i');
+    if (f.type) q.type = f.type;
+    if (f.experience) q.experience = f.experience;
+    if (f.remote) q.remote = true;
+    if (f.q) {
+      const rx = new RegExp(rxEsc(f.q), 'i');
+      q.$or = [{ title: rx }, { company: rx }, { description: rx }, { skills: rx }, { requirements: rx }];
+    }
+    return q;
+  };
+  return {
+    kind: 'mongodb',
+    async create(input) {
+      const doc = { ...pickJob(input), createdAt: now() };
+      const res = await jobsCol.insertOne(doc);
+      return toJob({ ...doc, _id: res.insertedId });
+    },
+    async list(f = {}) {
+      return (await jobsCol.find(filterFrom(f)).sort({ createdAt: -1 }).toArray()).map(toJob);
+    },
+    async byId(id) {
+      const _id = oid(id);
+      return _id ? toJob(await jobsCol.findOne({ _id })) : null;
+    },
+    async update(id, patch) {
+      const _id = oid(id);
+      if (!_id) return null;
+      const set = {};
+      for (const k of JOB_FIELDS) if (patch[k] !== undefined) set[k] = patch[k];
+      set.updatedAt = now();
+      await jobsCol.updateOne({ _id }, { $set: set });
+      return toJob(await jobsCol.findOne({ _id }));
+    },
+    async remove(id) {
+      const _id = oid(id);
+      if (!_id) return false;
+      await appsCol.deleteMany({ jobId: id });
+      const res = await jobsCol.deleteOne({ _id });
+      return res.deletedCount > 0;
+    },
+    async apply({ jobId, userId, userName, note }) {
+      const existing = await appsCol.findOne({ jobId, userId });
+      if (existing) {
+        if (note) await appsCol.updateOne({ _id: existing._id }, { $set: { note } });
+        return toApp(await appsCol.findOne({ _id: existing._id }));
+      }
+      const doc = { jobId, userId, userName: userName ?? '', note: note ?? '', status: 'applied', createdAt: now() };
+      const res = await appsCol.insertOne(doc);
+      return toApp({ ...doc, _id: res.insertedId });
+    },
+    async hasApplied(jobId, userId) {
+      return !!(await appsCol.findOne({ jobId, userId }));
+    },
+    async applicationsForUser(userId) {
+      return (await appsCol.find({ userId }).sort({ createdAt: -1 }).toArray()).map(toApp);
+    },
+    async applicationsForJob(jobId) {
+      return (await appsCol.find({ jobId }).sort({ createdAt: -1 }).toArray()).map(toApp);
+    },
+    async applicationById(id) {
+      const _id = oid(id);
+      return _id ? toApp(await appsCol.findOne({ _id })) : null;
+    },
+    async setApplicationStatus(id, status) {
+      const _id = oid(id);
+      if (!_id) return null;
+      await appsCol.updateOne({ _id }, { $set: { status, updatedAt: now() } });
+      return toApp(await appsCol.findOne({ _id }));
+    },
+    async applicantCounts() {
+      const rows = await appsCol.aggregate([{ $group: { _id: '$jobId', n: { $sum: 1 } } }]).toArray();
+      const counts = {};
+      for (const r of rows) counts[r._id] = r.n;
+      return counts;
+    },
+    async removeApplicationsByUser(userId) {
+      await appsCol.deleteMany({ userId });
+    },
+  };
+}
+
 // ===================== wiring =====================
 export async function connectSocialStores(db, log = () => {}) {
   const { ObjectId } = await import('mongodb');
@@ -574,14 +803,18 @@ export async function connectSocialStores(db, log = () => {}) {
   const dms = mongoDmStore(db.collection('dms'));
   const ads = mongoAdStore(db.collection('ads'), ObjectId);
   const notifications = mongoNotificationStore(db.collection('notifications'));
+  const jobs = mongoJobStore(db.collection('jobs'), db.collection('jobApplications'), ObjectId);
   await db.collection('profiles').createIndex({ updatedAt: -1 }, { name: 'profiles_recent' });
   await db.collection('connections').createIndex({ users: 1 }, { name: 'connections_users' });
   await db.collection('posts').createIndex({ authorId: 1, createdAt: -1 }, { name: 'posts_author' });
   await db.collection('dms').createIndex({ convId: 1, ts: -1 }, { name: 'dms_conv' });
   await db.collection('ads').createIndex({ createdAt: -1 }, { name: 'ads_recent' });
   await db.collection('notifications').createIndex({ userId: 1, ts: -1 }, { name: 'notifications_user' });
-  log('social stores ready (profiles, connections, posts, dms, ads, notifications)');
-  return { profiles, connections, posts, dms, ads, notifications };
+  await db.collection('jobs').createIndex({ createdAt: -1 }, { name: 'jobs_recent' });
+  await db.collection('jobApplications').createIndex({ jobId: 1, userId: 1 }, { name: 'job_apps_unique', unique: true });
+  await db.collection('jobApplications').createIndex({ userId: 1, createdAt: -1 }, { name: 'job_apps_user' });
+  log('social stores ready (profiles, connections, posts, dms, ads, notifications, jobs)');
+  return { profiles, connections, posts, dms, ads, notifications, jobs };
 }
 
 export function createMemorySocialStores() {
@@ -592,5 +825,6 @@ export function createMemorySocialStores() {
     dms: createMemoryDmStore(),
     ads: createMemoryAdStore(),
     notifications: createMemoryNotificationStore(),
+    jobs: createMemoryJobStore(),
   };
 }

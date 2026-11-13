@@ -6,7 +6,8 @@ import { AdminView } from './AdminView';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
-import { ChatIcon, LogsIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { BriefcaseIcon, ChatIcon, LogsIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { JobsView } from './JobsView';
 import { LogsView } from './LogsView';
 import { MeetView } from './MeetView';
 import { ModeToggle } from './ModeToggle';
@@ -27,6 +28,7 @@ export type Route =
   | { view: 'person'; id: string }
   | { view: 'meet'; room: string }
   | { view: 'chat'; room: string }
+  | { view: 'jobs' }
   | { view: 'calls' }
   | { view: 'profile' }
   | { view: 'admin' }
@@ -38,6 +40,7 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'r') return { view: 'meet', room: normalizeRoomId(seg[1] ?? '') ?? '' };
   if (seg[0] === 'meet') return { view: 'meet', room: '' };
   if (seg[0] === 'chat') return { view: 'chat', room: normalizeRoomId(seg[1] ?? '') ?? '' };
+  if (seg[0] === 'jobs') return { view: 'jobs' };
   if (seg[0] === 'calls') return { view: 'calls' };
   if (seg[0] === 'profile') return { view: 'profile' };
   if (seg[0] === 'admin') return { view: 'admin' };
@@ -81,6 +84,7 @@ const RAIL: { view: Route['view']; label: string; icon: ReactNode; testId: strin
   { view: 'feed', label: 'Home', icon: <SparkIcon />, testId: 'rail-feed' },
   { view: 'network', label: 'Network', icon: <UserIcon />, testId: 'rail-network' },
   { view: 'messages', label: 'Messages', icon: <ChatIcon />, testId: 'rail-messages' },
+  { view: 'jobs', label: 'Jobs', icon: <BriefcaseIcon />, testId: 'rail-jobs' },
   { view: 'meet', label: 'Meet', icon: <VideoIcon />, testId: 'rail-meet' },
 ];
 
@@ -236,6 +240,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'profile' && <ProfileView />}
         {route.view === 'admin' && <AdminView />}
         {route.view === 'logs' && <LogsView />}
+        {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
         {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}

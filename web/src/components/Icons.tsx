@@ -14,6 +14,12 @@ const base = (p: P) => ({
   ...p,
 });
 
+export const BriefcaseIcon = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="2" y="7" width="20" height="14" rx="2" />
+    <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M2 13h20" />
+  </svg>
+);
 export const MicIcon = (p: P) => (
   <svg {...base(p)}>
     <rect x="9" y="2" width="6" height="12" rx="3" />
