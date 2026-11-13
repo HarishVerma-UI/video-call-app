@@ -8,6 +8,7 @@
 
 import { HttpError, readJson, sendJson } from '../http.js';
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
+import { publicApplication, publicJob, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -135,12 +136,13 @@ export function createAdmin(opts) {
     await opts.store.remove(id);
     // Cascade: remove social data for the deleted user
     if (opts.social) {
-      const { profiles, connections, posts, dms } = opts.social;
+      const { profiles, connections, posts, dms, jobs } = opts.social;
       await Promise.all([
         profiles?.remove?.(id),
         connections?.removeByUser?.(id),
         posts?.removeByAuthor?.(id),
         dms?.removeByUser?.(id),
+        jobs?.removeApplicationsByUser?.(id),
       ].filter(Boolean));
       opts.log?.(`admin  cascaded social data deletion for ${id}`);
     }
@@ -202,6 +204,100 @@ export function createAdmin(opts) {
     sendJson(res, 200, { ok: true, id });
   }
 
+  // --- Jobs: admin-managed listings + applicant review ---
+  const jobNum = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+  const JOB_CATS = ['tech', 'non-tech'];
+  const JOB_TYPES = ['full-time', 'part-time', 'contract', 'internship'];
+  const JOB_EXPS = ['entry', 'mid', 'senior', 'lead'];
+  const STATUSES = ['applied', 'shortlisted', 'rejected'];
+  const list40 = (v, max) => (Array.isArray(v) ? v.slice(0, 40).map((x) => adStr(x, max)).filter(Boolean) : []);
+
+  function jobPatchFrom(body, { partial }) {
+    const patch = {};
+    if (!partial || body.title !== undefined) patch.title = adStr(body.title, 160);
+    if (!partial || body.company !== undefined) patch.company = adStr(body.company, 160);
+    if (!partial || body.category !== undefined) patch.category = JOB_CATS.includes(body.category) ? body.category : 'tech';
+    if (!partial || body.country !== undefined) patch.country = adStr(body.country, 80);
+    if (!partial || body.type !== undefined) patch.type = JOB_TYPES.includes(body.type) ? body.type : 'full-time';
+    if (!partial || body.experience !== undefined) patch.experience = JOB_EXPS.includes(body.experience) ? body.experience : 'mid';
+    if (!partial || body.salaryMin !== undefined) patch.salaryMin = jobNum(body.salaryMin);
+    if (!partial || body.salaryMax !== undefined) patch.salaryMax = jobNum(body.salaryMax);
+    if (!partial || body.salaryCurrency !== undefined) patch.salaryCurrency = adStr(body.salaryCurrency, 8) || 'USD';
+    if (!partial || body.remote !== undefined) patch.remote = body.remote === true;
+    if (!partial || body.description !== undefined) patch.description = adStr(body.description, 8000);
+    if (!partial || body.requirements !== undefined) patch.requirements = list40(body.requirements, 200);
+    if (!partial || body.skills !== undefined) patch.skills = list40(body.skills, 60);
+    if (!partial || body.active !== undefined) patch.active = body.active !== false;
+    return patch;
+  }
+
+  async function listJobs(req, res) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) return sendJson(res, 200, { jobs: [] });
+    const [jobs, counts] = await Promise.all([opts.social.jobs.list({ activeOnly: false }), opts.social.jobs.applicantCounts()]);
+    sendJson(res, 200, { jobs: jobs.map((j) => ({ ...publicJob(j), applicantCount: counts[j.id] ?? 0 })) });
+  }
+
+  async function createJob(req, res) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
+    const patch = jobPatchFrom(await readJson(req), { partial: false });
+    const fields = {};
+    if (!patch.title) fields.title = 'A title is required.';
+    if (!patch.company) fields.company = 'A company is required.';
+    if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
+    const job = await opts.social.jobs.create(patch);
+    opts.log?.(`admin  created job ${job.id}`);
+    sendJson(res, 201, { job: publicJob(job) });
+  }
+
+  async function updateJob(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
+    const patch = jobPatchFrom(await readJson(req), { partial: true });
+    if (patch.title !== undefined && !patch.title) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { title: 'A title is required.' } });
+    if (patch.company !== undefined && !patch.company) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { company: 'A company is required.' } });
+    const job = await opts.social.jobs.update(id, patch);
+    if (!job) throw new HttpError(404, 'Job not found.');
+    opts.log?.(`admin  updated job ${id}`);
+    sendJson(res, 200, { job: publicJob(job) });
+  }
+
+  async function deleteJob(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
+    const ok = await opts.social.jobs.remove(id);
+    if (!ok) throw new HttpError(404, 'Job not found.');
+    opts.log?.(`admin  deleted job ${id}`);
+    sendJson(res, 200, { ok: true, id });
+  }
+
+  async function jobApplicants(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) return sendJson(res, 200, { job: null, applicants: [] });
+    const job = await opts.social.jobs.byId(id);
+    if (!job) throw new HttpError(404, 'Job not found.');
+    const apps = await opts.social.jobs.applicationsForJob(id);
+    const profs = opts.social.profiles ? await opts.social.profiles.getMany(apps.map((a) => a.userId)) : [];
+    const byId = new Map(profs.map((p) => [p.userId, p]));
+    const applicants = apps.map((a) => ({
+      ...publicApplication(a),
+      profile: byId.get(a.userId) ? publicProfile(byId.get(a.userId), { full: false }) : undefined,
+    }));
+    sendJson(res, 200, { job: publicJob(job), applicants });
+  }
+
+  async function setApplicationStatus(req, res, id) {
+    await requireAdmin(req);
+    if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
+    const { status } = await readJson(req);
+    if (!STATUSES.includes(status)) throw new HttpError(400, 'Invalid status.');
+    const app = await opts.social.jobs.setApplicationStatus(id, status);
+    if (!app) throw new HttpError(404, 'Application not found.');
+    opts.log?.(`admin  set application ${id} → ${status}`);
+    sendJson(res, 200, { application: publicApplication(app) });
+  }
+
   async function statsHandler(req, res) {
     await requireAdmin(req);
     const [users, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
@@ -230,11 +326,20 @@ export function createAdmin(opts) {
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'GET') await listAds(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
+    else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
+    else if (pathname === '/api/admin/jobs' && req.method === 'POST') await createJob(req, res);
     else {
       const adMatch = pathname.match(/^\/api\/admin\/ads\/([^/]+)$/);
       const m = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+      const jobAppMatch = pathname.match(/^\/api\/admin\/jobs\/([^/]+)\/applicants$/);
+      const jobMatch = pathname.match(/^\/api\/admin\/jobs\/([^/]+)$/);
+      const appMatch = pathname.match(/^\/api\/admin\/applications\/([^/]+)$/);
       if (adMatch && req.method === 'PATCH') await updateAd(req, res, decodeURIComponent(adMatch[1]));
       else if (adMatch && req.method === 'DELETE') await deleteAd(req, res, decodeURIComponent(adMatch[1]));
+      else if (jobAppMatch && req.method === 'GET') await jobApplicants(req, res, decodeURIComponent(jobAppMatch[1]));
+      else if (jobMatch && req.method === 'PATCH') await updateJob(req, res, decodeURIComponent(jobMatch[1]));
+      else if (jobMatch && req.method === 'DELETE') await deleteJob(req, res, decodeURIComponent(jobMatch[1]));
+      else if (appMatch && req.method === 'PATCH') await setApplicationStatus(req, res, decodeURIComponent(appMatch[1]));
       else if (m && req.method === 'PATCH') await updateUser(req, res, decodeURIComponent(m[1]));
       else if (m && req.method === 'DELETE') await deleteUser(req, res, decodeURIComponent(m[1]));
       else throw new HttpError(404, 'Not found');

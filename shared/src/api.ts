@@ -154,6 +154,81 @@ export interface Conversation {
   last: DmMessage;
 }
 
+// --- jobs & careers ---
+export type JobCategory = 'tech' | 'non-tech';
+export type JobType = 'full-time' | 'part-time' | 'contract' | 'internship';
+export type JobExperience = 'entry' | 'mid' | 'senior' | 'lead';
+export type ApplicationStatus = 'applied' | 'shortlisted' | 'rejected';
+
+export interface Job {
+  id: string;
+  title: string;
+  company: string;
+  category: JobCategory;
+  country: string;
+  type: JobType;
+  experience: JobExperience;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string;
+  remote: boolean;
+  description: string;
+  requirements: string[];
+  skills: string[];
+  active: boolean;
+  createdAt: string | null;
+  /** 0–100 fit for the signed-in viewer, from skill overlap (list/detail only). */
+  matchScore?: number;
+  /** Which of the viewer's skills matched this job. */
+  matchedSkills?: string[];
+  /** Whether the signed-in viewer has already applied. */
+  appliedByMe?: boolean;
+  /** How many people applied (admin views only). */
+  applicantCount?: number;
+}
+
+export interface JobApplication {
+  id: string;
+  jobId: string;
+  userId: string;
+  userName: string;
+  note: string;
+  status: ApplicationStatus;
+  createdAt: string | null;
+  /** The job, included in "my applications". */
+  job?: Job;
+  /** The applicant's profile, included in the admin applicants list. */
+  profile?: Profile;
+}
+
+/** Fields an admin supplies to create or edit a job. */
+export interface JobInput {
+  title: string;
+  company: string;
+  category?: JobCategory;
+  country?: string;
+  type?: JobType;
+  experience?: JobExperience;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string;
+  remote?: boolean;
+  description?: string;
+  requirements?: string[];
+  skills?: string[];
+  active?: boolean;
+}
+
+/** Filters for the jobs board. */
+export interface JobFilters {
+  q?: string;
+  category?: JobCategory | '';
+  country?: string;
+  type?: JobType | '';
+  experience?: JobExperience | '';
+  remote?: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -249,6 +324,24 @@ export interface ApiClient {
   /** Start a call with a connection: posts a call message in the thread and notifies them. */
   startCall(userId: string, roomId: string): Promise<{ ok: boolean; message: DmMessage }>;
   conversations(): Promise<{ conversations: Conversation[] }>;
+
+  // --- jobs & careers ---
+  /** Browse active jobs, with a per-viewer match score. */
+  jobs(filters?: JobFilters): Promise<{ jobs: Job[]; total: number }>;
+  /** A single job's full details (with match score + whether you applied). */
+  job(id: string): Promise<{ job: Job }>;
+  /** Apply to a job with an optional cover note. */
+  applyToJob(id: string, input?: { note?: string }): Promise<{ application: JobApplication }>;
+  /** Jobs you've applied to, newest first, each with its status. */
+  myApplications(): Promise<{ applications: JobApplication[] }>;
+
+  // --- jobs admin (admin role only) ---
+  adminListJobs(): Promise<{ jobs: Job[] }>;
+  adminCreateJob(input: JobInput): Promise<{ job: Job }>;
+  adminUpdateJob(id: string, patch: Partial<JobInput>): Promise<{ job: Job }>;
+  adminDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
+  adminJobApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
+  adminSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
 
   // --- server logs (admin only) ---
   logs(opts?: { since?: number; level?: string; q?: string; limit?: number }): Promise<{ logs: { id: number; ts: number; level: string; message: string }[] }>;
@@ -349,6 +442,26 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     sendDm: (userId, text) => request('POST', `/api/dm/${encodeURIComponent(userId)}`, { text }),
     startCall: (userId, roomId) => request('POST', `/api/call/${encodeURIComponent(userId)}/invite`, { roomId }),
     conversations: () => request('GET', '/api/dm'),
+    jobs: (filters = {}) => {
+      const q = new URLSearchParams();
+      if (filters.q) q.set('q', filters.q);
+      if (filters.category) q.set('category', filters.category);
+      if (filters.country) q.set('country', filters.country);
+      if (filters.type) q.set('type', filters.type);
+      if (filters.experience) q.set('experience', filters.experience);
+      if (filters.remote) q.set('remote', '1');
+      const qs = q.toString();
+      return request('GET', `/api/jobs${qs ? `?${qs}` : ''}`);
+    },
+    job: (id) => request('GET', `/api/jobs/${encodeURIComponent(id)}`),
+    applyToJob: (id, input = {}) => request('POST', `/api/jobs/${encodeURIComponent(id)}/apply`, input),
+    myApplications: () => request('GET', '/api/applications'),
+    adminListJobs: () => request('GET', '/api/admin/jobs'),
+    adminCreateJob: (input) => request('POST', '/api/admin/jobs', input),
+    adminUpdateJob: (id, patch) => request('PATCH', `/api/admin/jobs/${encodeURIComponent(id)}`, patch),
+    adminDeleteJob: (id) => request('DELETE', `/api/admin/jobs/${encodeURIComponent(id)}`),
+    adminJobApplicants: (jobId) => request('GET', `/api/admin/jobs/${encodeURIComponent(jobId)}/applicants`),
+    adminSetApplicationStatus: (id, status) => request('PATCH', `/api/admin/applications/${encodeURIComponent(id)}`, { status }),
     logs: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.since !== undefined) q.set('since', String(opts.since));
@@ -359,6 +472,26 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       return request('GET', `/api/logs${qs ? `?${qs}` : ''}`);
     },
   };
+}
+
+/**
+ * How complete a professional profile is, 0–100. Used to gate job applications
+ * (the backlog's "70% rule") and to show a completeness meter. Weighted so a
+ * usefully-complete profile (headline, bio, location, a few skills, one role and
+ * one school) reaches 100.
+ */
+export function profileCompletion(p: Partial<Profile> | null | undefined): number {
+  if (!p) return 0;
+  let score = 0;
+  if ((p.headline ?? '').trim()) score += 15;
+  if ((p.bio ?? '').trim()) score += 15;
+  if ((p.location ?? '').trim()) score += 10;
+  const skills = p.skills?.length ?? 0;
+  score += Math.min(20, skills * 7); // 3+ skills → full 20
+  if ((p.experience?.length ?? 0) > 0) score += 20;
+  if ((p.education?.length ?? 0) > 0) score += 10;
+  if (p.hasPhoto) score += 10;
+  return Math.min(100, score);
 }
 
 /** 0–4 score with a label, for the sign-up strength meter. */

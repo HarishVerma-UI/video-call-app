@@ -4,7 +4,7 @@
 
 import { HttpError, readJson, sendJson } from './http.js';
 import { MediaError } from './media.js';
-import { publicAd, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
+import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const arr = (v, maxItems, maxLen) => (Array.isArray(v) ? v.slice(0, maxItems).map((x) => str(x, maxLen)).filter(Boolean) : []);
@@ -23,7 +23,7 @@ function entries(v, keys, maxItems = 20) {
  * @param {{ profiles, connections, posts, dms, media, requireUser, log? }} deps
  */
 export function createSocial(deps) {
-  const { profiles, connections, posts, dms, media, requireUser, users, ads, notifications } = deps;
+  const { profiles, connections, posts, dms, media, requireUser, users, ads, notifications, jobs } = deps;
   // Push a live notification to a user (no-op until signaling is attached).
   const notify = deps.notify ?? (() => 0);
 
@@ -84,6 +84,71 @@ export function createSocial(deps) {
     if (!ads) return sendJson(res, 200, { ads: [] });
     const list = await ads.list({ activeOnly: true });
     sendJson(res, 200, { ads: await Promise.all(list.map(adOut)) });
+  }
+
+  // --- jobs & careers ---
+  // Fit score from how many of the job's skills the viewer lists on their profile.
+  function scoreJob(job, userSkills) {
+    const us = new Set((userSkills ?? []).map((s) => String(s).toLowerCase()));
+    const js = job.skills ?? [];
+    const matched = js.filter((s) => us.has(String(s).toLowerCase()));
+    let matchScore;
+    if (!js.length) matchScore = 55;
+    else if (!matched.length) matchScore = 25;
+    else matchScore = Math.min(99, Math.round((matched.length / js.length) * 100));
+    return { matchScore, matchedSkills: matched };
+  }
+
+  async function listJobs(req, res, url) {
+    const me = await requireUser(req);
+    if (!jobs) return sendJson(res, 200, { jobs: [], total: 0 });
+    const f = {
+      activeOnly: true,
+      q: (url.searchParams.get('q') ?? '').trim(),
+      category: url.searchParams.get('category') ?? '',
+      country: url.searchParams.get('country') ?? '',
+      type: url.searchParams.get('type') ?? '',
+      experience: url.searchParams.get('experience') ?? '',
+      remote: url.searchParams.get('remote') === '1',
+    };
+    const [list, myProf, myApps] = await Promise.all([jobs.list(f), profiles.get(me.id), jobs.applicationsForUser(me.id)]);
+    const applied = new Set(myApps.map((a) => a.jobId));
+    const skills = myProf?.skills ?? [];
+    const out = list.map((j) => ({ ...publicJob(j), ...scoreJob(j, skills), appliedByMe: applied.has(j.id) }));
+    sendJson(res, 200, { jobs: out, total: out.length });
+  }
+
+  async function getJob(req, res, id) {
+    const me = await requireUser(req);
+    if (!jobs) throw new HttpError(404, 'Job not found.');
+    const job = await jobs.byId(id);
+    if (!job || job.active === false) throw new HttpError(404, 'Job not found.');
+    const [myProf, applied] = await Promise.all([profiles.get(me.id), jobs.hasApplied(id, me.id)]);
+    sendJson(res, 200, { job: { ...publicJob(job), ...scoreJob(job, myProf?.skills ?? []), appliedByMe: applied } });
+  }
+
+  async function applyJob(req, res, id) {
+    const me = await requireUser(req);
+    if (!jobs) throw new HttpError(503, 'Jobs are not available.');
+    const job = await jobs.byId(id);
+    if (!job || job.active === false) throw new HttpError(404, 'Job not found.');
+    const note = str((await readJson(req)).note, 2000);
+    const application = await jobs.apply({ jobId: id, userId: me.id, userName: me.name, note });
+    log(`job application ${me.id} -> ${id}`);
+    sendJson(res, 201, { application: publicApplication(application) });
+  }
+
+  async function myApplications(req, res) {
+    const me = await requireUser(req);
+    if (!jobs) return sendJson(res, 200, { applications: [] });
+    const apps = await jobs.applicationsForUser(me.id);
+    const out = await Promise.all(
+      apps.map(async (a) => {
+        const job = await jobs.byId(a.jobId);
+        return { ...publicApplication(a), job: job ? publicJob(job) : undefined };
+      }),
+    );
+    sendJson(res, 200, { applications: out });
   }
 
   // --- profiles ---
@@ -389,6 +454,8 @@ export function createSocial(deps) {
     if (pathname === '/api/notifications' && m === 'GET') return (await listNotifications(req, res), true);
     if (pathname === '/api/notifications/read' && m === 'POST') return (await readNotifications(req, res), true);
     if (pathname === '/api/dm' && m === 'GET') return (await conversations(req, res), true);
+    if (pathname === '/api/jobs' && m === 'GET') return (await listJobs(req, res, url), true);
+    if (pathname === '/api/applications' && m === 'GET') return (await myApplications(req, res), true);
 
     let mm;
     if ((mm = pathname.match(/^\/api\/profile\/([^/]+)$/)) && m === 'GET') return (await viewProfile(req, res, decodeURIComponent(mm[1])), true);
@@ -404,6 +471,8 @@ export function createSocial(deps) {
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'GET') return (await dmThread(req, res, decodeURIComponent(mm[1]), url), true);
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'POST') return (await dmSend(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/call\/([^/]+)\/invite$/)) && m === 'POST') return (await startCall(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/jobs\/([^/]+)\/apply$/)) && m === 'POST') return (await applyJob(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/jobs\/([^/]+)$/)) && m === 'GET') return (await getJob(req, res, decodeURIComponent(mm[1])), true);
 
     return false;
   }

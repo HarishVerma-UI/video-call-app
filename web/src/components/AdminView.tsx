@@ -1,7 +1,7 @@
-import { ApiError, type ActiveRoom, type Ad, type AdminStats, type AuthUser, type UserRole } from '@vca/shared';
+import { ApiError, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
+import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 import { uploadFile } from '../upload';
@@ -359,6 +359,242 @@ function AdsManager() {
   );
 }
 
+/* ─── jobs manager ─────────────────────────────────────── */
+
+const JOB_TYPES: { v: Job['type']; l: string }[] = [
+  { v: 'full-time', l: 'Full-time' },
+  { v: 'part-time', l: 'Part-time' },
+  { v: 'contract', l: 'Contract' },
+  { v: 'internship', l: 'Internship' },
+];
+const JOB_EXPS: { v: Job['experience']; l: string }[] = [
+  { v: 'entry', l: 'Entry level' },
+  { v: 'mid', l: 'Mid level' },
+  { v: 'senior', l: 'Senior' },
+  { v: 'lead', l: 'Lead / Principal' },
+];
+
+function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: () => void; onSaved: () => void }) {
+  const { api } = useAuth();
+  const [f, setF] = useState<JobInput>({
+    title: editing?.title ?? '',
+    company: editing?.company ?? '',
+    category: editing?.category ?? 'tech',
+    country: editing?.country ?? '',
+    type: editing?.type ?? 'full-time',
+    experience: editing?.experience ?? 'mid',
+    salaryMin: editing?.salaryMin ?? null,
+    salaryMax: editing?.salaryMax ?? null,
+    salaryCurrency: editing?.salaryCurrency ?? 'USD',
+    remote: editing?.remote ?? false,
+    description: editing?.description ?? '',
+    active: editing?.active ?? true,
+  });
+  const [requirements, setRequirements] = useState((editing?.requirements ?? []).join('\n'));
+  const [skills, setSkills] = useState((editing?.skills ?? []).join(', '));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const upd = <K extends keyof JobInput>(k: K, v: JobInput[K]) => setF((cur) => ({ ...cur, [k]: v }));
+  const numOrNull = (s: string) => (s.trim() === '' ? null : Number(s.replace(/[^\d.]/g, '')) || null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    setFields({});
+    try {
+      const input: JobInput = {
+        ...f,
+        title: f.title.trim(),
+        company: (f.company ?? '').trim(),
+        requirements: requirements.split('\n').map((s) => s.trim()).filter(Boolean),
+        skills: skills.split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      if (editing) await api.adminUpdateJob(editing.id, input);
+      else await api.adminCreateJob(input);
+      onSaved();
+    } catch (ex) {
+      const ae = ex instanceof ApiError ? ex : null;
+      setFields(ae?.fields ?? {});
+      setErr(ae?.message ?? 'Could not save this job.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={editing ? 'Edit job' : 'Post a job'} onClick={onClose}>
+      <form className="modal__card card job-form" onClick={(e: MouseEvent) => e.stopPropagation()} onSubmit={submit} noValidate>
+        <header className="card__head">
+          <div>
+            <h2>{editing ? 'Edit job' : 'Post a job'}</h2>
+            <p>Published jobs appear instantly on the Jobs tab.</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
+        </header>
+        <div className="card__grid">
+          <Line name="job-title" label="Title" type="text" autoComplete="off" value={f.title} onChange={(v) => upd('title', v)} error={fields.title} />
+          <Line name="job-company" label="Company" type="text" autoComplete="off" value={f.company ?? ''} onChange={(v) => upd('company', v)} error={fields.company} />
+        </div>
+        <div className="job-form__row">
+          <label className="admin__field"><span>Category</span>
+            <select className="admin__select" value={f.category} onChange={(e) => upd('category', e.target.value as Job['category'])}>
+              <option value="tech">Tech</option><option value="non-tech">Non-Tech</option>
+            </select>
+          </label>
+          <label className="admin__field"><span>Type</span>
+            <select className="admin__select" value={f.type} onChange={(e) => upd('type', e.target.value as Job['type'])}>
+              {JOB_TYPES.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          </label>
+          <label className="admin__field"><span>Experience</span>
+            <select className="admin__select" value={f.experience} onChange={(e) => upd('experience', e.target.value as Job['experience'])}>
+              {JOB_EXPS.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="job-form__row">
+          <Line name="job-country" label="Country" type="text" autoComplete="off" value={f.country ?? ''} onChange={(v) => upd('country', v)} />
+          <Line name="job-cur" label="Currency" type="text" autoComplete="off" value={f.salaryCurrency ?? ''} onChange={(v) => upd('salaryCurrency', v)} />
+          <Line name="job-min" label="Salary min" type="text" autoComplete="off" value={f.salaryMin == null ? '' : String(f.salaryMin)} onChange={(v) => upd('salaryMin', numOrNull(v))} />
+          <Line name="job-max" label="Salary max" type="text" autoComplete="off" value={f.salaryMax == null ? '' : String(f.salaryMax)} onChange={(v) => upd('salaryMax', numOrNull(v))} />
+        </div>
+        <div className="line">
+          <label htmlFor="job-desc">Description</label>
+          <div className="line__row"><textarea id="job-desc" className="pp-textarea" rows={4} maxLength={8000} value={f.description ?? ''} onChange={(e) => upd('description', e.target.value)} /></div>
+          <span className="line__rule" />
+        </div>
+        <div className="line">
+          <label htmlFor="job-reqs">Requirements (one per line)</label>
+          <div className="line__row"><textarea id="job-reqs" className="pp-textarea" rows={3} value={requirements} onChange={(e) => setRequirements(e.target.value)} /></div>
+          <span className="line__rule" />
+        </div>
+        <Line name="job-skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
+        <div className="job-form__toggles">
+          <label className="admin-ads__active"><input type="checkbox" checked={!!f.remote} onChange={(e) => upd('remote', e.target.checked)} /> Remote</label>
+          <label className="admin-ads__active"><input type="checkbox" checked={f.active !== false} onChange={(e) => upd('active', e.target.checked)} /> Active (visible on the Jobs tab)</label>
+        </div>
+        {err && <p className="form-msg" role="alert">{err}</p>}
+        <div className="modal__actions">
+          <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={busy} data-testid="save-job">{busy ? 'Saving…' : editing ? 'Save changes' : 'Publish job'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ApplicantsModal({ job, onClose }: { job: Job; onClose: () => void }) {
+  const { api } = useAuth();
+  const [applicants, setApplicants] = useState<JobApplication[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.adminJobApplicants(job.id).then(({ applicants }) => setApplicants(applicants)).catch(() => setApplicants([]));
+  }, [api, job.id]);
+
+  const setStatus = async (a: JobApplication, status: ApplicationStatus) => {
+    setErr(null);
+    try {
+      await api.adminSetApplicationStatus(a.id, status);
+      setApplicants((cur) => cur?.map((x) => (x.id === a.id ? { ...x, status } : x)) ?? cur);
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Could not update status.');
+    }
+  };
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={`Applicants for ${job.title}`} onClick={onClose}>
+      <div className="modal__card card" onClick={(e: MouseEvent) => e.stopPropagation()}>
+        <header className="card__head">
+          <div><h2>Applicants</h2><p>{job.title} · {job.company}</p></div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
+        </header>
+        {err && <p className="form-msg" role="alert">{err}</p>}
+        {applicants === null ? (
+          <div className="skeleton-list" aria-hidden="true"><i /></div>
+        ) : applicants.length === 0 ? (
+          <p className="card__empty">No applicants yet.</p>
+        ) : (
+          <div className="admin-dir__list">
+            {applicants.map((a) => (
+              <div key={a.id} className="job-applicant">
+                <Avatar id={a.userId} name={a.profile?.name || a.userName || '?'} size={38} />
+                <div className="job-applicant__info">
+                  <strong>{a.profile?.name || a.userName}</strong>
+                  {a.profile?.headline && <span>{a.profile.headline}</span>}
+                  {a.note && <em>“{a.note}”</em>}
+                </div>
+                <select className="admin__select" value={a.status} onChange={(e) => void setStatus(a, e.target.value as ApplicationStatus)} aria-label="Application status">
+                  <option value="applied">Applied</option>
+                  <option value="shortlisted">Shortlisted</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function JobsManager() {
+  const { api } = useAuth();
+  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Job | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [applicantsFor, setApplicantsFor] = useState<Job | null>(null);
+
+  const load = useCallback(() => {
+    api.adminListJobs().then(({ jobs }) => setJobs(jobs)).catch(() => setJobs([]));
+  }, [api]);
+  useEffect(() => load(), [load]);
+
+  const remove = async (job: Job) => {
+    if (!window.confirm(`Delete “${job.title}”? Applications to it will be removed too.`)) return;
+    setErr(null);
+    try { await api.adminDeleteJob(job.id); load(); } catch (ex) { setErr(ex instanceof ApiError ? ex.message : 'Could not delete the job.'); }
+  };
+
+  return (
+    <div className="card admin-dash__jobs">
+      <header className="card__head">
+        <h2><BriefcaseIcon width={18} height={18} /> Jobs Manager</h2>
+        <button className="btn btn--primary btn--small" onClick={() => { setEditing(null); setShowForm(true); }} data-testid="add-job">
+          <PlusIcon width={16} height={16} /> Post a job
+        </button>
+      </header>
+      {err && <p className="form-msg" role="alert">{err}</p>}
+      {jobs === null ? (
+        <div className="skeleton-list" aria-hidden="true"><i /></div>
+      ) : jobs.length === 0 ? (
+        <p className="card__empty">No jobs yet. Post one to show it on the Jobs tab.</p>
+      ) : (
+        <ul className="admin-jobs__list">
+          {jobs.map((job) => (
+            <li key={job.id} className={`admin-jobs__item${job.active ? '' : ' is-hidden'}`}>
+              <div className="admin-jobs__logo" aria-hidden="true">{(job.company || '?').charAt(0).toUpperCase()}</div>
+              <div className="admin-jobs__text">
+                <strong>{job.title}</strong>
+                <span>{job.company} · {job.country || 'Anywhere'}{job.remote ? ' · Remote' : ''}</span>
+              </div>
+              <button className="link-btn" onClick={() => setApplicantsFor(job)} data-testid="view-applicants">{job.applicantCount ?? 0} applicant{(job.applicantCount ?? 0) !== 1 ? 's' : ''}</button>
+              <div className="admin-ads__actions">
+                <button className="link-btn" onClick={() => { setEditing(job); setShowForm(true); }} aria-label="Edit job"><PencilIcon width={14} height={14} /></button>
+                <button className="link-btn admin-dir__danger" onClick={() => void remove(job)} aria-label="Delete job"><TrashIcon width={14} height={14} /></button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {showForm && <JobForm editing={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
+      {applicantsFor && <ApplicantsModal job={applicantsFor} onClose={() => setApplicantsFor(null)} />}
+    </div>
+  );
+}
+
 /* ─── main dashboard ───────────────────────────────────── */
 
 export function AdminView() {
@@ -562,6 +798,9 @@ export function AdminView() {
           </div>
         </div>
       </div>
+
+      {/* ─ jobs manager ─ */}
+      <JobsManager />
 
       {/* ─ ads manager ─ */}
       <AdsManager />
