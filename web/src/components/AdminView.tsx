@@ -545,12 +545,169 @@ function ApplicantsModal({ job, onClose }: { job: Job; onClose: () => void }) {
   );
 }
 
+type Checked = { valid: JobInput[]; problems: { index: number; errs: string[] }[] };
+
+const SAMPLE_JSON = `[
+  {
+    "title": "Senior React Developer",
+    "company": "Acme",
+    "category": "tech",
+    "country": "Bengaluru, India",
+    "type": "full-time",
+    "experience": "senior",
+    "salaryMin": 2500000,
+    "salaryMax": 4500000,
+    "salaryCurrency": "INR",
+    "remote": false,
+    "description": "Build things.",
+    "skills": ["React", "TypeScript"],
+    "applyUrl": "https://acme.example/careers",
+    "source": "Acme"
+  }
+]`;
+
+/** Paste or upload a JSON array of jobs, verify it, then import the valid ones. */
+function JsonImportModal({ onClose, onDone }: { onClose: () => void; onDone: (created: number, skipped: number) => void }) {
+  const { api } = useAuth();
+  const [text, setText] = useState('');
+  const [parseErr, setParseErr] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Checked | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const reset = () => { setChecked(null); setParseErr(null); setErr(null); };
+
+  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { setText(String(reader.result ?? '')); reset(); };
+    reader.readAsText(f);
+    if (fileInput.current) fileInput.current.value = '';
+  };
+
+  const verify = () => {
+    reset();
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      setParseErr('That isn’t valid JSON. Check for a trailing comma or a missing bracket.');
+      return;
+    }
+    const arr = Array.isArray(data)
+      ? data
+      : data && typeof data === 'object' && Array.isArray((data as { jobs?: unknown[] }).jobs)
+        ? (data as { jobs: unknown[] }).jobs
+        : null;
+    if (!arr) { setParseErr('Expected a JSON array of jobs, or an object like { "jobs": [ … ] }.'); return; }
+    if (arr.length === 0) { setParseErr('The list is empty — nothing to import.'); return; }
+    if (arr.length > 500) { setParseErr('Please import at most 500 jobs at a time.'); return; }
+
+    const problems: Checked['problems'] = [];
+    const valid: JobInput[] = [];
+    arr.forEach((raw, i) => {
+      const j = raw as Record<string, unknown>;
+      const errs: string[] = [];
+      if (!j || typeof j !== 'object') errs.push('not an object');
+      else {
+        if (typeof j.title !== 'string' || !j.title.trim()) errs.push('missing "title"');
+        if (typeof j.company !== 'string' || !j.company.trim()) errs.push('missing "company"');
+        if (j.applyUrl && !/^https?:\/\//i.test(String(j.applyUrl))) errs.push('"applyUrl" must start with http(s)://');
+        if (j.category && j.category !== 'tech' && j.category !== 'non-tech') errs.push('"category" must be "tech" or "non-tech"');
+      }
+      if (errs.length) problems.push({ index: i, errs });
+      else valid.push(j as unknown as JobInput);
+    });
+    setChecked({ valid, problems });
+  };
+
+  const doImport = async () => {
+    if (!checked?.valid.length) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const { created, skipped } = await api.adminImportJobs(checked.valid, { dedupe: false });
+      onDone(created, skipped);
+    } catch (ex) {
+      setErr(ex instanceof ApiError ? ex.message : 'Import failed.');
+      setBusy(false);
+    }
+  };
+
+  const allGood = checked && checked.problems.length === 0;
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label="Import jobs from JSON" onClick={onClose}>
+      <div className="modal__card card job-json" onClick={(e: MouseEvent) => e.stopPropagation()}>
+        <header className="card__head">
+          <div>
+            <h2>Import jobs from JSON</h2>
+            <p>Paste or upload a JSON array of jobs, verify it, then import.</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
+        </header>
+
+        <div className="job-json__toolbar">
+          <button type="button" className="btn btn--secondary btn--small" onClick={() => fileInput.current?.click()}>Upload .json file</button>
+          <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={onFile} />
+          <button type="button" className="link-btn" onClick={() => { setText(SAMPLE_JSON); reset(); }}>Insert sample</button>
+        </div>
+
+        <textarea
+          className="pp-textarea job-json__ta"
+          rows={12}
+          spellCheck={false}
+          value={text}
+          onChange={(e) => { setText(e.target.value); reset(); }}
+          placeholder='[ { "title": "…", "company": "…", "applyUrl": "https://…" } ]'
+          data-testid="json-input"
+        />
+
+        {parseErr && <p className="form-msg" role="alert">{parseErr}</p>}
+
+        {checked && (
+          <div className={`job-json__summary${allGood ? ' is-ok' : ''}`} data-testid="json-summary">
+            <p>
+              <strong>{checked.valid.length}</strong> valid
+              {checked.problems.length > 0 && <> · <strong>{checked.problems.length}</strong> with problems (skipped)</>}
+            </p>
+            {checked.problems.length > 0 && (
+              <ul className="job-json__problems">
+                {checked.problems.slice(0, 8).map((p) => (
+                  <li key={p.index}>Row {p.index + 1}: {p.errs.join(', ')}</li>
+                ))}
+                {checked.problems.length > 8 && <li>…and {checked.problems.length - 8} more</li>}
+              </ul>
+            )}
+          </div>
+        )}
+        {err && <p className="form-msg" role="alert">{err}</p>}
+
+        <div className="modal__actions">
+          <button type="button" className="btn btn--secondary" onClick={onClose}>Cancel</button>
+          {!checked ? (
+            <button type="button" className="btn btn--primary" onClick={verify} disabled={!text.trim()} data-testid="verify-json">Verify</button>
+          ) : (
+            <button type="button" className="btn btn--primary" onClick={() => void doImport()} disabled={busy || checked.valid.length === 0} data-testid="import-json">
+              {busy ? 'Importing…' : `Import ${checked.valid.length} job${checked.valid.length !== 1 ? 's' : ''}`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function JobsManager() {
   const { api } = useAuth();
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [editing, setEditing] = useState<Job | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showJson, setShowJson] = useState(false);
   const [applicantsFor, setApplicantsFor] = useState<Job | null>(null);
 
   const load = useCallback(() => {
@@ -568,10 +725,16 @@ function JobsManager() {
     <div className="card admin-dash__jobs">
       <header className="card__head">
         <h2><BriefcaseIcon width={18} height={18} /> Jobs Manager</h2>
-        <button className="btn btn--primary btn--small" onClick={() => { setEditing(null); setShowForm(true); }} data-testid="add-job">
-          <PlusIcon width={16} height={16} /> Post a job
-        </button>
+        <div className="admin-jobs__head-actions">
+          <button className="btn btn--secondary btn--small" onClick={() => setShowJson(true)} data-testid="import-json-open">
+            Import JSON
+          </button>
+          <button className="btn btn--primary btn--small" onClick={() => { setEditing(null); setShowForm(true); }} data-testid="add-job">
+            <PlusIcon width={16} height={16} /> Post a job
+          </button>
+        </div>
       </header>
+      {note && <p className="form-msg form-msg--ok" role="status">{note}</p>}
       {err && <p className="form-msg" role="alert">{err}</p>}
       {jobs === null ? (
         <div className="skeleton-list" aria-hidden="true"><i /></div>
@@ -596,6 +759,16 @@ function JobsManager() {
         </ul>
       )}
       {showForm && <JobForm editing={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
+      {showJson && (
+        <JsonImportModal
+          onClose={() => setShowJson(false)}
+          onDone={(created, skipped) => {
+            setShowJson(false);
+            setNote(`Imported ${created} job${created !== 1 ? 's' : ''}${skipped ? `, skipped ${skipped}` : ''}.`);
+            load();
+          }}
+        />
+      )}
       {applicantsFor && <ApplicantsModal job={applicantsFor} onClose={() => setApplicantsFor(null)} />}
     </div>
   );

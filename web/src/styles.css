@@ -3185,3 +3185,13 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
 .pp-meter--ok .pp-meter__label { color: var(--live); font-weight: 600; }
 
 .job-chip--ext { color: var(--accent) !important; font-weight: 600; }
+
+/* admin: jobs JSON import */
+.admin-jobs__head-actions { display: flex; gap: 8px; align-items: center; }
+.job-json { max-width: 640px; }
+.job-json__toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.job-json__ta { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; white-space: pre; overflow-wrap: normal; }
+.job-json__summary { margin: 12px 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); }
+.job-json__summary.is-ok { background: var(--live-soft); border-color: transparent; }
+.job-json__summary p { margin: 0; color: var(--text); }
+.job-json__problems { margin: 8px 0 0; padding-left: 18px; color: var(--danger); font-size: .86rem; display: flex; flex-direction: column; gap: 3px; }
