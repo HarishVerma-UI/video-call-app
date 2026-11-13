@@ -148,6 +148,91 @@ export function finalize(jobs) {
   return jobs.map(({ _date, ...j }) => ({ ...j, description: (j.description || '').slice(0, 6000) }));
 }
 
+// ---- CSV import (a spreadsheet of jobs) ---------------------------------
+/** Minimal RFC-4180 CSV parser → array of row objects keyed by header. */
+export function parseCsv(text) {
+  const rows = [];
+  let field = '';
+  let row = [];
+  let inQuotes = false;
+  const s = String(text ?? '');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+      } else field += c;
+      continue;
+    }
+    if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); field = ''; row = []; }
+    else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const header = rows[0].map((h) => h.trim());
+  return rows
+    .slice(1)
+    .filter((r) => r.some((x) => x && x.trim()))
+    .map((r) => {
+      const o = {};
+      header.forEach((h, i) => { o[h] = (r[i] ?? '').trim(); });
+      return o;
+    });
+}
+
+/** "₹35,00,000 - ₹55,00,000" → { min: 3500000, max: 5500000 }. */
+export function parseSalaryRange(s) {
+  const nums = String(s ?? '').match(/\d[\d,]*/g);
+  if (!nums) return { min: null, max: null };
+  const toN = (x) => { const n = Number(x.replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };
+  return { min: toN(nums[0]), max: nums[1] ? toN(nums[1]) : null };
+}
+
+/** "5-8 Years" (+ the title) → one of entry/mid/senior/lead. */
+export function expFromRange(level, title = '') {
+  const byTitle = classifyExperience(title);
+  if (byTitle !== 'mid') return byTitle;
+  const m = String(level ?? '').match(/\d+/);
+  const min = m ? Number(m[0]) : null;
+  if (min == null) return 'mid';
+  if (min >= 7) return 'lead';
+  if (min >= 4) return 'senior';
+  if (min >= 2) return 'mid';
+  return 'entry';
+}
+
+/** Map one CSV row (the "real_it_jobs_with_contacts" shape) to a JobInput. */
+export function fromCsvRow(row) {
+  const get = (k) => (row[k] ?? '').trim();
+  const location = get('Location');
+  const stack = get('Tech Stack');
+  const salary = get('Salary Range');
+  const { min, max } = parseSalaryRange(salary);
+  const email = get('Recruitment Email');
+  const description = [get('Description'), email ? `Contact: ${email}` : ''].filter(Boolean).join('\n\n');
+  const category = /^non-?tech$/i.test(get('Category')) ? 'non-tech' : categorize(`${get('Job Title')} ${stack}`);
+  return {
+    title: get('Job Title'),
+    company: get('Company'),
+    category,
+    country: location,
+    type: classifyType(get('Job Type')),
+    experience: expFromRange(get('Experience Level'), get('Job Title')),
+    salaryMin: min,
+    salaryMax: max,
+    salaryCurrency: /₹|\bINR\b|\bRs\b/i.test(salary) ? 'INR' : 'USD',
+    remote: /remote/i.test(location),
+    description: description.slice(0, 6000),
+    requirements: [],
+    skills: cleanSkills(stack.split(',')),
+    active: true,
+    applyUrl: get('Company Website'),
+    source: get('Company') || 'Imported',
+  };
+}
+
 /** Full pipeline over raw source arrays: { remotive, arbeitnow, jobicy } → JobInput[] */
 export function buildImport({ remotive = [], arbeitnow = [], jobicy = [] } = {}, { days = 10, limit = 100 } = {}) {
   const all = [...remotive.map(fromRemotive), ...arbeitnow.map(fromArbeitnow), ...jobicy.map(fromJobicy)];

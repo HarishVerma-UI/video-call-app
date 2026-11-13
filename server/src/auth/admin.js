@@ -276,7 +276,10 @@ export function createAdmin(opts) {
     const incoming = Array.isArray(body.jobs) ? body.jobs : [];
     if (!incoming.length) throw new HttpError(400, 'No jobs to import.');
     if (incoming.length > 500) throw new HttpError(400, 'Import at most 500 jobs at a time.');
-    const existing = await opts.social.jobs.list({ activeOnly: false });
+    // Dedupe by default; pass dedupe:false to insert a curated batch verbatim
+    // (e.g. a spreadsheet where several roles share one careers URL).
+    const dedupe = body.dedupe !== false;
+    const existing = dedupe ? await opts.social.jobs.list({ activeOnly: false }) : [];
     const seenUrl = new Set(existing.map((j) => (j.applyUrl || '').toLowerCase()).filter(Boolean));
     const seenKey = new Set(existing.map((j) => `${(j.title || '').toLowerCase()}@@${(j.company || '').toLowerCase()}`));
     let created = 0;
@@ -292,7 +295,7 @@ export function createAdmin(opts) {
       if (!patch.title || !patch.company) { skipped++; continue; }
       const urlKey = (patch.applyUrl || '').toLowerCase();
       const key = `${patch.title.toLowerCase()}@@${patch.company.toLowerCase()}`;
-      if ((urlKey && seenUrl.has(urlKey)) || seenKey.has(key)) { skipped++; continue; }
+      if (dedupe && ((urlKey && seenUrl.has(urlKey)) || seenKey.has(key))) { skipped++; continue; }
       await opts.social.jobs.create(patch);
       if (urlKey) seenUrl.add(urlKey);
       seenKey.add(key);

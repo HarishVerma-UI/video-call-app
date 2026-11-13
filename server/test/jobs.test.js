@@ -178,6 +178,16 @@ test('admin bulk-imports external jobs, dedupes, and skips invalid ones', async 
   assert.equal(again.body.created, 0);
 });
 
+test('import with dedupe:false inserts a curated batch verbatim (shared careers URL)', async () => {
+  const jobs = [
+    { title: 'UI Developer', company: 'Zoho', applyUrl: 'https://zoho.example/careers', source: 'Zoho' },
+    { title: 'Backend Engineer', company: 'Zoho', applyUrl: 'https://zoho.example/careers', source: 'Zoho' }, // same URL, different role
+  ];
+  const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs, dedupe: false }, admin.token);
+  assert.equal(res.status, 201);
+  assert.equal(res.body.created, 2);
+});
+
 test('import rejects non-admins', async () => {
   const u = await registerUser(t.base, 'Not Admin Two');
   const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs: [{ title: 'x', company: 'y' }] }, u.token);

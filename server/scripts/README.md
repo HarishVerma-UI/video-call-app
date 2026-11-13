@@ -8,8 +8,31 @@ the Huddle job shape, de-duplicates, and inserts up to `LIMIT` of them via the
 admin API. Each job keeps its **original apply link**, so **Apply** on the board
 opens the company's own site.
 
-> Run this from a machine or server **with internet access** and an **admin
-> account** on the target app. It will not work from a locked-down CI sandbox.
+> Run this from a machine or server with internet and/or database access. It
+> will not work from a locked-down CI sandbox (no outbound network).
+
+### Insert from a CSV you have
+
+Columns: `Job Title, Company, Category, Tech Stack, Experience Level, Location,
+Salary Range, Job Type, Company Website, Recruitment Email, Description,
+Created Date`. The **Company Website** becomes each job's apply link.
+
+```bash
+# straight into the database (no admin account needed):
+CSV=jobs.csv MONGODB_URI='mongodb+srv://…/huddle' npm run import-jobs -w @vca/server
+
+# or via the admin API:
+CSV=jobs.csv BASE_URL=https://your-app.example \
+  ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='pw' npm run import-jobs -w @vca/server
+
+# or just preview the mapped JSON:
+CSV=jobs.csv npm run import-jobs -w @vca/server -- --dry-run
+```
+
+A CSV is inserted **verbatim** (no de-duplication), since curated rows often
+share one careers URL across many roles.
+
+### Live public APIs (no CSV)
 
 ### Preview (no insert)
 

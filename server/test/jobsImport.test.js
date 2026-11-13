@@ -1,7 +1,7 @@
 // Pure job-import helpers: HTML stripping, classification, and the build pipeline.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildImport, categorize, classifyExperience, classifyType, dedupeJobs, filterRecent, fromRemotive, stripHtml } from '../src/jobsImport.js';
+import { buildImport, categorize, classifyExperience, classifyType, dedupeJobs, expFromRange, filterRecent, fromCsvRow, fromRemotive, parseCsv, parseSalaryRange, stripHtml } from '../src/jobsImport.js';
 
 const iso = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString();
 
@@ -68,6 +68,58 @@ test('dedupeJobs removes duplicate apply URLs and title+company, newest first', 
   const out = dedupeJobs(jobs);
   assert.equal(out.length, 2);
   assert.equal(out[0].title, 'B'); // newest first
+});
+
+test('parseCsv handles quoted fields with commas and newlines', () => {
+  const csv = 'A,B,C\n1,"x, y","line1\nline2"\n2,plain,z\n';
+  const rows = parseCsv(csv);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].B, 'x, y');
+  assert.equal(rows[0].C, 'line1\nline2');
+  assert.equal(rows[1].A, '2');
+});
+
+test('parseSalaryRange reads Indian-format ranges', () => {
+  assert.deepEqual(parseSalaryRange('₹35,00,000 - ₹55,00,000'), { min: 3500000, max: 5500000 });
+  assert.deepEqual(parseSalaryRange('₹18,00,000+'), { min: 1800000, max: null });
+  assert.deepEqual(parseSalaryRange(''), { min: null, max: null });
+});
+
+test('expFromRange uses the title then the year range', () => {
+  assert.equal(expFromRange('7-12 Years', 'Angular Architect / Lead'), 'lead');
+  assert.equal(expFromRange('2-5 Years', 'UI Developer - Angular / React'), 'mid');
+  assert.equal(expFromRange('4-8 Years', 'Software Engineer'), 'senior');
+});
+
+test('fromCsvRow maps the real_it_jobs CSV shape with apply URL = careers site', () => {
+  const row = {
+    'Job Title': 'Senior Frontend Engineer (React/TypeScript)',
+    Company: 'Postman',
+    Category: 'Tech',
+    'Tech Stack': 'React, Next.js, TypeScript, Node.js, Tailwind CSS',
+    'Experience Level': '5-8 Years',
+    Location: 'Bengaluru, Karnataka (Hybrid)',
+    'Salary Range': '₹35,00,000 - ₹55,00,000',
+    'Job Type': 'Full-time',
+    'Company Website': 'https://www.postman.com/company/careers/',
+    'Recruitment Email': 'careers@postman.com',
+    Description: 'Join Postman.',
+    'Created Date': '2026-11-10 23:00',
+  };
+  const j = fromCsvRow(row);
+  assert.equal(j.company, 'Postman');
+  assert.equal(j.category, 'tech');
+  assert.equal(j.experience, 'senior');
+  assert.equal(j.type, 'full-time');
+  assert.equal(j.country, 'Bengaluru, Karnataka (Hybrid)');
+  assert.equal(j.remote, false);
+  assert.equal(j.salaryMin, 3500000);
+  assert.equal(j.salaryMax, 5500000);
+  assert.equal(j.salaryCurrency, 'INR');
+  assert.equal(j.applyUrl, 'https://www.postman.com/company/careers/');
+  assert.equal(j.source, 'Postman');
+  assert.ok(j.skills.includes('React') && j.skills.includes('TypeScript'));
+  assert.match(j.description, /Contact: careers@postman\.com/);
 });
 
 test('buildImport produces capped, finalized JobInput objects', () => {

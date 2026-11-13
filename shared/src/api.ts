@@ -364,8 +364,8 @@ export interface ApiClient {
   adminDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
   adminJobApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
   adminSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
-  /** Bulk-insert jobs (e.g. from the importer), skipping duplicates. */
-  adminImportJobs(jobs: JobInput[]): Promise<{ created: number; skipped: number }>;
+  /** Bulk-insert jobs (e.g. from the importer). Dedupes by default; pass { dedupe: false } to insert a curated batch verbatim. */
+  adminImportJobs(jobs: JobInput[], opts?: { dedupe?: boolean }): Promise<{ created: number; skipped: number }>;
 
   // --- server logs (admin only) ---
   logs(opts?: { since?: number; level?: string; q?: string; limit?: number }): Promise<{ logs: { id: number; ts: number; level: string; message: string }[] }>;
@@ -509,7 +509,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminDeleteJob: (id) => request('DELETE', `/api/admin/jobs/${encodeURIComponent(id)}`),
     adminJobApplicants: (jobId) => request('GET', `/api/admin/jobs/${encodeURIComponent(jobId)}/applicants`),
     adminSetApplicationStatus: (id, status) => request('PATCH', `/api/admin/applications/${encodeURIComponent(id)}`, { status }),
-    adminImportJobs: (jobs) => request('POST', '/api/admin/jobs/import', { jobs }),
+    adminImportJobs: (jobs, opts) => request('POST', '/api/admin/jobs/import', { jobs, dedupe: opts?.dedupe }),
     logs: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.since !== undefined) q.set('since', String(opts.since));
