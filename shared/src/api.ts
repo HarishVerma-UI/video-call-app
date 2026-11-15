@@ -304,6 +304,18 @@ export interface AdminStats {
   activeCalls: { rooms: number; participants: number };
   activeRooms: ActiveRoom[];
   uptimeSec: number;
+  // Platform (jobs & applications) metrics.
+  jobsTotal: number;
+  jobsActive: number;
+  jobsByCategory: { tech: number; 'non-tech': number };
+  applicationsTotal: number;
+  applicationsByStatus: { applied: number; shortlisted: number; rejected: number };
+}
+
+/** A recruiter in the super-admin directory, with their posting activity. */
+export interface RecruiterSummary extends AuthUser {
+  jobCount: number;
+  applicantCount: number;
 }
 
 export interface ApiClient {
@@ -323,6 +335,7 @@ export interface ApiClient {
   adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
   adminStats(): Promise<AdminStats>;
+  adminListRecruiters(): Promise<{ recruiters: RecruiterSummary[] }>;
 
   // --- ads (admin manages; everyone sees active ones in the feed) ---
   ads(): Promise<{ ads: Ad[] }>;
@@ -450,6 +463,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
     adminStats: () => request('GET', '/api/admin/stats'),
+    adminListRecruiters: () => request('GET', '/api/admin/recruiters'),
     ads: () => request('GET', '/api/ads'),
     stats: () => request('GET', '/api/stats'),
     notifications: () => request('GET', '/api/notifications'),

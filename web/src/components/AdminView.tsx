@@ -1,4 +1,4 @@
-import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type UserRole } from '@vca/shared';
+import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
@@ -356,6 +356,66 @@ function AdsManager() {
         </ul>
       )}
       {showForm && <AdForm editing={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />}
+    </div>
+  );
+}
+
+/* ─── platform intelligence: jobs-by-domain + recruiter directory ─── */
+
+function JobsByDomain({ stats }: { stats: AdminStats | null }) {
+  if (!stats) return <div className="card admin-domain"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
+  const t = stats.jobsByCategory.tech;
+  const nt = stats.jobsByCategory['non-tech'];
+  const total = Math.max(1, t + nt);
+  const s = stats.applicationsByStatus;
+  const bar = (label: string, n: number, cls: string) => (
+    <div className="admin-domain__row">
+      <div className="admin-domain__top"><span>{label}</span><strong>{n}</strong></div>
+      <div className="admin-domain__bar"><span className={`admin-domain__fill admin-domain__fill--${cls}`} style={{ width: `${(n / total) * 100}%` }} /></div>
+    </div>
+  );
+  return (
+    <div className="card admin-domain">
+      <header className="card__head"><h2>Jobs by domain &amp; moderation</h2></header>
+      <div className="admin-domain__bars">
+        {bar('Tech', t, 'tech')}
+        {bar('Non-Tech', nt, 'nontech')}
+      </div>
+      <div className="admin-domain__mod">
+        <span><b>{s.applied}</b> applied</span>
+        <span><b>{s.shortlisted}</b> shortlisted</span>
+        <span><b>{s.rejected}</b> not selected</span>
+      </div>
+    </div>
+  );
+}
+
+function RecruitersDirectory() {
+  const { api } = useAuth();
+  const [recs, setRecs] = useState<RecruiterSummary[] | null>(null);
+  useEffect(() => {
+    api.adminListRecruiters().then(({ recruiters }) => setRecs(recruiters)).catch(() => setRecs([]));
+  }, [api]);
+  return (
+    <div className="card admin-recs">
+      <header className="card__head"><h2><BriefcaseIcon width={18} height={18} /> Recruiter directory</h2></header>
+      {recs === null ? (
+        <div className="skeleton-list" aria-hidden="true"><i /></div>
+      ) : recs.length === 0 ? (
+        <p className="card__empty">No recruiters yet. Set a member’s role to “Recruiter” to let them post jobs and source candidates.</p>
+      ) : (
+        <div className="admin-recs__list">
+          {recs.map((r) => (
+            <div key={r.id} className="admin-rec">
+              <Avatar id={r.id} name={r.name} size={38} />
+              <div className="admin-rec__info"><strong>{r.name || '—'}</strong><span>{r.email}</span></div>
+              <span className="admin-rec__stat"><b>{r.jobCount}</b> job{r.jobCount !== 1 ? 's' : ''}</span>
+              <span className="admin-rec__stat"><b>{r.applicantCount}</b> applicant{r.applicantCount !== 1 ? 's' : ''}</span>
+              <span className={`pill pill--role-${r.role ?? 'member'}`}>{ROLE_LABEL[(r.role ?? 'member') as UserRole] ?? r.role}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -858,8 +918,8 @@ export function AdminView() {
       <header className="admin-dash__head">
         <span className="card__icon card__icon--face"><ShieldIcon width={22} height={22} /></span>
         <div className="admin-dash__headtext">
-          <h1>Admin Dashboard</h1>
-          <span className="admin-dash__badge">{loading ? '…' : total} Registered Accounts</span>
+          <h1>Platform Administration &amp; Intelligence</h1>
+          <span className="admin-dash__badge">{loading ? '…' : total} accounts · global ecosystem overview</span>
         </div>
         <button className="btn btn--primary btn--small" onClick={openNew} data-testid="add-user">
           <PlusIcon width={16} height={16} /> New User
@@ -869,12 +929,12 @@ export function AdminView() {
       {flash && <p className="form-msg form-msg--ok" role="status">{flash}</p>}
       {error && <p className="form-msg" role="alert">{error}</p>}
 
-      {/* ─ stats row ─ */}
+      {/* ─ platform metric cards ─ */}
       <div className="admin-dash__stats">
-        <StatCard label="Total Users:" value={loading ? '…' : total} />
-        <StatCard label="Active Calls:" value={stats?.activeCalls.rooms ?? 0} sub={stats ? `${stats.activeCalls.participants} participant${stats.activeCalls.participants !== 1 ? 's' : ''}` : undefined} />
-        <StatCard label="System Status:" value="Online" accent="var(--green, #22c55e)" />
-        <StatCard label="Uptime:" value={stats ? fmtUptime(stats.uptimeSec) : '…'} sub={stats ? `${stats.recentLogins} logins this week` : undefined} />
+        <StatCard label="Total platform users" value={loading ? '…' : total} sub={stats ? `${stats.recentSignups} new this week` : undefined} />
+        <StatCard label="Recruiters & admins" value={stats ? stats.byRole.recruiter + stats.byRole.super_admin : '…'} sub={stats ? `${stats.byRole.recruiter} recruiter${stats.byRole.recruiter !== 1 ? 's' : ''}` : undefined} />
+        <StatCard label="Live job postings" value={stats?.jobsActive ?? '…'} sub={stats ? `${stats.jobsTotal} total` : undefined} />
+        <StatCard label="Applications" value={stats?.applicationsTotal ?? '…'} sub={stats ? `${stats.applicationsByStatus.shortlisted} shortlisted` : undefined} />
       </div>
 
       {/* ─ main grid ─ */}
@@ -913,7 +973,10 @@ export function AdminView() {
 
           {/* active calls */}
           <div className="card admin-dash__calls">
-            <header className="card__head"><h2><VideoIcon width={18} height={18} /> Active Rooms</h2></header>
+            <header className="card__head">
+              <h2><VideoIcon width={18} height={18} /> Active Rooms</h2>
+              {stats && <span className="admin-sys" title="System health">● Online · {fmtUptime(stats.uptimeSec)} · {stats.activeCalls.rooms} live call{stats.activeCalls.rooms !== 1 ? 's' : ''}</span>}
+            </header>
             {stats && stats.activeRooms.length > 0 ? (
               <ul className="admin-activity">
                 {stats.activeRooms.map((r: ActiveRoom) => (
@@ -977,6 +1040,12 @@ export function AdminView() {
             </a>
           </div>
         </div>
+      </div>
+
+      {/* ─ platform intelligence ─ */}
+      <div className="admin-intel">
+        <RecruitersDirectory />
+        <JobsByDomain stats={stats} />
       </div>
 
       {/* ─ jobs manager ─ */}

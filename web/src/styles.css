@@ -2599,6 +2599,38 @@ svg {
 }
 .admin-resources__item:hover { background: var(--accent-soft); color: var(--accent); }
 
+/* ===== admin platform intelligence ===== */
+.admin-sys { font-size: 0.74rem; color: var(--green, #22c55e); font-weight: 500; white-space: nowrap; }
+.admin-intel { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 18px; }
+@media (max-width: 860px) { .admin-intel { grid-template-columns: 1fr; } }
+
+.admin-recs__list { display: flex; flex-direction: column; padding: 0 16px 16px; }
+.admin-rec {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.admin-rec:last-child { border-bottom: 0; }
+.admin-rec__info { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.admin-rec__info strong { font-weight: 600; font-size: 0.9rem; }
+.admin-rec__info span { color: var(--muted); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-rec__stat { flex: 0 0 auto; color: var(--muted); font-size: 0.78rem; text-align: right; }
+.admin-rec__stat b { color: var(--text); font-weight: 600; }
+
+.admin-domain__bars { display: flex; flex-direction: column; gap: 14px; padding: 4px 16px 14px; }
+.admin-domain__row { display: flex; flex-direction: column; gap: 6px; }
+.admin-domain__top { display: flex; justify-content: space-between; font-size: 0.82rem; }
+.admin-domain__top strong { font-weight: 600; }
+.admin-domain__bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.admin-domain__fill { display: block; height: 100%; border-radius: 999px; }
+.admin-domain__fill--tech { background: var(--accent); }
+.admin-domain__fill--nontech { background: var(--amber, #f59e0b); }
+.admin-domain__mod {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 12px 16px 16px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 0.8rem;
+}
+.admin-domain__mod b { color: var(--text); font-weight: 600; }
+
 /* ===== admin ads manager ===== */
 .admin-dash__ads { margin-top: 18px; }
 .admin-ads__list { list-style: none; margin: 0; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
