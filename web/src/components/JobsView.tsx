@@ -31,7 +31,6 @@ function salaryText(j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>):
 const matchBand = (s: number) => (s >= 75 ? 'high' : s >= 50 ? 'mid' : 'low');
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 
-interface SavedAlert { id: string; label: string; filters: JobFilters }
 const EMPTY: JobFilters = { q: '', category: '', country: '', type: '', experience: '', remote: false };
 
 type JobSort = 'match' | 'recent' | 'salary';
@@ -459,9 +458,6 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
   const [applying, setApplying] = useState<Job | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [apps, setApps] = useState<JobApplication[] | null>(null);
-  const [alerts, setAlerts] = useState<SavedAlert[]>(() => {
-    try { return JSON.parse(localStorage.getItem('huddle.jobAlerts') || '[]'); } catch { return []; }
-  });
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
 
@@ -510,22 +506,6 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
       setApplying(job);
       setSelected(null);
     }
-  };
-
-  const persistAlerts = (next: SavedAlert[]) => {
-    setAlerts(next);
-    try { localStorage.setItem('huddle.jobAlerts', JSON.stringify(next)); } catch { /* ignore */ }
-  };
-  const saveAlert = () => {
-    const parts = [
-      filters.q,
-      filters.category && CAT_LABEL[filters.category as JobCategory],
-      filters.type && TYPE_LABEL[filters.type as JobType],
-      filters.experience && EXP_LABEL[filters.experience as JobExperience],
-      filters.country,
-      filters.remote && 'Remote',
-    ].filter(Boolean);
-    persistAlerts([{ id: String(Date.now()), label: parts.join(' · ') || 'All openings', filters }, ...alerts.filter((a) => a.label)].slice(0, 6));
   };
 
   if (selected) {
