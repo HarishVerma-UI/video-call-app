@@ -32,6 +32,17 @@ const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 interface SavedAlert { id: string; label: string; filters: JobFilters }
 const EMPTY: JobFilters = { q: '', category: '', country: '', type: '', experience: '', remote: false };
 
+type JobSort = 'match' | 'recent' | 'salary';
+const SORT_LABEL: Record<JobSort, string> = { match: 'Best match', recent: 'Newest', salary: 'Top salary' };
+const salaryKey = (j: Job) => j.salaryMax ?? j.salaryMin ?? 0;
+function sortJobs(jobs: Job[], sort: JobSort): Job[] {
+  const xs = [...jobs];
+  if (sort === 'recent') xs.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  else if (sort === 'salary') xs.sort((a, b) => salaryKey(b) - salaryKey(a));
+  else xs.sort((a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1));
+  return xs;
+}
+
 /* ─── job card ─────────────────────────────────────────── */
 function JobCard({ job, onOpen, onApply }: { job: Job; onOpen: () => void; onApply: () => void }) {
   const sal = salaryText(job);
@@ -227,6 +238,54 @@ function TopEmployers({ jobs, onPick }: { jobs: Job[] | null; onPick: (company: 
   );
 }
 
+/* ─── salary insights (from the jobs currently shown) ──── */
+function SalaryInsights({ jobs }: { jobs: Job[] | null }) {
+  const stat = useMemo(() => {
+    const vals = (jobs ?? []).map(salaryKey).filter((n) => n > 0).sort((a, b) => a - b);
+    if (vals.length === 0) return null;
+    const cur = jobs?.find((j) => salaryKey(j) > 0)?.salaryCurrency ?? '';
+    const median = vals[Math.floor(vals.length / 2)];
+    return { lo: vals[0], hi: vals[vals.length - 1], median, cur, n: vals.length };
+  }, [jobs]);
+  if (!stat) return null;
+  const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const pct = stat.hi > stat.lo ? ((stat.median - stat.lo) / (stat.hi - stat.lo)) * 100 : 50;
+  return (
+    <div className="hub-card">
+      <div className="hub-card__head"><h3>Salary insights</h3></div>
+      <div className="sal-insight">
+        <div className="sal-insight__median">{stat.cur} {fmt(stat.median)}<small>median</small></div>
+        <div className="sal-insight__track"><span className="sal-insight__dot" style={{ left: `${pct}%` }} /></div>
+        <div className="sal-insight__ends"><span>{stat.cur} {fmt(stat.lo)}</span><span>{stat.cur} {fmt(stat.hi)}</span></div>
+        <p className="sal-insight__note">Across {stat.n} listed salar{stat.n !== 1 ? 'ies' : 'y'} here.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── pipeline: real next-step applications ────────────── */
+function Pipeline({ apps, openDetail }: { apps: JobApplication[] | null; openDetail: (job: Job) => void }) {
+  const shortlisted = (apps ?? []).filter((a) => a.status === 'shortlisted');
+  if (shortlisted.length === 0) return null;
+  return (
+    <div className="hub-card hub-card--pipe">
+      <div className="hub-card__head"><h3>You’re shortlisted</h3></div>
+      <ul className="pipe-list">
+        {shortlisted.slice(0, 4).map((a) => (
+          <li key={a.id} className="pipe-item" onClick={() => a.job && openDetail(a.job)} role={a.job ? 'button' : undefined}>
+            <span className="pipe-item__dot" aria-hidden="true" />
+            <div className="pipe-item__info">
+              <strong>{a.job?.title ?? 'Role no longer listed'}</strong>
+              <span>{a.job?.company}</span>
+            </div>
+            <span className="pipe-item__tag">Next: employer review</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /* ─── my applications list ─────────────────────────────── */
 function MyApplications({ apps, openDetail }: { apps: JobApplication[] | null; openDetail: (job: Job) => void }) {
   if (apps === null) return <div className="skeleton-list" aria-hidden="true"><i /></div>;
@@ -252,6 +311,7 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
   const { api } = useAuth();
   const [tab, setTab] = useState<'browse' | 'applied'>('browse');
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [sort, setSort] = useState<JobSort>('match');
   const [filters, setFilters] = useState<JobFilters>(EMPTY);
   const [selected, setSelected] = useState<Job | null>(null);
   const [applying, setApplying] = useState<Job | null>(null);
@@ -282,6 +342,17 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
   const set = <K extends keyof JobFilters>(k: K, v: JobFilters[K]) => setFilters((f) => ({ ...f, [k]: v }));
   const clearFilters = () => setFilters(EMPTY);
   const activeFilters = !!(filters.category || filters.type || filters.experience || filters.country || filters.remote || filters.q);
+  const sortedJobs = useMemo(() => (jobs ? sortJobs(jobs, sort) : jobs), [jobs, sort]);
+
+  // Quick-filter chips: one-tap toggles over the main filters.
+  const chips: { label: string; on: boolean; toggle: () => void }[] = [
+    { label: 'Remote', on: !!filters.remote, toggle: () => set('remote', !filters.remote) },
+    { label: 'Tech', on: filters.category === 'tech', toggle: () => set('category', filters.category === 'tech' ? '' : 'tech') },
+    { label: 'Non-Tech', on: filters.category === 'non-tech', toggle: () => set('category', filters.category === 'non-tech' ? '' : 'non-tech') },
+    { label: 'Full-time', on: filters.type === 'full-time', toggle: () => set('type', filters.type === 'full-time' ? '' : 'full-time') },
+    { label: 'Senior', on: filters.experience === 'senior', toggle: () => set('experience', filters.experience === 'senior' ? '' : 'senior') },
+    { label: 'Entry level', on: filters.experience === 'entry', toggle: () => set('experience', filters.experience === 'entry' ? '' : 'entry') },
+  ];
 
   const markApplied = (jobId: string) => {
     setJobs((cur) => cur?.map((j) => (j.id === jobId ? { ...j, appliedByMe: true } : j)) ?? cur);
@@ -381,17 +452,36 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
               <p className="jobs__count">Your applications</p>
               <MyApplications apps={apps} openDetail={setSelected} />
             </>
-          ) : jobs === null ? (
-            <div className="skeleton-list" aria-hidden="true"><i /><i /><i /></div>
-          ) : jobs.length === 0 ? (
-            <div className="jobs__empty card__empty">
-              <p>No jobs match your filters{activeFilters ? '.' : ' yet.'}</p>
-              {activeFilters && <button className="btn btn--secondary btn--small" onClick={clearFilters}>Clear filters</button>}
-            </div>
           ) : (
             <>
-              <p className="jobs__count">{jobs.length} open position{jobs.length !== 1 ? 's' : ''}</p>
-              {jobs.map((j) => <JobCard key={j.id} job={j} onOpen={() => setSelected(j)} onApply={() => startApply(j)} />)}
+              {jobs !== null && jobs.length > 0 && (
+                <div className="jobs__chips" role="group" aria-label="Quick filters">
+                  {chips.map((c) => (
+                    <button key={c.label} type="button" className={`jchip${c.on ? ' is-on' : ''}`} aria-pressed={c.on} onClick={c.toggle}>{c.label}</button>
+                  ))}
+                </div>
+              )}
+              {jobs === null ? (
+                <div className="skeleton-list" aria-hidden="true"><i /><i /><i /></div>
+              ) : jobs.length === 0 ? (
+                <div className="jobs__empty card__empty">
+                  <p>No jobs match your filters{activeFilters ? '.' : ' yet.'}</p>
+                  {activeFilters && <button className="btn btn--secondary btn--small" onClick={clearFilters}>Clear filters</button>}
+                </div>
+              ) : (
+                <>
+                  <div className="jobs__listhead">
+                    <p className="jobs__count">{jobs.length} open position{jobs.length !== 1 ? 's' : ''}</p>
+                    <label className="jobs__sort">
+                      <span>Sort</span>
+                      <select value={sort} onChange={(e) => setSort(e.target.value as JobSort)} aria-label="Sort jobs">
+                        {Object.entries(SORT_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  {(sortedJobs ?? []).map((j) => <JobCard key={j.id} job={j} onOpen={() => setSelected(j)} onApply={() => startApply(j)} />)}
+                </>
+              )}
             </>
           )}
         </div>
@@ -399,6 +489,8 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
         {/* right: hub + employers */}
         <aside className="jobs__hub" aria-label="Summary">
           <ApplicationsHub apps={apps} onOpenAll={() => setTab('applied')} />
+          <Pipeline apps={apps} openDetail={setSelected} />
+          <SalaryInsights jobs={jobs} />
           <TopEmployers jobs={jobs} onPick={(company) => { setTab('browse'); set('q', company); }} />
         </aside>
       </div>
