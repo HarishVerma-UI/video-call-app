@@ -1,5 +1,5 @@
 import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
 import { Line } from './Line';
@@ -375,7 +375,7 @@ function JobsByDomain({ stats }: { stats: AdminStats | null }) {
     </div>
   );
   return (
-    <div className="card admin-domain">
+    <div className="card admin-domain" id="moderation">
       <header className="card__head"><h2>Jobs by domain &amp; moderation</h2></header>
       <div className="admin-domain__bars">
         {bar('Tech', t, 'tech')}
@@ -397,7 +397,7 @@ function RecruitersDirectory() {
     api.adminListRecruiters().then(({ recruiters }) => setRecs(recruiters)).catch(() => setRecs([]));
   }, [api]);
   return (
-    <div className="card admin-recs">
+    <div className="card admin-recs" id="recruiters">
       <header className="card__head"><h2><BriefcaseIcon width={18} height={18} /> Recruiter directory</h2></header>
       {recs === null ? (
         <div className="skeleton-list" aria-hidden="true"><i /></div>
@@ -886,6 +886,40 @@ export function AdminView() {
     }
   };
 
+  // Left-nav sections (scroll-to with active tracking).
+  const [activeSec, setActiveSec] = useState('overview');
+  useEffect(() => {
+    const ids = ['overview', 'directory', 'moderation', 'recruiters', 'audit'];
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (vis[0]) setActiveSec(vis[0].target.id);
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
+    );
+    for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
+    return () => obs.disconnect();
+  }, [users]);
+  const goSec = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveSec(id); };
+
+  const exportReport = () => {
+    if (!stats) return;
+    const report = {
+      generatedAt: new Date().toISOString(),
+      totalUsers: total,
+      byRole: stats.byRole,
+      recentSignups: stats.recentSignups,
+      jobs: { total: stats.jobsTotal, active: stats.jobsActive, byCategory: stats.jobsByCategory },
+      applications: { total: stats.applicationsTotal, byStatus: stats.applicationsByStatus },
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `huddle-platform-report-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Build a simple activity log from user data
   const recentActivity: { icon: string; text: string; time: string }[] = [];
   if (stats) {
@@ -912,8 +946,34 @@ export function AdminView() {
 
   const loading = users === null;
 
+  const NAV: { id: string; label: string; icon: ReactNode; badge?: number }[] = [
+    { id: 'overview', label: 'Overview', icon: <ShieldIcon width={18} height={18} /> },
+    { id: 'directory', label: 'User Directory', icon: <PeopleIcon width={18} height={18} /> },
+    { id: 'moderation', label: 'Jobs & Moderation', icon: <BriefcaseIcon width={18} height={18} /> },
+    { id: 'recruiters', label: 'Recruiter Directory', icon: <UserIcon width={18} height={18} /> },
+    { id: 'audit', label: 'Activity & Audit', icon: <VideoIcon width={18} height={18} /> },
+  ];
+
   return (
-    <section className="page admin-dash" aria-label="Admin dashboard" data-testid="admin">
+    <div className="admin-shell">
+      <aside className="admin-side" aria-label="Admin sections">
+        <div className="admin-side__brand">
+          <span className="admin-side__mark"><ShieldIcon width={20} height={20} /></span>
+          <div><strong>Huddle Admin Suite</strong><em>Enterprise Tier</em></div>
+        </div>
+        <nav className="admin-side__nav">
+          {NAV.map((n) => (
+            <button key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} onClick={() => goSec(n.id)} aria-current={activeSec === n.id ? 'true' : undefined}>
+              {n.icon}<span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <button className="btn btn--secondary btn--small admin-side__invite" onClick={openNew}>
+          <PlusIcon width={15} height={15} /> New User
+        </button>
+      </aside>
+
+      <section className="page admin-dash" aria-label="Admin dashboard" data-testid="admin">
       {/* ─ header ─ */}
       <header className="admin-dash__head">
         <span className="card__icon card__icon--face"><ShieldIcon width={22} height={22} /></span>
@@ -921,6 +981,9 @@ export function AdminView() {
           <h1>Platform Administration &amp; Intelligence</h1>
           <span className="admin-dash__badge">{loading ? '…' : total} accounts · global ecosystem overview</span>
         </div>
+        <button className="btn btn--secondary btn--small" onClick={exportReport} disabled={!stats} title="Download platform metrics as JSON">
+          ⭳ Export report
+        </button>
         <button className="btn btn--primary btn--small" onClick={openNew} data-testid="add-user">
           <PlusIcon width={16} height={16} /> New User
         </button>
@@ -930,7 +993,7 @@ export function AdminView() {
       {error && <p className="form-msg" role="alert">{error}</p>}
 
       {/* ─ platform metric cards ─ */}
-      <div className="admin-dash__stats">
+      <div className="admin-dash__stats" id="overview">
         <StatCard label="Total platform users" value={loading ? '…' : total} sub={stats ? `${stats.recentSignups} new this week` : undefined} />
         <StatCard label="Recruiters & admins" value={stats ? stats.byRole.recruiter + stats.byRole.super_admin : '…'} sub={stats ? `${stats.byRole.recruiter} recruiter${stats.byRole.recruiter !== 1 ? 's' : ''}` : undefined} />
         <StatCard label="Live job postings" value={stats?.jobsActive ?? '…'} sub={stats ? `${stats.jobsTotal} total` : undefined} />
@@ -938,7 +1001,7 @@ export function AdminView() {
       </div>
 
       {/* ─ main grid ─ */}
-      <div className="admin-dash__grid">
+      <div className="admin-dash__grid" id="directory">
         {/* left: user directory */}
         <div className="card admin-dash__dir">
           <header className="card__head">
@@ -997,10 +1060,10 @@ export function AdminView() {
       </div>
 
       {/* ─ bottom row ─ */}
-      <div className="admin-dash__bottom">
+      <div className="admin-dash__bottom" id="audit">
         {/* activity log */}
         <div className="card admin-dash__log">
-          <header className="card__head"><h2>Activity Log</h2></header>
+          <header className="card__head"><h2>Live Platform Activity &amp; Audit Stream</h2></header>
           {recentActivity.length > 0 ? (
             <ul className="admin-activity">
               {recentActivity.slice(0, 10).map((a, i) => (
@@ -1055,6 +1118,7 @@ export function AdminView() {
       <AdsManager />
 
       {showForm && <UserForm editing={editing} selfId={user?.id ?? ''} onClose={() => setShowForm(false)} onSaved={onSaved} />}
-    </section>
+      </section>
+    </div>
   );
 }
