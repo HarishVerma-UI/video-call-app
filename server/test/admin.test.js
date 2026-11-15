@@ -36,7 +36,7 @@ test('recruiter applications stay pending until an administrator approves them',
   assert.equal(applicant.body.user.role, 'member');
   assert.equal(applicant.body.user.recruiterApplication.status, 'pending');
 
-  const profile = await api(t.base, 'GET', '/api/profile', null, applicant.body.token);
+  const profile = await api(t.base, 'GET', '/api/profile/me', null, applicant.body.token);
   assert.equal(profile.body.profile.headline, 'Talent specialist');
   assert.equal(profile.body.profile.experience[0].company, 'Northstar');
 
