@@ -33,7 +33,7 @@ const config = {
   webServer: {
     command: 'node server-harness.js',
     port: Number(process.env.E2E_PORT) || 3210,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 10_000,
   },
 };

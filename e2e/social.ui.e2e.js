@@ -86,7 +86,9 @@ test.describe('UI: Profile photo upload', () => {
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64'),
     });
 
-    await expect(page.locator('.pp-photo img.pf-avatar')).toHaveAttribute('src', /\/api\/media\/local\/view\?/);
+    const profilePhoto = page.locator('.pp-photo img.pf-avatar');
+    await expect(profilePhoto).toHaveAttribute('src', /^\/media\/photo\//);
+    await expect.poll(() => profilePhoto.evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
   });
 
   test('uploads an image to a feed post and displays it', async ({ page, request }) => {
@@ -109,7 +111,7 @@ test.describe('UI: Profile photo upload', () => {
     await page.getByTestId('submit-post').click();
 
     const postImage = page.locator('.post__img');
-    await expect(postImage).toHaveAttribute('src', /\/api\/media\/local\/view\?/);
+    await expect(postImage).toHaveAttribute('src', /^\/media\/post\//);
     await expect.poll(() => postImage.evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
   });
 
@@ -166,7 +168,7 @@ test.describe('UI: People search', () => {
     await page.getByRole('button', { name: /sign in|log in/i }).click();
 
     await page.getByTestId('global-search').fill(target.name);
-    await expect(page.getByText(target.name)).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.feed-people .people-row__main').filter({ hasText: target.name })).toBeVisible({ timeout: 5000 });
   });
 
   test('legacy /people URL redirects to Home', async ({ page, request }) => {
