@@ -1,4 +1,4 @@
-import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
+import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type AdminUser, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
@@ -174,7 +174,7 @@ function UserForm({ editing, selfId, onClose, onSaved }: { editing: AuthUser | n
 
 /* ─── user row with "..." menu ─────────────────────────── */
 
-function UserRow({ u, isSelf, onEdit, onDelete }: { u: AuthUser; isSelf: boolean; onEdit: () => void; onDelete: () => void }) {
+function UserRow({ u, isSelf, onEdit, onDelete }: { u: AdminUser; isSelf: boolean; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -188,27 +188,72 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AuthUser; isSelf: boolean
   }, [open]);
 
   return (
-    <div className="admin-dir__row">
-      <Avatar id={u.id} name={u.name || u.email || '?'} size={38} />
-      <div className="admin-dir__info">
-        <strong>{u.name || '—'}</strong>
-        <span>{u.email || 'No email'}</span>
-      </div>
-      <span className={`pill pill--role-${u.role ?? 'member'}`}>{ROLE_LABEL[(u.role ?? 'member') as UserRole] ?? u.role}</span>
-      <div className="admin-dir__menu" ref={ref}>
-        <button className="icon-btn admin-dir__dots" onClick={() => setOpen(!open)} aria-label="Actions" title="Actions">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
-        </button>
-        {open && (
-          <div className="admin-dir__dropdown">
-            <button onClick={() => { setOpen(false); onEdit(); }}><PencilIcon width={14} height={14} /> Edit</button>
-            <button className="admin-dir__danger" onClick={() => { setOpen(false); onDelete(); }} disabled={isSelf}>
-              <TrashIcon width={14} height={14} /> Delete
-            </button>
+    <tr className="admin-dir__row">
+      <td>
+        <div className="admin-user__identity">
+          <Avatar id={u.id} name={u.name || u.email || '?'} size={38} />
+          <div className="admin-dir__info">
+            <strong>{u.name || '—'}</strong>
+            <span>{u.email || 'No email'}</span>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      </td>
+      <td><span className={`pill pill--role-${u.role ?? 'member'}`}>{ROLE_LABEL[(u.role ?? 'member') as UserRole] ?? u.role}</span></td>
+      <td>{u.profile?.headline || u.profile?.experience[0]?.title || '—'}</td>
+      <td>{u.profile?.location || '—'}</td>
+      <td>{u.profile?.expectedSalary || '—'}</td>
+      <td>
+        {u.profile?.experience.length ? (
+          <ul className="admin-user__details">
+            {u.profile.experience.map((entry, index) => (
+              <li key={`${entry.title}-${entry.company}-${index}`}>
+                <strong>{entry.title || 'Role'}</strong>
+                {entry.company && <span> · {entry.company}</span>}
+                {(entry.start || entry.end) && <small>{[entry.start, entry.end].filter(Boolean).join(' – ')}</small>}
+              </li>
+            ))}
+          </ul>
+        ) : '—'}
+      </td>
+      <td>
+        {u.profile?.education.length ? (
+          <ul className="admin-user__details">
+            {u.profile.education.map((entry, index) => (
+              <li key={`${entry.school}-${entry.degree}-${index}`}>
+                <strong>{entry.degree || 'Education'}</strong>
+                {entry.school && <span> · {entry.school}</span>}
+                {entry.year && <small>{entry.year}</small>}
+              </li>
+            ))}
+          </ul>
+        ) : '—'}
+      </td>
+      <td>{u.profile?.skills.length ? u.profile.skills.join(', ') : '—'}</td>
+      <td>
+        {u.profile?.cvUrl ? (
+          <a className="btn btn--secondary btn--small" href={u.profile.cvUrl} target="_blank" rel="noreferrer" aria-label={`Download CV for ${u.name || u.email}`}>
+            Download{u.profile.cvName ? ` ${u.profile.cvName}` : ' CV'}
+          </a>
+        ) : '—'}
+      </td>
+      <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+      <td>{u.lastLoginAt ? ago(u.lastLoginAt) : 'Never'}</td>
+      <td>
+        <div className="admin-dir__menu" ref={ref}>
+          <button className="icon-btn admin-dir__dots" onClick={() => setOpen(!open)} aria-label="Actions" title="Actions">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+          </button>
+          {open && (
+            <div className="admin-dir__dropdown">
+              <button onClick={() => { setOpen(false); onEdit(); }}><PencilIcon width={14} height={14} /> Edit</button>
+              <button className="admin-dir__danger" onClick={() => { setOpen(false); onDelete(); }} disabled={isSelf}>
+                <TrashIcon width={14} height={14} /> Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -324,7 +369,7 @@ function AdsManager() {
   };
 
   return (
-    <div className="card admin-dash__ads">
+    <div className="card admin-dash__ads" id="ads">
       <header className="card__head">
         <h2>Ads Manager</h2>
         <button className="btn btn--primary btn--small" onClick={() => { setEditing(null); setShowForm(true); }} data-testid="add-ad">
@@ -363,7 +408,7 @@ function AdsManager() {
 /* ─── platform intelligence: jobs-by-domain + recruiter directory ─── */
 
 function JobsByDomain({ stats }: { stats: AdminStats | null }) {
-  if (!stats) return <div className="card admin-domain" id="jobs"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
+  if (!stats) return <div className="card admin-domain"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
   const t = stats.jobsByCategory.tech;
   const nt = stats.jobsByCategory['non-tech'];
   const total = Math.max(1, t + nt);
@@ -375,7 +420,7 @@ function JobsByDomain({ stats }: { stats: AdminStats | null }) {
     </div>
   );
   return (
-    <div className="card admin-domain" id="jobs">
+    <div className="card admin-domain">
       <header className="card__head"><h2>Jobs by domain &amp; moderation</h2></header>
       <div className="admin-domain__bars">
         {bar('Tech', t, 'tech')}
@@ -783,7 +828,7 @@ function JobsManager() {
   };
 
   return (
-    <div className="card admin-dash__jobs">
+    <div className="card admin-dash__jobs" id="jobs">
       <header className="card__head">
         <h2><BriefcaseIcon width={18} height={18} /> Jobs Manager</h2>
         <div className="admin-jobs__head-actions">
@@ -839,7 +884,7 @@ function JobsManager() {
 
 export function AdminView() {
   const { api, user } = useAuth();
-  const [users, setUsers] = useState<AuthUser[] | null>(null);
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -948,6 +993,15 @@ export function AdminView() {
         </button>
       </header>
 
+      <nav className="admin-dash__nav" aria-label="Dashboard sections">
+        <a href="#overview">Overview</a>
+        <a href="#users">Users</a>
+        <a href="#recruiters">Recruiters</a>
+        <a href="#jobs">Jobs</a>
+        <a href="#audit">Activity</a>
+        <a href="#ads">Ads</a>
+      </nav>
+
       {flash && <p className="form-msg form-msg--ok" role="status">{flash}</p>}
       {error && <p className="form-msg" role="alert">{error}</p>}
 
@@ -971,16 +1025,36 @@ export function AdminView() {
           ) : users!.length === 0 ? (
             <p className="card__empty">No accounts yet.</p>
           ) : (
-            <div className="admin-dir__list" data-testid="user-table">
-              {users!.map((u) => (
-                <UserRow
-                  key={u.id}
-                  u={u}
-                  isSelf={u.id === user?.id}
-                  onEdit={() => openEdit(u)}
-                  onDelete={() => void remove(u)}
-                />
-              ))}
+            <div className="admin-dir__table-wrap">
+              <table className="admin-users-table" data-testid="user-table">
+                <thead>
+                  <tr>
+                    <th scope="col">User</th>
+                    <th scope="col">Account role</th>
+                    <th scope="col">Job role</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Expected salary</th>
+                    <th scope="col">Experience</th>
+                    <th scope="col">Education</th>
+                    <th scope="col">Skills</th>
+                    <th scope="col">CV</th>
+                    <th scope="col">Joined</th>
+                    <th scope="col">Last active</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users!.map((u) => (
+                    <UserRow
+                      key={u.id}
+                      u={u}
+                      isSelf={u.id === user?.id}
+                      onEdit={() => openEdit(u)}
+                      onDelete={() => void remove(u)}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

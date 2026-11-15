@@ -212,6 +212,12 @@ export function RecruiterDashboard() {
         <button className="btn btn--secondary btn--small" onClick={exportAts} disabled={recentApplicants.length === 0} title="Download recent applicants as CSV">⭳ Export ATS data</button>
         <button className="btn btn--primary" onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="rec-post"><PlusIcon width={16} height={16} /> Post a role</button>
       </header>
+      <nav className="rec__nav" aria-label="Dashboard sections">
+        <a href="#overview">Overview</a>
+        <a href="#funnel">Candidate funnel</a>
+        <a href="#applicants">Applicants</a>
+        <a href="#jobs">Job requisitions</a>
+      </nav>
       {err && <p className="form-msg" role="alert">{err}</p>}
 
       <div className="rec__tiles" id="overview">

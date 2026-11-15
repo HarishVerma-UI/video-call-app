@@ -102,11 +102,25 @@ export interface Profile {
   // private fields, present only when the viewer may see them (self or accepted connection)
   bio?: string;
   mobile?: string;
+  expectedSalary?: string;
   experience?: Experience[];
   education?: Education[];
   hasCv?: boolean;
   cvName?: string;
   cvUrl?: string | null;
+}
+
+export interface AdminUser extends AuthUser {
+  profile?: {
+    headline: string;
+    location: string;
+    expectedSalary: string;
+    skills: string[];
+    experience: Experience[];
+    education: Education[];
+    cvName: string;
+    cvUrl: string | null;
+  } | null;
 }
 
 /** Best-effort fields parsed from an uploaded CV, for the member to review. */
@@ -330,7 +344,7 @@ export interface ApiClient {
   providers(): Promise<{ providers: Providers }>;
 
   // --- admin dashboard (admin role only) ---
-  adminListUsers(): Promise<{ users: AuthUser[]; total: number }>;
+  adminListUsers(): Promise<{ users: AdminUser[]; total: number }>;
   adminCreateUser(input: { name: string; email: string; password: string; role?: UserRole }): Promise<{ user: AuthUser }>;
   adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;

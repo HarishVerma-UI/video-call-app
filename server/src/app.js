@@ -98,8 +98,8 @@ export function createApp(
     activeRooms: signaling ? signaling.activeRooms() : [],
     uptimeSec: Math.round((Date.now() - startedAt) / 1000),
   });
-  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social });
   const media = createMedia(config.s3 ?? {}, log);
+  const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social, media });
   let signaling;
   // Late-bound: signaling is created below, but social only calls notify at request time.
   const notify = (userId, payload) => signaling?.notifyUser(userId, payload) ?? 0;

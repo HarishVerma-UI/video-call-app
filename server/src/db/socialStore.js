@@ -31,6 +31,7 @@ export function publicProfile(p, { full = false } = {}) {
     ...base,
     bio: p.bio ?? '',
     mobile: p.mobile ?? '',
+    expectedSalary: p.expectedSalary ?? '',
     experience: p.experience ?? [],
     education: p.education ?? [],
     hasCv: !!p.cvKey,
@@ -38,7 +39,7 @@ export function publicProfile(p, { full = false } = {}) {
   };
 }
 
-const PROFILE_FIELDS = ['name', 'headline', 'bio', 'location', 'mobile', 'photoKey', 'cvKey', 'cvName', 'skills', 'experience', 'education', 'mentor', 'mentee', 'focusAreas'];
+const PROFILE_FIELDS = ['name', 'headline', 'bio', 'location', 'mobile', 'expectedSalary', 'photoKey', 'cvKey', 'cvName', 'skills', 'experience', 'education', 'mentor', 'mentee', 'focusAreas'];
 function cleanPatch(patch) {
   const out = {};
   for (const k of PROFILE_FIELDS) if (patch[k] !== undefined) out[k] = patch[k];

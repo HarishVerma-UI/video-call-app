@@ -5,6 +5,7 @@ export function Line(props: {
   label: string;
   type: string;
   name: string;
+  placeholder?: string;
   value: string;
   autoComplete: string;
   error?: string;
