@@ -588,6 +588,8 @@ export function publicJob(j) {
     active: j.active !== false,
     applyUrl: j.applyUrl ?? '',
     source: j.source ?? '',
+    postedBy: j.postedBy ?? '',
+    postedByName: j.postedByName ?? '',
     createdAt: iso(j.createdAt),
   };
 }
@@ -624,6 +626,8 @@ function pickJob(input) {
     active: input.active !== false,
     applyUrl: input.applyUrl ?? '',
     source: input.source ?? '',
+    postedBy: input.postedBy ?? '',
+    postedByName: input.postedByName ?? '',
   };
 }
 
@@ -637,6 +641,7 @@ export function createMemoryJobStore() {
     if (f.type && j.type !== f.type) return false;
     if (f.experience && j.experience !== f.experience) return false;
     if (f.remote && !j.remote) return false;
+    if (f.postedBy && j.postedBy !== f.postedBy) return false;
     if (f.q) {
       const hay = [j.title, j.company, j.description, ...(j.skills ?? []), ...(j.requirements ?? [])].join(' ').toLowerCase();
       if (!hay.includes(f.q.toLowerCase())) return false;
@@ -687,6 +692,10 @@ export function createMemoryJobStore() {
     async applicationsForJob(jobId) {
       return [...apps.values()].filter((a) => a.jobId === jobId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
     },
+    async applicationsForJobIds(ids) {
+      const set = new Set(ids);
+      return [...apps.values()].filter((a) => set.has(a.jobId)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
+    },
     async applicationById(id) {
       const a = apps.get(id);
       return a ? { ...a } : null;
@@ -721,6 +730,7 @@ function mongoJobStore(jobsCol, appsCol, ObjectId) {
     if (f.type) q.type = f.type;
     if (f.experience) q.experience = f.experience;
     if (f.remote) q.remote = true;
+    if (f.postedBy) q.postedBy = f.postedBy;
     if (f.q) {
       const rx = new RegExp(rxEsc(f.q), 'i');
       q.$or = [{ title: rx }, { company: rx }, { description: rx }, { skills: rx }, { requirements: rx }];
@@ -775,6 +785,9 @@ function mongoJobStore(jobsCol, appsCol, ObjectId) {
     },
     async applicationsForJob(jobId) {
       return (await appsCol.find({ jobId }).sort({ createdAt: -1 }).toArray()).map(toApp);
+    },
+    async applicationsForJobIds(ids) {
+      return (await appsCol.find({ jobId: { $in: ids } }).sort({ createdAt: -1 }).toArray()).map(toApp);
     },
     async applicationById(id) {
       const _id = oid(id);

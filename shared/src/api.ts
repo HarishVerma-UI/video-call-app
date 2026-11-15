@@ -209,6 +209,10 @@ export interface Job {
   applyUrl: string;
   /** Where the job came from, e.g. "Remotive" or "Posted by admin". */
   source: string;
+  /** User id of the recruiter/admin who posted this job. */
+  postedBy?: string;
+  /** Display name of the poster. */
+  postedByName?: string;
   createdAt: string | null;
   /** 0–100 fit for the signed-in viewer, from skill overlap (list/detail only). */
   matchScore?: number;
@@ -252,6 +256,14 @@ export interface JobInput {
   active?: boolean;
   applyUrl?: string;
   source?: string;
+}
+
+/** Applicant funnel + jobs summary for a recruiter's dashboard. */
+export interface RecruiterDashboard {
+  jobCount: number;
+  funnel: { total: number; applied: number; shortlisted: number; rejected: number };
+  jobs: Job[];
+  recentApplicants: JobApplication[];
 }
 
 /** Filters for the jobs board. */
@@ -381,6 +393,15 @@ export interface ApiClient {
   adminSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
   /** Bulk-insert jobs (e.g. from the importer). Dedupes by default; pass { dedupe: false } to insert a curated batch verbatim. */
   adminImportJobs(jobs: JobInput[], opts?: { dedupe?: boolean }): Promise<{ created: number; skipped: number }>;
+
+  // --- recruiter (recruiter or super_admin) — scoped to the caller's own jobs ---
+  recruiterDashboard(): Promise<RecruiterDashboard>;
+  recruiterJobs(): Promise<{ jobs: Job[] }>;
+  recruiterCreateJob(input: JobInput): Promise<{ job: Job }>;
+  recruiterUpdateJob(id: string, patch: Partial<JobInput>): Promise<{ job: Job }>;
+  recruiterDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
+  recruiterApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
+  recruiterSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
 
   // --- server logs (admin only) ---
   logs(opts?: { since?: number; level?: string; q?: string; limit?: number }): Promise<{ logs: { id: number; ts: number; level: string; message: string }[] }>;
@@ -525,6 +546,13 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminJobApplicants: (jobId) => request('GET', `/api/admin/jobs/${encodeURIComponent(jobId)}/applicants`),
     adminSetApplicationStatus: (id, status) => request('PATCH', `/api/admin/applications/${encodeURIComponent(id)}`, { status }),
     adminImportJobs: (jobs, opts) => request('POST', '/api/admin/jobs/import', { jobs, dedupe: opts?.dedupe }),
+    recruiterDashboard: () => request('GET', '/api/recruiter/dashboard'),
+    recruiterJobs: () => request('GET', '/api/recruiter/jobs'),
+    recruiterCreateJob: (input) => request('POST', '/api/recruiter/jobs', input),
+    recruiterUpdateJob: (id, patch) => request('PATCH', `/api/recruiter/jobs/${encodeURIComponent(id)}`, patch),
+    recruiterDeleteJob: (id) => request('DELETE', `/api/recruiter/jobs/${encodeURIComponent(id)}`),
+    recruiterApplicants: (jobId) => request('GET', `/api/recruiter/jobs/${encodeURIComponent(jobId)}/applicants`),
+    recruiterSetApplicationStatus: (id, status) => request('PATCH', `/api/recruiter/applications/${encodeURIComponent(id)}`, { status }),
     logs: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.since !== undefined) q.set('since', String(opts.since));
