@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { createAuth } from './auth/auth.js';
 import { createAdmin } from './auth/admin.js';
+import { isSuperAdmin } from './auth/roles.js';
 import { createMemoryActivityStore } from './db/activityStore.js';
 import { createMemoryMessageStore } from './db/messageStore.js';
 import { createMemorySocialStores } from './db/socialStore.js';
@@ -148,7 +149,7 @@ export function createApp(
     // Server logs (admin only): GET /api/logs?since=&level=&q=&limit=
     if (path === '/api/logs' && req.method === 'GET') {
       const user = await auth.requireUser(req);
-      if (user.role !== 'admin') throw new HttpError(403, 'Admin access required.');
+      if (!isSuperAdmin(user.role)) throw new HttpError(403, 'Super-admin access required.');
       const since = url.searchParams.has('since') ? Number(url.searchParams.get('since')) : undefined;
       const level = url.searchParams.get('level') || undefined;
       const q = url.searchParams.get('q') || undefined;

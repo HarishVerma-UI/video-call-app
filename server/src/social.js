@@ -3,6 +3,7 @@
 // messages. All routes require a signed-in user.
 
 import { HttpError, readJson, readRaw, sendJson } from './http.js';
+import { isSuperAdmin } from './auth/roles.js';
 import { parseCv } from './cv.js';
 import { MediaError } from './media.js';
 import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
@@ -361,7 +362,7 @@ export function createSocial(deps) {
     const me = await requireUser(req);
     const post = await posts.byId(id);
     if (!post) throw new HttpError(404, 'Post not found.');
-    if (post.authorId !== me.id && me.role !== 'admin') throw new HttpError(403, 'You can only delete your own posts.');
+    if (post.authorId !== me.id && !isSuperAdmin(me.role)) throw new HttpError(403, 'You can only delete your own posts.');
     await posts.remove(id);
     if (post.imageKey) media.deleteFile(post.imageKey).catch(() => {});
     sendJson(res, 200, { ok: true });
@@ -386,7 +387,7 @@ export function createSocial(deps) {
     if (!post) throw new HttpError(404, 'Post not found.');
     const comment = post.comments.find((c) => c.id === commentId);
     if (!comment) throw new HttpError(404, 'Comment not found.');
-    if (comment.userId !== me.id && post.authorId !== me.id && me.role !== 'admin') {
+    if (comment.userId !== me.id && post.authorId !== me.id && !isSuperAdmin(me.role)) {
       throw new HttpError(403, 'You can only delete your own comments or comments on your posts.');
     }
     const updated = await posts.removeComment(postId, commentId);

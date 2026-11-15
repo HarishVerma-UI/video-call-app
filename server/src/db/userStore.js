@@ -25,6 +25,7 @@
 // tokenVersion is copied into every JWT; bumping it invalidates older tokens.
 
 import { randomBytes } from 'node:crypto';
+import { isSuperAdmin, normalizeRole } from '../auth/roles.js';
 
 export class DuplicateEmailError extends Error {
   constructor() {
@@ -39,7 +40,7 @@ export function publicUser(u) {
     id: u.id,
     name: u.name,
     email: u.email ?? '',
-    role: u.role ?? 'user',
+    role: normalizeRole(u.role),
     hasPassword: !!u.passwordHash,
     provider: u.provider ?? null,
     createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
@@ -53,7 +54,7 @@ export function createMemoryUserStore() {
   const byEmail = new Map();
   return {
     kind: 'memory',
-    async create({ name, email, passwordHash, role = 'user', provider = null, providerId = null }) {
+    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null }) {
       if (email && byEmail.has(email)) throw new DuplicateEmailError();
       const now = new Date();
       const user = {
@@ -176,7 +177,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
 
   return {
     kind: 'mongodb',
-    async create({ name, email, passwordHash, role = 'user', provider = null, providerId = null }) {
+    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null }) {
       const now = new Date();
       const doc = {
         name,
@@ -319,13 +320,13 @@ export async function connectMongoUserStore(uri, dbName, log = () => {}) {
 export async function seedAdmin(store, { email, password, name }, hashPassword, log = () => {}) {
   const existing = await store.findByEmail(email);
   if (existing) {
-    if (existing.role !== 'admin') {
-      await store.setRole(existing.id, 'admin');
-      log(`admin  promoted existing account ${email} to admin`);
+    if (!isSuperAdmin(existing.role)) {
+      await store.setRole(existing.id, 'super_admin');
+      log(`admin  promoted existing account ${email} to super_admin`);
     }
     return existing;
   }
-  const user = await store.create({ name, email, passwordHash: await hashPassword(password), role: 'admin' });
-  log(`admin  seeded admin account ${email}`);
+  const user = await store.create({ name, email, passwordHash: await hashPassword(password), role: 'super_admin' });
+  log(`admin  seeded super_admin account ${email}`);
   return user;
 }

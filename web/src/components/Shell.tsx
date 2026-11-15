@@ -1,4 +1,4 @@
-import { normalizeRoomId, type AuthUser } from '@vca/shared';
+import { isSuperAdmin, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
@@ -190,7 +190,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             <span>{item.label}</span>
           </button>
         ))}
-        {user.role === 'admin' && (
+        {isSuperAdmin(user.role) && (
           <>
             <button
               className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
