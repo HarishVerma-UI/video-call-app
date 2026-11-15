@@ -1,11 +1,10 @@
 import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 import { uploadFile } from '../upload';
-import type { AdminSection } from './Shell';
 
 type Draft = { name: string; email: string; password: string; role: UserRole };
 
@@ -838,7 +837,7 @@ function JobsManager() {
 
 /* ─── main dashboard ───────────────────────────────────── */
 
-export function AdminView({ section, navigate }: { section: AdminSection; navigate: (section: AdminSection) => void }) {
+export function AdminView() {
   const { api, user } = useAuth();
   const [users, setUsers] = useState<AuthUser[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -887,25 +886,6 @@ export function AdminView({ section, navigate }: { section: AdminSection; naviga
     }
   };
 
-  // Left-nav sections (scroll-to with active tracking).
-  const [activeSec, setActiveSec] = useState<AdminSection>(section);
-  useEffect(() => {
-    const ids: AdminSection[] = ['overview', 'users', 'jobs', 'recruiters', 'audit'];
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (vis[0]) setActiveSec(vis[0].target.id as AdminSection);
-      },
-      { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
-    );
-    for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
-    return () => obs.disconnect();
-  }, [users]);
-  useEffect(() => {
-    setActiveSec(section);
-    if (section !== 'overview') document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [section]);
-
   const exportReport = () => {
     if (!stats) return;
     const report = {
@@ -950,29 +930,8 @@ export function AdminView({ section, navigate }: { section: AdminSection; naviga
 
   const loading = users === null;
 
-  const NAV: { id: AdminSection; label: string; icon: ReactNode; badge?: number }[] = [
-    { id: 'overview', label: 'Overview', icon: <ShieldIcon width={18} height={18} /> },
-    { id: 'users', label: 'User Directory', icon: <PeopleIcon width={18} height={18} /> },
-    { id: 'jobs', label: 'Jobs & Moderation', icon: <BriefcaseIcon width={18} height={18} /> },
-    { id: 'recruiters', label: 'Recruiter Directory', icon: <UserIcon width={18} height={18} /> },
-    { id: 'audit', label: 'Activity & Audit', icon: <VideoIcon width={18} height={18} /> },
-  ];
-
   return (
     <div className="admin-shell">
-      <aside className="admin-side" aria-label="Admin sections">
-        <nav className="admin-side__nav">
-          {NAV.map((n) => (
-            <a key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} href={n.id === 'overview' ? '/admin' : `/admin/${n.id}`} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(n.id); }} aria-current={activeSec === n.id ? 'page' : undefined}>
-              {n.icon}<span>{n.label}</span>
-            </a>
-          ))}
-        </nav>
-        <button className="btn btn--secondary btn--small admin-side__invite" onClick={openNew}>
-          <PlusIcon width={15} height={15} /> New User
-        </button>
-      </aside>
-
       <section className="page admin-dash" aria-label="Admin dashboard" data-testid="admin">
       {/* ─ header ─ */}
       <header className="admin-dash__head">
@@ -1081,24 +1040,6 @@ export function AdminView({ section, navigate }: { section: AdminSection; naviga
           )}
         </div>
 
-        {/* quick resources */}
-        <div className="card admin-dash__resources">
-          <header className="card__head"><h2>Quick Resources</h2></header>
-          <div className="admin-resources__grid">
-            <a className="admin-resources__item" href="/network">
-              <UserIcon width={22} height={22} />
-              <span>Connections</span>
-            </a>
-            <a className="admin-resources__item" href="/meet">
-              <VideoIcon width={22} height={22} />
-              <span>Active Call Monitor</span>
-            </a>
-            <a className="admin-resources__item" href="/logs">
-              <ShieldIcon width={22} height={22} />
-              <span>Server Logs</span>
-            </a>
-          </div>
-        </div>
       </div>
 
       {/* ─ platform intelligence ─ */}

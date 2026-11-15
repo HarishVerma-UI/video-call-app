@@ -1,10 +1,9 @@
 import { ApiError, type ApplicationStatus, type Job, type JobApplication, type JobInput, type RecruiterDashboard as Dash } from '@vca/shared';
-import { useCallback, useEffect, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { BriefcaseIcon, ChatIcon, CloseIcon, PencilIcon, PeopleIcon, PlusIcon, SparkIcon, TrashIcon } from './Icons';
+import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, TrashIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
-import type { RecruiterSection } from './Shell';
 
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 const salaryText = (j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>) => {
@@ -158,7 +157,7 @@ function ApplicantsModal({ job, onClose, onChanged }: { job: Job; onClose: () =>
 }
 
 /* ── main ── */
-export function RecruiterDashboard({ section, navigate }: { section: RecruiterSection; navigate: (section: RecruiterSection) => void }) {
+export function RecruiterDashboard() {
   const { api, user } = useAuth();
   const [data, setData] = useState<Dash | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -178,24 +177,6 @@ export function RecruiterDashboard({ section, navigate }: { section: RecruiterSe
   const moveStatus = async (a: JobApplication, status: ApplicationStatus) => {
     try { await api.recruiterSetApplicationStatus(a.id, status); load(); } catch { /* ignore */ }
   };
-
-  const [activeSec, setActiveSec] = useState<RecruiterSection>(section);
-  useEffect(() => {
-    const ids: RecruiterSection[] = ['overview', 'funnel', 'jobs', 'applicants'];
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (vis[0]) setActiveSec(vis[0].target.id as RecruiterSection);
-      },
-      { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
-    );
-    for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
-    return () => obs.disconnect();
-  }, [data]);
-  useEffect(() => {
-    setActiveSec(section);
-    if (section !== 'overview') document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [section, data]);
 
   const exportAts = () => {
     if (!data) return;
@@ -220,32 +201,8 @@ export function RecruiterDashboard({ section, navigate }: { section: RecruiterSe
   ];
   const maxStage = Math.max(1, ...stages.map((s) => s.n));
 
-  const NAV: { id: RecruiterSection; label: string; icon: ReactNode }[] = [
-    { id: 'overview', label: 'Talent Dashboard', icon: <SparkIcon width={18} height={18} /> },
-    { id: 'funnel', label: 'Candidate Funnel', icon: <PeopleIcon width={18} height={18} /> },
-    { id: 'jobs', label: 'Job Requisitions', icon: <BriefcaseIcon width={18} height={18} /> },
-    { id: 'applicants', label: 'Recent Applicants', icon: <ChatIcon width={18} height={18} /> },
-  ];
-
   return (
     <div className="admin-shell">
-      <aside className="admin-side" aria-label="Recruiter sections">
-        <div className="admin-side__brand">
-          <span className="admin-side__mark"><BriefcaseIcon width={20} height={20} /></span>
-          <div><strong>Talent Hub</strong><em>Recruiter workspace</em></div>
-        </div>
-        <nav className="admin-side__nav">
-          {NAV.map((n) => (
-            <a key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} href={n.id === 'overview' ? '/recruiter' : `/recruiter/${n.id}`} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(n.id); }} aria-current={activeSec === n.id ? 'page' : undefined}>
-              {n.icon}<span>{n.label}</span>
-            </a>
-          ))}
-        </nav>
-        <button className="btn btn--secondary btn--small admin-side__invite" onClick={() => { setEditing(null); setFormOpen(true); }}>
-          <PlusIcon width={15} height={15} /> Post a role
-        </button>
-      </aside>
-
       <section className="page rec" data-testid="recruiter-dashboard">
       <header className="rec__head">
         <div>
