@@ -1,8 +1,9 @@
-import { isSuperAdmin, normalizeRoomId, type AuthUser } from '@vca/shared';
+import { isStaff, isSuperAdmin, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { AdminView } from './AdminView';
+import { RecruiterDashboard } from './RecruiterDashboard';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
@@ -190,27 +191,27 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             <span>{item.label}</span>
           </button>
         ))}
+        {isStaff(user.role) && (
+          <button
+            className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
+            onClick={() => go({ view: 'admin' })}
+            aria-current={route.view === 'admin' ? 'page' : undefined}
+            data-testid="rail-admin"
+          >
+            {isSuperAdmin(user.role) ? <ShieldIcon /> : <BriefcaseIcon />}
+            <span>{isSuperAdmin(user.role) ? 'Admin' : 'Recruiter'}</span>
+          </button>
+        )}
         {isSuperAdmin(user.role) && (
-          <>
-            <button
-              className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
-              onClick={() => go({ view: 'admin' })}
-              aria-current={route.view === 'admin' ? 'page' : undefined}
-              data-testid="rail-admin"
-            >
-              <ShieldIcon />
-              <span>Admin</span>
-            </button>
-            <button
-              className={`rail__item${route.view === 'logs' ? ' is-on' : ''}`}
-              onClick={() => go({ view: 'logs' })}
-              aria-current={route.view === 'logs' ? 'page' : undefined}
-              data-testid="rail-logs"
-            >
-              <LogsIcon />
-              <span>Logs</span>
-            </button>
-          </>
+          <button
+            className={`rail__item${route.view === 'logs' ? ' is-on' : ''}`}
+            onClick={() => go({ view: 'logs' })}
+            aria-current={route.view === 'logs' ? 'page' : undefined}
+            data-testid="rail-logs"
+          >
+            <LogsIcon />
+            <span>Logs</span>
+          </button>
         )}
         <button
           className={`rail__item rail__item--me${route.view === 'profile' ? ' is-on' : ''}`}
@@ -238,7 +239,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'chat' && <ChatView user={user} room={route.room} openRoom={(room) => go({ view: 'chat', room })} onJoin={onJoin} />}
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
         {route.view === 'profile' && <ProfileView />}
-        {route.view === 'admin' && <AdminView />}
+        {route.view === 'admin' && (isSuperAdmin(user.role) ? <AdminView /> : isStaff(user.role) ? <RecruiterDashboard /> : null)}
         {route.view === 'logs' && <LogsView />}
         {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
