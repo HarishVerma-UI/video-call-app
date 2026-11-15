@@ -1,7 +1,7 @@
 import { ApiError, type ApplicationStatus, type Job, type JobApplication, type JobInput, type RecruiterDashboard as Dash } from '@vca/shared';
-import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, TrashIcon } from './Icons';
+import { BriefcaseIcon, ChatIcon, CloseIcon, PencilIcon, PeopleIcon, PlusIcon, SparkIcon, TrashIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 
@@ -178,6 +178,34 @@ export function RecruiterDashboard() {
     try { await api.recruiterSetApplicationStatus(a.id, status); load(); } catch { /* ignore */ }
   };
 
+  const [activeSec, setActiveSec] = useState('overview');
+  useEffect(() => {
+    const ids = ['overview', 'funnel', 'reqs', 'applicants'];
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (vis[0]) setActiveSec(vis[0].target.id);
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
+    );
+    for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
+    return () => obs.disconnect();
+  }, [data]);
+  const goSec = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveSec(id); };
+
+  const exportAts = () => {
+    if (!data) return;
+    const rows = [['Candidate', 'Role', 'Status', 'Applied']];
+    for (const a of data.recentApplicants) rows.push([a.profile?.name || a.userName || '', a.job?.title || '', a.status, a.createdAt || '']);
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = url; el.download = `huddle-ats-${new Date().toISOString().slice(0, 10)}.csv`;
+    el.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!data) return <section className="page rec"><div className="skeleton-list" aria-hidden="true"><i /><i /></div></section>;
   const { funnel, jobs, recentApplicants, jobCount } = data;
   const rate = funnel.total ? Math.round((funnel.shortlisted / funnel.total) * 100) : 0;
@@ -188,25 +216,51 @@ export function RecruiterDashboard() {
   ];
   const maxStage = Math.max(1, ...stages.map((s) => s.n));
 
+  const NAV: { id: string; label: string; icon: ReactNode }[] = [
+    { id: 'overview', label: 'Talent Dashboard', icon: <SparkIcon width={18} height={18} /> },
+    { id: 'funnel', label: 'Candidate Funnel', icon: <PeopleIcon width={18} height={18} /> },
+    { id: 'reqs', label: 'Job Requisitions', icon: <BriefcaseIcon width={18} height={18} /> },
+    { id: 'applicants', label: 'Recent Applicants', icon: <ChatIcon width={18} height={18} /> },
+  ];
+
   return (
-    <section className="page rec" data-testid="recruiter-dashboard">
+    <div className="admin-shell">
+      <aside className="admin-side" aria-label="Recruiter sections">
+        <div className="admin-side__brand">
+          <span className="admin-side__mark"><BriefcaseIcon width={20} height={20} /></span>
+          <div><strong>Talent Hub</strong><em>Recruiter workspace</em></div>
+        </div>
+        <nav className="admin-side__nav">
+          {NAV.map((n) => (
+            <button key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} onClick={() => goSec(n.id)} aria-current={activeSec === n.id ? 'true' : undefined}>
+              {n.icon}<span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <button className="btn btn--secondary btn--small admin-side__invite" onClick={() => { setEditing(null); setFormOpen(true); }}>
+          <PlusIcon width={15} height={15} /> Post a role
+        </button>
+      </aside>
+
+      <section className="page rec" data-testid="recruiter-dashboard">
       <header className="rec__head">
         <div>
           <h1>Welcome back, {(user?.name || 'there').split(' ')[0]}</h1>
           <p>Your talent pipeline across {jobCount} open role{jobCount !== 1 ? 's' : ''}.</p>
         </div>
+        <button className="btn btn--secondary btn--small" onClick={exportAts} disabled={recentApplicants.length === 0} title="Download recent applicants as CSV">⭳ Export ATS data</button>
         <button className="btn btn--primary" onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="rec-post"><PlusIcon width={16} height={16} /> Post a role</button>
       </header>
       {err && <p className="form-msg" role="alert">{err}</p>}
 
-      <div className="rec__tiles">
+      <div className="rec__tiles" id="overview">
         <div className="rec-tile"><span className="rec-tile__n">{funnel.total}</span><span className="rec-tile__l">Total applicants</span></div>
         <div className="rec-tile"><span className="rec-tile__n">{rate}%</span><span className="rec-tile__l">Shortlist rate</span></div>
         <div className="rec-tile"><span className="rec-tile__n">{jobCount}</span><span className="rec-tile__l">Active roles</span></div>
         <div className="rec-tile"><span className="rec-tile__n">{funnel.shortlisted}</span><span className="rec-tile__l">Shortlisted</span></div>
       </div>
 
-      <div className="rec__grid">
+      <div className="rec__grid" id="funnel">
         <div className="card rec-funnel">
           <h2>Candidate funnel</h2>
           <p className="rec-funnel__sub">Where your {funnel.total} applicant{funnel.total !== 1 ? 's' : ''} stand.</p>
@@ -220,7 +274,7 @@ export function RecruiterDashboard() {
           </div>
         </div>
 
-        <div className="card rec-recent">
+        <div className="card rec-recent" id="applicants">
           <h2>Recent applicants</h2>
           {recentApplicants.length === 0 ? (
             <p className="card__empty">No applicants yet. Share your roles to get candidates.</p>
@@ -241,38 +295,42 @@ export function RecruiterDashboard() {
         </div>
       </div>
 
-      <div className="card rec-reqs">
-        <header className="rec-reqs__head"><h2>Your requisitions</h2><span className="rec-reqs__count">{jobCount} role{jobCount !== 1 ? 's' : ''}</span></header>
+      <div className="card rec-reqs" id="reqs">
+        <header className="rec-reqs__head"><h2>Active requisitions</h2><span className="rec-reqs__count">{jobCount} role{jobCount !== 1 ? 's' : ''}</span></header>
         {jobs.length === 0 ? (
           <p className="card__empty">You haven’t posted any roles yet. Post one to start sourcing.</p>
         ) : (
-          <ul className="rec-reqs__list">
+          <div className="rec-reqs__grid">
             {jobs.map((j) => {
               const sal = salaryText(j);
+              const n = j.applicantCount ?? 0;
               return (
-                <li key={j.id} className={`rec-req${j.active ? '' : ' is-hidden'}`}>
-                  <div className="rec-req__logo" aria-hidden="true">{initial(j.company)}</div>
-                  <div className="rec-req__info">
-                    <strong>{j.title}</strong>
-                    <span>{j.company}{j.country ? ` · ${j.country}` : ''}{j.remote ? ' · Remote' : ''}{sal ? ` · ${sal}` : ''}</span>
+                <div key={j.id} className={`rec-reqcard${j.active ? '' : ' is-hidden'}`}>
+                  <div className="rec-reqcard__top">
+                    <span className="rec-req__logo" aria-hidden="true">{initial(j.company)}</span>
+                    <span className={`rec-reqcard__state rec-reqcard__state--${j.active ? 'live' : 'off'}`}>{j.active ? 'Live' : 'Hidden'}</span>
                   </div>
-                  <button className="rec-req__applicants" onClick={() => setApplicantsFor(j)} data-testid="rec-view-candidates">
-                    <strong>{j.applicantCount ?? 0}</strong> candidate{(j.applicantCount ?? 0) !== 1 ? 's' : ''}
+                  <strong className="rec-reqcard__title">{j.title}</strong>
+                  <span className="rec-reqcard__meta">{j.company}{j.country ? ` · ${j.country}` : ''}{j.remote ? ' · Remote' : ''}</span>
+                  {sal && <span className="rec-reqcard__sal">{sal}</span>}
+                  <button className="rec-reqcard__count" onClick={() => setApplicantsFor(j)} data-testid="rec-view-candidates">
+                    <b>{n}</b> candidate{n !== 1 ? 's' : ''} →
                   </button>
-                  <div className="admin-ads__actions">
-                    <button className="link-btn" onClick={() => { setEditing(j); setFormOpen(true); }} aria-label="Edit role"><PencilIcon width={14} height={14} /></button>
+                  <div className="rec-reqcard__actions">
+                    <button className="link-btn" onClick={() => { setEditing(j); setFormOpen(true); }} aria-label="Edit role"><PencilIcon width={14} height={14} /> Edit</button>
                     <button className="link-btn admin-dir__danger" onClick={() => void remove(j)} aria-label="Delete role"><TrashIcon width={14} height={14} /></button>
                   </div>
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
       {formOpen && <JobForm editing={editing} onClose={() => setFormOpen(false)} onSaved={() => { setFormOpen(false); load(); }} />}
       {applicantsFor && <ApplicantsModal job={applicantsFor} onClose={() => setApplicantsFor(null)} onChanged={load} />}
       <p className="rec__foot"><BriefcaseIcon width={14} height={14} /> You see only the roles you posted and their candidates.</p>
-    </section>
+      </section>
+    </div>
   );
 }
