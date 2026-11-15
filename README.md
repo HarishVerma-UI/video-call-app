@@ -158,7 +158,10 @@ so signed-in members get live pushes wherever they are:
 
 **Accounts**
 - Sign in with **email and password**, or with **Google or GitHub** (optional social login)
-- **Admin dashboard** (admin role): see everyone who has registered, and create, edit, delete or re-role accounts
+- Sign in as a **user** or **recruiter**; recruiter tools and job requirements stay locked until an administrator approves the application
+- Registration collects professional profile details and can include a recruiter application; admins review pending requests in the dashboard
+- **About** and **Privacy** pages are linked from both sign-in and registration
+- **Admin dashboard** (admin role): see everyone who has registered, review recruiter applications, and create, edit, delete or re-role accounts
 - A social account can add a password in Profile, so it can also sign in by email
 - Accounts in **MongoDB** with **scrypt**-hashed passwords; **JWT** sessions (7 days by default)
 - Rate limiting, identical errors for "wrong password" and "no such account", invite links that survive sign-in
@@ -273,8 +276,8 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 
 | Method | Path | Auth | Body → Response |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | `{ name, email, password }` → `201 { user, token, expiresAt }` |
-| POST | `/api/auth/login` | — | `{ email, password }` → `200 { user, token, expiresAt }` |
+| POST | `/api/auth/register` | — | `{ name, email, password, profile?, applyAsRecruiter?, recruiterApplication? }` → `201 { user, token, expiresAt }` |
+| POST | `/api/auth/login` | — | `{ email, password, mode?: "user" \| "recruiter" }` → `200 { user, token, expiresAt }` |
 | GET | `/api/auth/me` | Bearer | → `{ user }` |
 | PATCH | `/api/auth/me` | Bearer | `{ name?, email?, currentPassword? }` → `{ user, token, expiresAt }` (email change needs `currentPassword`) |
 | POST | `/api/auth/password` | Bearer | `{ currentPassword, newPassword }` → `{ user, token, expiresAt }`; older tokens stop working. Social-login accounts with no password yet send just `newPassword` to add one |
@@ -282,8 +285,9 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | GET | `/api/auth/oauth/:provider/start` | — | Redirects to Google, GitHub or Facebook (`provider` = `google`, `github` or `facebook`) |
 | GET | `/api/auth/oauth/:provider/callback` | — | Provider returns here; redirects to the app with a token in the URL hash |
 | GET | `/api/admin/users` | Bearer (admin) | → `{ users, total }` |
+| GET | `/api/admin/recruiter-applications` | Bearer (admin) | → `{ requests }` (pending applications) |
 | POST | `/api/admin/users` | Bearer (admin) | `{ name, email, password, role? }` → `201 { user }` |
-| PATCH | `/api/admin/users/:id` | Bearer (admin) | `{ name?, email?, role?, password? }` → `{ user }` |
+| PATCH | `/api/admin/users/:id` | Bearer (admin) | `{ name?, email?, role?, password?, recruiterApplicationStatus?: "approved" \| "rejected" }` → `{ user }` |
 | DELETE | `/api/admin/users/:id` | Bearer (admin) | → `{ ok, id }` (cascades to their social data; you can't delete yourself) |
 | GET | `/api/admin/ads` | Bearer (admin) | → `{ ads }` (all ads) |
 | POST | `/api/admin/ads` | Bearer (admin) | `{ title, body?, linkUrl?, imageKey?, active? }` → `201 { ad }` |
@@ -372,7 +376,7 @@ Each folder has a `.env.example`.
 ## What's tested
 
 - **Server:**
-  - **Accounts & admin:** register / sign-in validation, duplicate emails, new accounts defaulting to the `user` role, the social-providers endpoint, and the admin API — list, create, update and delete users, role changes, and the guards that stop an admin from deleting or demoting themselves.
+  - **Accounts & admin:** registration and sign-in validation, recruiter applications remaining members until admin approval, profile details saved at registration, duplicate emails, the social-providers endpoint, and admin user management.
   - **Professional network:** profiles and partial visibility, connections (request / accept / decline / remove, idempotent requests), posts & feed (create, like, comment, before-paging), direct messages (connections only), and a regression test that a **profile-less account like the seeded admin can still receive and accept connection requests**.
   - **Ads:** admin create / edit / delete, and that only *active* ads reach members' feeds.
   - **Notifications & calling:** a like/comment notifies the post author (and not yourself), mark-read clears the unread count, the community user count, and that calling a connection posts a call message in the DM thread with the room plus a `call` notification (and rejects calling a non-connection).

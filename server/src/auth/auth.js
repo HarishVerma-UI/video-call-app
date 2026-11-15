@@ -7,6 +7,7 @@ import { TokenError, signToken, verifyToken } from './jwt.js';
 import { dummyVerify, hashPassword, verifyPassword } from './password.js';
 import { createOAuth } from './oauth.js';
 import { createRateLimiter } from './rateLimit.js';
+import { isRecruiter, isSuperAdmin } from './roles.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -34,6 +35,56 @@ function validateRegistration(body) {
   else if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) errors.password = 'Include at least one letter and one number.';
 
   return { name, email, password, errors };
+}
+
+function registrationDetails(body) {
+  const profile = body?.profile && typeof body.profile === 'object' && !Array.isArray(body.profile) ? body.profile : {};
+  const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+  const list = (value, fields, maxItems) => {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, maxItems).map((item) => {
+      const entry = {};
+      for (const [field, max] of Object.entries(fields)) entry[field] = text(item?.[field], max);
+      return entry;
+    }).filter((entry) => Object.values(entry).some(Boolean));
+  };
+  const details = {
+    headline: text(profile.headline, 120),
+    location: text(profile.location, 120),
+    expectedSalary: text(profile.expectedSalary, 80),
+    mobile: text(profile.mobile, 40),
+    skills: Array.isArray(profile.skills)
+      ? [...new Set(profile.skills.filter((skill) => typeof skill === 'string').map((skill) => text(skill, 40)).filter(Boolean))].slice(0, 40)
+      : [],
+    experience: list(profile.experience, { title: 120, company: 120, start: 40, end: 40, description: 1000 }, 20),
+    education: list(profile.education, { school: 160, degree: 120, year: 40 }, 20),
+  };
+  return details;
+}
+
+function recruiterApplicationFrom(body, errors) {
+  if (body?.applyAsRecruiter !== true) return null;
+  const raw = body.recruiterApplication && typeof body.recruiterApplication === 'object' ? body.recruiterApplication : {};
+  const company = typeof raw.company === 'string' ? raw.company.trim().slice(0, 120) : '';
+  const reason = typeof raw.reason === 'string' ? raw.reason.trim().slice(0, 1200) : '';
+  const website = typeof raw.website === 'string' ? raw.website.trim().slice(0, 300) : '';
+  if (company.length < 2) errors.recruiterCompany = 'Enter your company or organization.';
+  if (reason.length < 10) errors.recruiterReason = 'Tell us a little more about your recruiting work.';
+  if (website) {
+    try {
+      const parsed = new URL(website);
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Unsupported protocol');
+    } catch {
+      errors.recruiterWebsite = 'Enter a valid http:// or https:// website.';
+    }
+  }
+  return {
+    status: 'pending',
+    company,
+    website,
+    reason,
+    requestedAt: new Date().toISOString(),
+  };
 }
 
 function validateNewAccount(body) {
@@ -97,19 +148,21 @@ export function createAuth(opts) {
     if (!limited.ok)
       throw new HttpError(429, 'Too many sign-ups from this network. Try again later.', { retryAfterSec: limited.retryAfterSec });
 
-    const { name, email, password, errors } = validateRegistration(await readJson(req));
+    const body = await readJson(req);
+    const { name, email, password, errors } = validateRegistration(body);
+    const recruiterApplication = recruiterApplicationFrom(body, errors);
     if (Object.keys(errors).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: errors });
 
     let user;
     try {
-      user = await opts.store.create({ name, email, passwordHash: await hashPassword(password) });
+      user = await opts.store.create({ name, email, passwordHash: await hashPassword(password), recruiterApplication });
     } catch (err) {
       if (err instanceof DuplicateEmailError)
         throw new HttpError(409, 'An account with this email already exists.', { fields: { email: 'Already registered — try signing in.' } });
       throw err;
     }
     opts.log?.(`auth   registered ${email}`);
-    if (opts.onRegister) await opts.onRegister(user);
+    if (opts.onRegister) await opts.onRegister(user, registrationDetails(body));
     sendJson(res, 201, issue(user));
   }
 
@@ -118,6 +171,8 @@ export function createAuth(opts) {
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     const password = typeof body.password === 'string' ? body.password : '';
     if (!email || !password) throw new HttpError(400, 'Enter your email and password.');
+    const mode = body.mode ?? 'user';
+    if (mode !== 'user' && mode !== 'recruiter') throw new HttpError(400, 'Choose whether you are signing in as a user or recruiter.');
 
     const ip = clientIp(req, opts.trustProxy);
     const a = loginByIp.hit(ip);
@@ -134,6 +189,18 @@ export function createAuth(opts) {
     if (!user || !ok) throw new HttpError(401, 'Email or password is incorrect.', { code: 'invalid-credentials' });
 
     loginByEmail.reset(email);
+    if (mode === 'recruiter' && !isRecruiter(user.role) && !isSuperAdmin(user.role)) {
+      const status = user.recruiterApplication?.status;
+      const message = status === 'pending'
+        ? 'Your recruiter application is awaiting admin approval.'
+        : status === 'rejected'
+          ? 'Your recruiter application was declined. Contact an administrator if you need help.'
+          : 'This account does not have approved recruiter access.';
+      throw new HttpError(403, message, { code: status === 'pending' ? 'recruiter-pending' : 'recruiter-not-approved' });
+    }
+    if (body.mode === 'user' && isRecruiter(user.role)) {
+      throw new HttpError(403, 'This account has recruiter access. Choose recruiter to sign in.', { code: 'recruiter-mode-mismatch' });
+    }
     await opts.store.recordLogin(user.id);
     opts.log?.(`auth   login ${email}`);
     sendJson(res, 200, issue(user));

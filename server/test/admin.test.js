@@ -12,6 +12,69 @@ test('new accounts default to the "member" role', async () => {
   assert.equal(u.user.role, 'member');
 });
 
+test('recruiter applications stay pending until an administrator approves them', async () => {
+  const applicant = await api(t.base, 'POST', '/api/auth/register', {
+    name: 'Recruiter Applicant',
+    email: `applicant-${Date.now()}@example.com`,
+    password: 'candidate-123',
+    profile: {
+      headline: 'Talent specialist',
+      location: 'Toronto',
+      expectedSalary: 'CAD 100,000',
+      skills: ['Hiring', 'Sourcing'],
+      experience: [{ title: 'Recruiter', company: 'Northstar', start: '2021', end: 'Present', description: '' }],
+      education: [{ school: 'Example University', degree: 'BA', year: '2020' }],
+    },
+    applyAsRecruiter: true,
+    recruiterApplication: {
+      company: 'Northstar',
+      website: 'https://northstar.example',
+      reason: 'I hire and support candidates every day.',
+    },
+  });
+  assert.equal(applicant.status, 201);
+  assert.equal(applicant.body.user.role, 'member');
+  assert.equal(applicant.body.user.recruiterApplication.status, 'pending');
+
+  const profile = await api(t.base, 'GET', '/api/profile', null, applicant.body.token);
+  assert.equal(profile.body.profile.headline, 'Talent specialist');
+  assert.equal(profile.body.profile.experience[0].company, 'Northstar');
+
+  const prematureLogin = await api(t.base, 'POST', '/api/auth/login', {
+    email: applicant.body.user.email,
+    password: 'candidate-123',
+    mode: 'recruiter',
+  });
+  assert.equal(prematureLogin.status, 403);
+  assert.equal(prematureLogin.body.code, 'recruiter-pending');
+
+  const admin = await registerUser(t.base, 'Approval Admin');
+  await t.store.setRole(admin.user.id, 'super_admin');
+  let res = await api(t.base, 'GET', '/api/admin/recruiter-applications', null, admin.token);
+  assert.equal(res.status, 200);
+  assert.ok(res.body.requests.some((request) => request.id === applicant.body.user.id));
+
+  res = await api(t.base, 'PATCH', `/api/admin/users/${applicant.body.user.id}`, { recruiterApplicationStatus: 'approved' }, admin.token);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.user.role, 'recruiter');
+  assert.equal(res.body.user.recruiterApplication.status, 'approved');
+
+  const approvedLogin = await api(t.base, 'POST', '/api/auth/login', {
+    email: applicant.body.user.email,
+    password: 'candidate-123',
+    mode: 'recruiter',
+  });
+  assert.equal(approvedLogin.status, 200);
+  assert.equal(approvedLogin.body.user.role, 'recruiter');
+  const wrongModeLogin = await api(t.base, 'POST', '/api/auth/login', {
+    email: applicant.body.user.email,
+    password: 'candidate-123',
+    mode: 'user',
+  });
+  assert.equal(wrongModeLogin.status, 403);
+  assert.equal(wrongModeLogin.body.code, 'recruiter-mode-mismatch');
+});
+
 test('providers endpoint reports which social logins are configured', async () => {
   const res = await api(t.base, 'GET', '/api/auth/providers');
   assert.equal(res.status, 200);
@@ -64,6 +127,29 @@ test('an admin can list, create, update and delete users', async () => {
   // the deleted user can no longer sign in
   res = await api(t.base, 'POST', '/api/auth/login', { email, password: 'secret-123' });
   assert.equal(res.status, 401);
+});
+
+test('admin user directory supports server-side search and pagination', async () => {
+  const admin = await registerUser(t.base, 'Directory Admin');
+  await t.store.setRole(admin.user.id, 'super_admin');
+  for (const [index, suffix] of ['Alpha', 'Beta'].entries()) {
+    const res = await api(t.base, 'POST', '/api/admin/users', {
+      name: `Directory Match ${suffix}`,
+      email: `directory-${Date.now()}-${index}@example.com`,
+      password: 'secret-123',
+    }, admin.token);
+    assert.equal(res.status, 201);
+  }
+
+  const query = encodeURIComponent('directory match');
+  const first = await api(t.base, 'GET', `/api/admin/users?page=1&limit=1&search=${query}`, null, admin.token);
+  const second = await api(t.base, 'GET', `/api/admin/users?page=2&limit=1&search=${query}`, null, admin.token);
+
+  assert.equal(first.status, 200);
+  assert.equal(first.body.total, 2);
+  assert.equal(first.body.users.length, 1);
+  assert.equal(second.body.users.length, 1);
+  assert.notEqual(first.body.users[0].id, second.body.users[0].id);
 });
 
 test('admin user list includes candidate profile details', async () => {
