@@ -48,7 +48,27 @@ export function createAdmin(opts) {
     const skip = (page - 1) * limit;
     const [allUsers, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
     const paged = allUsers.slice(skip, skip + limit);
-    sendJson(res, 200, { users: paged.map(publicUser), total, page, limit });
+    const profiles = opts.social?.profiles ? await opts.social.profiles.getMany(paged.map((user) => user.id)) : [];
+    const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
+    const users = await Promise.all(paged.map(async (user) => {
+      const profile = profileById.get(user.id);
+      return {
+        ...publicUser(user),
+        profile: profile ? {
+          headline: profile.headline ?? '',
+          location: profile.location ?? '',
+          expectedSalary: profile.expectedSalary ?? '',
+          skills: profile.skills ?? [],
+          experience: profile.experience ?? [],
+          education: profile.education ?? [],
+          cvName: profile.cvName ?? '',
+          cvUrl: profile.cvKey && opts.media
+            ? await opts.media.viewUrl(profile.cvKey, { download: profile.cvName || 'cv' })
+            : null,
+        } : null,
+      };
+    }));
+    sendJson(res, 200, { users, total, page, limit });
   }
 
   async function createUser(req, res) {

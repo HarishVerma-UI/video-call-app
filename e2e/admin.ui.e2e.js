@@ -28,11 +28,23 @@ test.describe('UI: Admin dashboard', () => {
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
     await expect(page.getByRole('heading', { name: 'Platform Administration & Intelligence' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /User Directory|Jobs & Moderation|Recruiter Directory|Activity & Audit/ })).toHaveCount(0);
+    for (const [label, hash] of [
+      ['Overview', 'overview'],
+      ['Users', 'users'],
+      ['Recruiters', 'recruiters'],
+      ['Jobs', 'jobs'],
+      ['Activity', 'audit'],
+      ['Ads', 'ads'],
+    ]) {
+      await page.getByRole('link', { name: label, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`#${hash}$`));
+    }
+    await expect(page.getByRole('columnheader', { name: 'Expected salary' })).toBeVisible();
     const jobsHeading = page.getByRole('heading', { name: 'Jobs Manager' });
     await jobsHeading.scrollIntoViewIfNeeded();
     await expect(jobsHeading).toBeVisible();
-    await expect(page).toHaveURL(/\/admin$/);
+    await expect.poll(() => page.locator('.admin-dash').evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await expect(page).toHaveURL(/\/admin(?:#.*)?$/);
 
     await page.getByTestId('add-user').click();
     await expect(page.getByRole('dialog', { name: 'Add user' })).toBeVisible();

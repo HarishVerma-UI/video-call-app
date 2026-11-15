@@ -14,6 +14,7 @@ export function ProfessionalProfile() {
   const [headline, setHeadline] = useState('');
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
+  const [expectedSalary, setExpectedSalary] = useState('');
   const [mobile, setMobile] = useState('');
   const [skills, setSkills] = useState('');
   const [focus, setFocus] = useState('');
@@ -33,6 +34,7 @@ export function ProfessionalProfile() {
     setHeadline(prof.headline ?? '');
     setBio(prof.bio ?? '');
     setLocation(prof.location ?? '');
+    setExpectedSalary(prof.expectedSalary ?? '');
     setMobile(prof.mobile ?? '');
     setSkills((prof.skills ?? []).join(', '));
     setFocus((prof.focusAreas ?? []).join(', '));
@@ -50,6 +52,7 @@ export function ProfessionalProfile() {
     headline,
     bio,
     location,
+    expectedSalary,
     mobile,
     skills: toList(skills),
     focusAreas: toList(focus),
@@ -149,7 +152,7 @@ export function ProfessionalProfile() {
       <header className="card__head">
         <div>
           <h2 id="pp-h">Your professional profile</h2>
-          <p>This is what mentors and connections see. Private details (mobile, CV) show only to accepted connections.</p>
+          <p>This is what mentors and connections see. Private details (mobile, salary expectation, CV) show only to accepted connections.</p>
         </div>
       </header>
 
@@ -171,8 +174,9 @@ export function ProfessionalProfile() {
           </div>
         </div>
         <div className="card__grid">
-          <Line name="headline" label="Headline" type="text" autoComplete="off" value={headline} onChange={setHeadline} />
+          <Line name="headline" label="Job role / headline" type="text" autoComplete="off" value={headline} onChange={setHeadline} />
           <Line name="location" label="Location" type="text" autoComplete="off" value={location} onChange={setLocation} />
+          <Line name="expected-salary" label="Expected salary" type="text" autoComplete="off" value={expectedSalary} onChange={setExpectedSalary} placeholder="e.g. 120,000 USD per year" />
         </div>
         <label className="line">
           <span>About you</span>

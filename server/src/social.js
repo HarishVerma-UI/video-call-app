@@ -184,6 +184,7 @@ export function createSocial(deps) {
       bio: str(b.bio, 2000),
       location: str(b.location, 120),
       mobile: str(b.mobile, 40),
+      expectedSalary: str(b.expectedSalary, 120),
       skills: arr(b.skills, 40, 40),
       focusAreas: arr(b.focusAreas, 20, 40),
       mentor: !!b.mentor,

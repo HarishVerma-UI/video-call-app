@@ -66,6 +66,31 @@ test('an admin can list, create, update and delete users', async () => {
   assert.equal(res.status, 401);
 });
 
+test('admin user list includes candidate profile details', async () => {
+  const admin = await registerUser(t.base, 'Profile Admin');
+  await t.store.setRole(admin.user.id, 'super_admin');
+  const candidate = await registerUser(t.base, 'Profile Candidate');
+  await api(t.base, 'PUT', '/api/profile', {
+    headline: 'Senior designer',
+    location: 'Toronto',
+    expectedSalary: 'CAD 120,000 per year',
+    skills: ['Figma', 'Research'],
+    experience: [{ title: 'Designer', company: 'Studio', start: '2021', end: 'Present', description: '' }],
+    education: [{ school: 'Design College', degree: 'BA', year: '2020' }],
+  }, candidate.token);
+
+  const res = await api(t.base, 'GET', '/api/admin/users', null, admin.token);
+  assert.equal(res.status, 200);
+  const listed = res.body.users.find((user) => user.id === candidate.user.id);
+  assert.equal(listed.profile.headline, 'Senior designer');
+  assert.equal(listed.profile.location, 'Toronto');
+  assert.equal(listed.profile.expectedSalary, 'CAD 120,000 per year');
+  assert.deepEqual(listed.profile.experience[0], { title: 'Designer', company: 'Studio', start: '2021', end: 'Present', description: '' });
+  assert.deepEqual(listed.profile.education[0], { school: 'Design College', degree: 'BA', year: '2020' });
+  assert.deepEqual(listed.profile.skills, ['Figma', 'Research']);
+  assert.equal(listed.profile.cvUrl, null);
+});
+
 test('admin stats endpoint returns dashboard data', async () => {
   const admin = await registerUser(t.base, 'Stats Admin');
   await t.store.setRole(admin.user.id, 'admin');
