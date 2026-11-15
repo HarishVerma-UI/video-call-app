@@ -11,6 +11,8 @@ import {
 } from '@vca/shared';
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { ago } from '../format';
+import { Avatar } from './RoomBadge';
 import { BriefcaseIcon, CloseIcon, SearchIcon } from './Icons';
 
 const CAT_LABEL: Record<JobCategory, string> = { tech: 'Tech', 'non-tech': 'Non-Tech' };
@@ -150,45 +152,177 @@ function ApplyModal({ job, completion, onClose, onApplied }: { job: Job; complet
   );
 }
 
-/* ─── job detail modal ─────────────────────────────────── */
-function JobDetail({ job, onClose, onApply }: { job: Job; onClose: () => void; onApply: () => void }) {
+/* ─── full job-detail page ─────────────────────────────── */
+type DetailTab = 'overview' | 'responsibilities' | 'skills' | 'salary';
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'responsibilities', label: 'Responsibilities' },
+  { id: 'skills', label: 'Skills & Tech' },
+  { id: 'salary', label: 'Salary & Benefits' },
+];
+
+function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onOpenUser }: {
+  job: Job; allJobs: Job[] | null; saved: boolean; onToggleSave: () => void;
+  onBack: () => void; onApply: () => void; onOpenUser: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
   const sal = salaryText(job);
+  const matched = job.matchedSkills ?? [];
+  const missing = job.skills.filter((s) => !matched.includes(s));
+
+  const similar = useMemo(() => {
+    const skillSet = new Set(job.skills.map((s) => s.toLowerCase()));
+    return (allJobs ?? [])
+      .filter((j) => j.id !== job.id)
+      .map((j) => ({ j, overlap: j.skills.filter((s) => skillSet.has(s.toLowerCase())).length + (j.category === job.category ? 0.5 : 0) }))
+      .filter((x) => x.overlap > 0)
+      .sort((a, b) => b.overlap - a.overlap)
+      .slice(0, 3)
+      .map((x) => x.j);
+  }, [allJobs, job]);
+
+  const whyFit: string[] = [];
+  if (job.skills.length > 0) whyFit.push(`${matched.length}/${job.skills.length} required skills matched`);
+  whyFit.push(`${EXP_LABEL[job.experience]} role`);
+  if (sal) whyFit.push('Salary disclosed');
+
   return (
-    <div className="modal" role="dialog" aria-modal="true" aria-label={job.title} onClick={onClose}>
-      <div className="modal__card card job-detail" onClick={(e: MouseEvent) => e.stopPropagation()}>
-        <header className="card__head">
-          <div className="job-detail__title">
-            <div className="jcard__logo jcard__logo--lg" aria-hidden="true">{initial(job.company)}</div>
-            <div>
-              <h2>{job.title}</h2>
-              <p>{job.company}{job.country ? ` · ${job.country}` : ''}{job.remote ? ' · Remote' : ''}</p>
+    <section className="page jobd" aria-label={job.title} data-testid="job-detail">
+      <div className="jobd__crumb">
+        <button className="link-btn jobd__back" onClick={onBack}>← Back to Jobs</button>
+        <span className="jobd__crumb-sep">/</span>
+        <span>{CAT_LABEL[job.category]}</span>
+        <span className="jobd__crumb-sep">/</span>
+        <span className="jobd__crumb-cur">{job.company} — {job.title}</span>
+        <span className="jobd__crumb-id">Job ID: {job.id.slice(0, 8).toUpperCase()}</span>
+      </div>
+
+      <div className="jobd__grid">
+        <div className="jobd__main">
+          {/* header card */}
+          <div className="card jobd__head">
+            <div className="jobd__head-top">
+              <div className="jcard__logo jcard__logo--lg" aria-hidden="true">{initial(job.company)}</div>
+              <div className="jobd__id">
+                <div className="jobd__company">
+                  <span>{job.company}</span>
+                  {job.remote && <span className="jtag jtag--remote">Remote</span>}
+                  {job.applyUrl && <span className="jtag jtag--ext">↗ {job.source || 'External'}</span>}
+                </div>
+                <h1>{job.title}</h1>
+              </div>
+              {typeof job.matchScore === 'number' && (
+                <span className={`jmatch jmatch--${matchBand(job.matchScore)} jobd__match`}>{job.matchScore}%<small>match</small></span>
+              )}
+            </div>
+
+            <div className="jobd__facts">
+              <span>📍 {job.remote ? 'Remote' : job.country || 'Anywhere'}</span>
+              {sal && <span>💲 {sal}</span>}
+              <span>🗂 {TYPE_LABEL[job.type]} · {EXP_LABEL[job.experience]}</span>
+              {job.createdAt && <span>🕑 Posted {ago(job.createdAt)}</span>}
+            </div>
+
+            {matched.length > 0 && (
+              <div className="jobd__why">
+                <strong>Why you’re a strong candidate</strong>
+                <div className="jobd__why-chips">
+                  {whyFit.map((w) => <span key={w} className="jobd__why-chip">✓ {w}</span>)}
+                </div>
+              </div>
+            )}
+
+            <div className="jobd__actions">
+              <button className="btn btn--primary" onClick={onApply} data-testid="open-apply">
+                {job.applyUrl ? `Apply on ${job.source || 'company site'} ↗` : 'Apply Now →'}
+              </button>
+              <button className={`btn btn--secondary${saved ? ' is-on' : ''}`} onClick={onToggleSave} aria-pressed={saved}>
+                {saved ? '✓ Saved' : '🔖 Save Job'}
+              </button>
             </div>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
-        </header>
-        <div className="job-detail__facts">
-          <span>{CAT_LABEL[job.category]}</span>
-          <span>{TYPE_LABEL[job.type]}</span>
-          <span>{EXP_LABEL[job.experience]}</span>
-          {sal && <span>{sal}</span>}
-          {typeof job.matchScore === 'number' && <span className={`jmatch jmatch--${matchBand(job.matchScore)}`}>{job.matchScore}% match</span>}
-        </div>
-        {job.description && <p className="job-detail__desc">{job.description}</p>}
-        {job.requirements.length > 0 && (
-          <div className="job-detail__section"><h3>Requirements</h3><ul>{job.requirements.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-        )}
-        {job.skills.length > 0 && (
-          <div className="job-detail__section">
-            <h3>Skills {job.matchedSkills && job.matchedSkills.length > 0 && <small>({job.matchedSkills.length} match yours)</small>}</h3>
-            <div className="jcard__skills">{job.skills.map((s) => <span key={s} className={`jskill${job.matchedSkills?.includes(s) ? ' jskill--match' : ''}`}>{s}</span>)}</div>
+
+          {/* tabs */}
+          <div className="jobd__tabs" role="tablist">
+            {DETAIL_TABS.map((t) => (
+              <button key={t.id} role="tab" aria-selected={tab === t.id} className={`jobd__tab${tab === t.id ? ' is-on' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            ))}
           </div>
-        )}
-        <div className="modal__actions">
-          <button className="btn btn--secondary" onClick={onClose}>Close</button>
-          <button className="btn btn--primary" onClick={onApply} data-testid="open-apply">{job.applyUrl ? `Apply on ${job.source || 'company site'} ↗` : 'Apply now'}</button>
+
+          <div className="card jobd__panel">
+            {tab === 'overview' && (
+              <>
+                <h2>About the role</h2>
+                {job.description ? <p className="jobd__desc">{job.description}</p> : <p className="card__empty">No description provided for this role.</p>}
+              </>
+            )}
+            {tab === 'responsibilities' && (
+              <>
+                <h2>Key responsibilities</h2>
+                {job.requirements.length > 0 ? (
+                  <ul className="jobd__reqs">{job.requirements.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                ) : <p className="card__empty">Responsibilities aren’t listed for this role.</p>}
+              </>
+            )}
+            {tab === 'skills' && (
+              <>
+                <h2>Required skills &amp; tech {matched.length > 0 && <small>({matched.length} of {job.skills.length} match your profile)</small>}</h2>
+                {job.skills.length > 0 ? (
+                  <div className="jcard__skills jobd__skills">
+                    {job.skills.map((s) => <span key={s} className={`jskill${matched.includes(s) ? ' jskill--match' : ''}`}>{s}{matched.includes(s) && ' ✓'}</span>)}
+                  </div>
+                ) : <p className="card__empty">No skills listed.</p>}
+              </>
+            )}
+            {tab === 'salary' && (
+              <>
+                <h2>Salary &amp; benefits</h2>
+                {sal ? <p className="jobd__salary-big">{sal}<small>per year</small></p> : <p className="card__empty">Salary isn’t disclosed for this role.</p>}
+                <p className="jobd__note">Benefits are set by the employer and aren’t listed on Huddle for this role. Ask during the application if they aren’t in the description.</p>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* side rail */}
+        <aside className="jobd__side" aria-label="Role insights">
+          {typeof job.matchScore === 'number' && (
+            <div className="card jobd__fit">
+              <div className="jobd__fit-head"><h3>Role Fit Analysis</h3><span className={`jmatch jmatch--${matchBand(job.matchScore)}`}>{job.matchScore}%</span></div>
+              <p className="jobd__fit-sub">{matched.length} of {job.skills.length || '—'} required skills matched from your profile.</p>
+              {matched.map((s) => <div key={s} className="jobd__fit-row jobd__fit-row--on"><span>{s}</span><span>✓</span></div>)}
+              {missing.map((s) => <div key={s} className="jobd__fit-row"><span>{s}</span><span className="jobd__fit-add">add to profile</span></div>)}
+            </div>
+          )}
+
+          <div className="card jobd__hire">
+            <h3>Hiring team</h3>
+            {job.postedBy && job.postedByName ? (
+              <button className="jobd__recruiter" onClick={() => onOpenUser(job.postedBy!)}>
+                <Avatar id={job.postedBy} name={job.postedByName} size={42} />
+                <span className="jobd__recruiter-info"><strong>{job.postedByName}</strong><em>Posted this role</em></span>
+              </button>
+            ) : (
+              <p className="jobd__hire-src">Listed via <strong>{job.source || 'Huddle'}</strong>.</p>
+            )}
+          </div>
+
+          {similar.length > 0 && (
+            <div className="card jobd__similar">
+              <h3>Similar open roles</h3>
+              <ul>
+                {similar.map((j) => (
+                  <li key={j.id} className="jobd__sim"><span className="jobd__sim-logo">{initial(j.company)}</span>
+                    <span className="jobd__sim-info"><strong>{j.title}</strong><em>{j.company}{j.country ? ` · ${j.country}` : ''}</em></span>
+                    {typeof j.matchScore === 'number' && <span className={`jmatch jmatch--${matchBand(j.matchScore)} jobd__sim-m`}>{j.matchScore}%</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </aside>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -307,9 +441,17 @@ function MyApplications({ apps, openDetail }: { apps: JobApplication[] | null; o
 }
 
 /* ─── main view ────────────────────────────────────────── */
-export function JobsView(_props: { openUser: (id: string) => void }) {
+export function JobsView({ openUser }: { openUser: (id: string) => void }) {
   const { api } = useAuth();
   const [tab, setTab] = useState<'browse' | 'applied'>('browse');
+  const [savedIds, setSavedIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('huddle.savedJobs') || '[]'); } catch { return []; }
+  });
+  const toggleSave = (id: string) => setSavedIds((cur) => {
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    try { localStorage.setItem('huddle.savedJobs', JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [sort, setSort] = useState<JobSort>('match');
   const [filters, setFilters] = useState<JobFilters>(EMPTY);
@@ -385,6 +527,23 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
     ].filter(Boolean);
     persistAlerts([{ id: String(Date.now()), label: parts.join(' · ') || 'All openings', filters }, ...alerts.filter((a) => a.label)].slice(0, 6));
   };
+
+  if (selected) {
+    return (
+      <>
+        <JobDetailPage
+          job={selected}
+          allJobs={jobs}
+          saved={savedIds.includes(selected.id)}
+          onToggleSave={() => toggleSave(selected.id)}
+          onBack={() => setSelected(null)}
+          onApply={() => startApply(selected)}
+          onOpenUser={openUser}
+        />
+        {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(a) => { markApplied(a.jobId); setApplying(null); }} />}
+      </>
+    );
+  }
 
   return (
     <section className="page jobs" aria-label="Jobs" data-testid="jobs">
@@ -495,7 +654,6 @@ export function JobsView(_props: { openUser: (id: string) => void }) {
         </aside>
       </div>
 
-      {selected && <JobDetail job={selected} onClose={() => setSelected(null)} onApply={() => startApply(selected)} />}
       {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(a) => { markApplied(a.jobId); setApplying(null); }} />}
     </section>
   );
