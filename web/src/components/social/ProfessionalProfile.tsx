@@ -158,59 +158,77 @@ export function ProfessionalProfile() {
         <span className="pp-meter__label">{completion}% complete{completion >= 70 ? ' — ready to apply for jobs ✓' : ' — reach 70% to apply for jobs'}</span>
       </div>
 
-      <div className="pp-photo">
-        <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl: p.photoUrl }} size={72} />
-        <div>
-          <button type="button" className="btn btn--secondary btn--small" disabled={busyPhoto} onClick={() => photoInput.current?.click()}>
-            {busyPhoto ? 'Uploading…' : p.photoUrl ? 'Change photo' : 'Upload photo'}
-          </button>
-          <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => void onPhoto(e)} />
+      {/* ─ Section: Basics ─ */}
+      <section className="pp-section">
+        <div className="pp-section__head"><h3>Basics</h3><span className="pp-section__hint">Your photo, headline and summary</span></div>
+        <div className="pp-photo">
+          <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl: p.photoUrl }} size={72} />
+          <div>
+            <button type="button" className="btn btn--secondary btn--small" disabled={busyPhoto} onClick={() => photoInput.current?.click()}>
+              {busyPhoto ? 'Uploading…' : p.photoUrl ? 'Change photo' : 'Upload photo'}
+            </button>
+            <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => void onPhoto(e)} />
+          </div>
         </div>
-      </div>
+        <div className="card__grid">
+          <Line name="headline" label="Headline" type="text" autoComplete="off" value={headline} onChange={setHeadline} />
+          <Line name="location" label="Location" type="text" autoComplete="off" value={location} onChange={setLocation} />
+        </div>
+        <label className="line">
+          <span>About you</span>
+          <textarea className="pp-textarea" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} placeholder="A short bio" />
+        </label>
+      </section>
 
-      <div className="card__grid">
-        <Line name="headline" label="Headline" type="text" autoComplete="off" value={headline} onChange={setHeadline} />
-        <Line name="location" label="Location" type="text" autoComplete="off" value={location} onChange={setLocation} />
-      </div>
-      <label className="line">
-        <span>About you</span>
-        <textarea className="pp-textarea" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} placeholder="A short bio" />
-      </label>
-      <div className="card__grid">
+      {/* ─ Section: Contact ─ */}
+      <section className="pp-section">
+        <div className="pp-section__head"><h3>Contact</h3><span className="pp-section__hint">Mobile is shown only to accepted connections</span></div>
         <Line name="mobile" label="Mobile (private)" type="text" autoComplete="off" value={mobile} onChange={setMobile} />
+      </section>
+
+      {/* ─ Section: Skills & interests ─ */}
+      <section className="pp-section">
+        <div className="pp-section__head"><h3>Skills &amp; interests</h3><span className="pp-section__hint">Skills power your job matches</span></div>
         <Line name="skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
-      </div>
-      <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
+        <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
+        <div className="pp-flags">
+          <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I&apos;m looking for mentorship</label>
+          <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I&apos;m available as a mentor</label>
+        </div>
+      </section>
 
-      <div className="pp-flags">
-        <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I&apos;m looking for mentorship</label>
-        <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I&apos;m available as a mentor</label>
-      </div>
+      {/* ─ Section: CV / Resume ─ */}
+      <section className="pp-section">
+        <div className="pp-section__head"><h3>CV / Resume</h3><span className="pp-section__hint">Upload once — we pre-fill the sections below</span></div>
+        <div className="pp-cv">
+          <span>
+            {p.hasCv ? 'CV: ' : 'No CV uploaded'}
+            {p.hasCv && p.cvUrl ? (
+              <a href={p.cvUrl} target="_blank" rel="noopener noreferrer">{p.cvName || 'View CV'}</a>
+            ) : p.hasCv ? (
+              p.cvName || 'uploaded'
+            ) : null}
+          </span>
+          <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()} title="We'll read your CV and pre-fill your profile for you to review">
+            {busyCv ? 'Reading CV…' : p.hasCv ? 'Replace CV & auto-fill' : 'Upload CV & auto-fill'}
+          </button>
+          <input ref={cvInput} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onCv(e)} />
+        </div>
+      </section>
 
-      <div className="pp-cv">
-        <span>
-          {p.hasCv ? 'CV: ' : 'No CV uploaded'}
-          {p.hasCv && p.cvUrl ? (
-            <a href={p.cvUrl} target="_blank" rel="noopener noreferrer">{p.cvName || 'View CV'}</a>
-          ) : p.hasCv ? (
-            p.cvName || 'uploaded'
-          ) : null}
-        </span>
-        <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()} title="We'll read your CV and pre-fill your profile for you to review">
-          {busyCv ? 'Reading CV…' : p.hasCv ? 'Replace CV & auto-fill' : 'Upload CV & auto-fill'}
-        </button>
-        <input ref={cvInput} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onCv(e)} />
-      </div>
-
-      <section className="pp-repeat">
-        <h3>Experience</h3>
+      {/* ─ Section: Experience ─ */}
+      <section className="pp-section pp-repeat">
+        <div className="pp-section__head"><h3>Experience</h3><span className="pp-section__hint">{experience.length} entr{experience.length === 1 ? 'y' : 'ies'}</span></div>
         {experience.map((x, i) => (
-          <div className="pp-row" key={i}>
-            <input placeholder="Title" value={x.title} onChange={(e) => setExp(i, { title: e.target.value })} />
-            <input placeholder="Company" value={x.company} onChange={(e) => setExp(i, { company: e.target.value })} />
-            <input placeholder="From" value={x.start} onChange={(e) => setExp(i, { start: e.target.value })} />
-            <input placeholder="To" value={x.end} onChange={(e) => setExp(i, { end: e.target.value })} />
-            <button type="button" className="link-btn" onClick={() => setExperience((xs) => xs.filter((_, j) => j !== i))}>Remove</button>
+          <div className="pp-entry" key={i}>
+            <div className="pp-row">
+              <input placeholder="Title" value={x.title} onChange={(e) => setExp(i, { title: e.target.value })} />
+              <input placeholder="Company" value={x.company} onChange={(e) => setExp(i, { company: e.target.value })} />
+              <input placeholder="From" value={x.start} onChange={(e) => setExp(i, { start: e.target.value })} />
+              <input placeholder="To" value={x.end} onChange={(e) => setExp(i, { end: e.target.value })} />
+              <button type="button" className="link-btn" onClick={() => setExperience((xs) => xs.filter((_, j) => j !== i))}>Remove</button>
+            </div>
+            <textarea className="pp-textarea pp-entry__desc" rows={2} placeholder="What you did there (optional)" value={x.description ?? ''} onChange={(e) => setExp(i, { description: e.target.value })} />
           </div>
         ))}
         <button type="button" className="link-btn" onClick={() => setExperience((xs) => [...xs, { title: '', company: '', start: '', end: '', description: '' }])}>
@@ -218,8 +236,9 @@ export function ProfessionalProfile() {
         </button>
       </section>
 
-      <section className="pp-repeat">
-        <h3>Education</h3>
+      {/* ─ Section: Education ─ */}
+      <section className="pp-section pp-repeat">
+        <div className="pp-section__head"><h3>Education</h3><span className="pp-section__hint">{education.length} entr{education.length === 1 ? 'y' : 'ies'}</span></div>
         {education.map((x, i) => (
           <div className="pp-row" key={i}>
             <input placeholder="School" value={x.school} onChange={(e) => setEdu(i, { school: e.target.value })} />
@@ -233,10 +252,12 @@ export function ProfessionalProfile() {
         </button>
       </section>
 
-      {msg && <p className={`form-msg${msg.ok ? ' form-msg--ok' : ''}`} role="status">{msg.text}</p>}
-      <button className="btn btn--primary" type="submit" disabled={saving} data-testid="save-professional">
-        {saving ? 'Saving…' : 'Save profile'}
-      </button>
+      <div className="pp-save">
+        {msg && <p className={`form-msg${msg.ok ? ' form-msg--ok' : ''}`} role="status">{msg.text}</p>}
+        <button className="btn btn--primary" type="submit" disabled={saving} data-testid="save-professional">
+          {saving ? 'Saving…' : 'Save profile'}
+        </button>
+      </div>
     </form>
   );
 }
