@@ -5,7 +5,6 @@ import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, TrashIcon } from './Ico
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 
-const STATUS: Record<ApplicationStatus, string> = { applied: 'Applied', shortlisted: 'Shortlisted', rejected: 'Not selected' };
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 const salaryText = (j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>) => {
   const f = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
