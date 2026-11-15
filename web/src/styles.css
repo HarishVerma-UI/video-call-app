@@ -3386,6 +3386,8 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
 
 /* ===== Jobs (three-column redesign) ===== */
 .jobs { max-width: 100%; }
+/* full-bleed pages: let children use the whole width instead of the .page 980px cap */
+.jobs > *, .jobd > * { width: 100%; max-width: none; margin-left: 0; margin-right: 0; }
 .jobs__top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
 .jobs__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); flex: none; }
 .jobs__titles { flex: 1; }
@@ -3399,6 +3401,27 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
 .jobs__main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 @media (max-width: 1100px) { .jobs__grid { grid-template-columns: 220px 1fr; } .jobs__hub { display: none; } }
 @media (max-width: 760px) { .jobs__grid { grid-template-columns: 1fr; } .jobs__side { position: static; } }
+
+/* ===== consistency + mobile polish (new surfaces) ===== */
+@media (max-width: 620px) {
+  .jobd__head-top { flex-wrap: wrap; }
+  .jobd__match { order: -1; margin-left: auto; }
+  .jobd__id h1 { font-size: 1.25rem; }
+  .jobd__crumb { gap: 6px; }
+  .jobd__crumb-id { margin-left: 0; width: 100%; }
+  .jobd__actions { flex-direction: column; }
+  .jobd__actions .btn { width: 100%; }
+}
+/* admin + recruiter sidebar shells collapse to a stacked strip on phones */
+@media (max-width: 620px) {
+  .admin-side { flex-direction: column; align-items: stretch; }
+  .admin-side__brand { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+  .admin-side__nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0; }
+  .admin-side__link { white-space: nowrap; }
+  .admin-side__invite { margin-left: 0; margin-top: 10px; }
+  .rec__head, .admin-dash__head { flex-wrap: wrap; }
+  .rec__head .btn, .admin-dash__head .btn { flex: 1 1 auto; }
+}
 
 .jobs__alert-btn { margin-top: 4px; width: 100%; }
 .jobs__alerts { border-top: 1px solid var(--line); padding-top: 12px; }
