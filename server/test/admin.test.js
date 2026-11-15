@@ -7,9 +7,9 @@ let t;
 before(async () => (t = await startTestApp()));
 after(() => t.app.close());
 
-test('new accounts default to the "user" role', async () => {
+test('new accounts default to the "member" role', async () => {
   const u = await registerUser(t.base, 'Plain User');
-  assert.equal(u.user.role, 'user');
+  assert.equal(u.user.role, 'member');
 });
 
 test('providers endpoint reports which social logins are configured', async () => {
@@ -26,7 +26,7 @@ test('admin routes reject non-admins', async () => {
 
 test('an admin can list, create, update and delete users', async () => {
   const admin = await registerUser(t.base, 'Admin User');
-  await t.store.setRole(admin.user.id, 'admin'); // promote (seeding happens in index.js, not in tests)
+  await t.store.setRole(admin.user.id, 'super_admin'); // promote (seeding happens in index.js, not in tests)
 
   // list
   let res = await api(t.base, 'GET', '/api/admin/users', null, admin.token);
@@ -36,10 +36,10 @@ test('an admin can list, create, update and delete users', async () => {
 
   // create
   const email = `created-${Date.now()}@example.com`;
-  res = await api(t.base, 'POST', '/api/admin/users', { name: 'Created Person', email, password: 'secret-123', role: 'user' }, admin.token);
+  res = await api(t.base, 'POST', '/api/admin/users', { name: 'Created Person', email, password: 'secret-123', role: 'member' }, admin.token);
   assert.equal(res.status, 201);
   const id = res.body.user.id;
-  assert.equal(res.body.user.role, 'user');
+  assert.equal(res.body.user.role, 'member');
   assert.equal(res.body.user.email, email);
 
   // the created user can sign in with the password the admin set
@@ -47,13 +47,13 @@ test('an admin can list, create, update and delete users', async () => {
   assert.equal(res.status, 200);
 
   // update (rename + promote)
-  res = await api(t.base, 'PATCH', `/api/admin/users/${id}`, { name: 'Renamed', role: 'admin' }, admin.token);
+  res = await api(t.base, 'PATCH', `/api/admin/users/${id}`, { name: 'Renamed', role: 'recruiter' }, admin.token);
   assert.equal(res.status, 200);
   assert.equal(res.body.user.name, 'Renamed');
-  assert.equal(res.body.user.role, 'admin');
+  assert.equal(res.body.user.role, 'recruiter');
 
-  // admins can't strip their own admin role or delete themselves
-  res = await api(t.base, 'PATCH', `/api/admin/users/${admin.user.id}`, { role: 'user' }, admin.token);
+  // super-admins can't strip their own super-admin role or delete themselves
+  res = await api(t.base, 'PATCH', `/api/admin/users/${admin.user.id}`, { role: 'member' }, admin.token);
   assert.equal(res.status, 400);
   res = await api(t.base, 'DELETE', `/api/admin/users/${admin.user.id}`, null, admin.token);
   assert.equal(res.status, 400);
@@ -72,8 +72,9 @@ test('admin stats endpoint returns dashboard data', async () => {
   const res = await api(t.base, 'GET', '/api/admin/stats', null, admin.token);
   assert.equal(res.status, 200);
   assert.ok(typeof res.body.totalUsers === 'number');
-  assert.ok(typeof res.body.byRole.admin === 'number');
-  assert.ok(typeof res.body.byRole.user === 'number');
+  assert.ok(typeof res.body.byRole.super_admin === 'number');
+  assert.ok(typeof res.body.byRole.member === 'number');
+  assert.ok(typeof res.body.byRole.recruiter === 'number');
   assert.ok(Array.isArray(res.body.dailyActivity));
   assert.equal(res.body.dailyActivity.length, 7);
   assert.ok(typeof res.body.activeCalls.rooms === 'number');

@@ -1,4 +1,4 @@
-import { ApiError, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type UserRole } from '@vca/shared';
+import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
@@ -87,7 +87,7 @@ function UserForm({ editing, selfId, onClose, onSaved }: { editing: AuthUser | n
   const { api } = useAuth();
   const isNew = !editing;
   const isSelf = !!editing && editing.id === selfId;
-  const [d, setD] = useState<Draft>({ name: editing?.name ?? '', email: editing?.email ?? '', password: '', role: (editing?.role as UserRole) ?? 'user' });
+  const [d, setD] = useState<Draft>({ name: editing?.name ?? '', email: editing?.email ?? '', password: '', role: (editing?.role as UserRole) ?? 'member' });
   const [err, setErr] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,8 +151,9 @@ function UserForm({ editing, selfId, onClose, onSaved }: { editing: AuthUser | n
               onChange={(e: ChangeEvent<HTMLSelectElement>) => setD({ ...d, role: e.target.value as UserRole })}
               data-testid="user-role"
             >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="recruiter">Recruiter</option>
+              <option value="super_admin">Super Admin</option>
             </select>
           </div>
           <span className="line__rule" />
@@ -193,7 +194,7 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AuthUser; isSelf: boolean
         <strong>{u.name || '—'}</strong>
         <span>{u.email || 'No email'}</span>
       </div>
-      <span className={`pill pill--${u.role === 'admin' ? 'admin' : 'user'}`}>{u.role === 'admin' ? 'Admin' : 'User'}</span>
+      <span className={`pill pill--role-${u.role ?? 'member'}`}>{ROLE_LABEL[(u.role ?? 'member') as UserRole] ?? u.role}</span>
       <div className="admin-dir__menu" ref={ref}>
         <button className="icon-btn admin-dir__dots" onClick={() => setOpen(!open)} aria-label="Actions" title="Actions">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>

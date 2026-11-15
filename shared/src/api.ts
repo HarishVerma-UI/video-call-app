@@ -2,13 +2,28 @@ import type { ChatMessage } from './protocol';
 
 // Tiny typed client for the server's REST API, shared by web and mobile.
 
-export type UserRole = 'user' | 'admin';
+export type UserRole = 'member' | 'recruiter' | 'super_admin';
+
+/** Normalize any stored/legacy role string ('user'→member, 'admin'→super_admin). */
+export function normalizeRole(role?: string | null): UserRole {
+  if (role === 'super_admin' || role === 'admin') return 'super_admin';
+  if (role === 'recruiter') return 'recruiter';
+  return 'member';
+}
+export const isSuperAdmin = (role?: string | null): boolean => normalizeRole(role) === 'super_admin';
+export const isRecruiter = (role?: string | null): boolean => normalizeRole(role) === 'recruiter';
+/** Recruiters and super-admins — anyone with a back-office dashboard. */
+export const isStaff = (role?: string | null): boolean => {
+  const r = normalizeRole(role);
+  return r === 'recruiter' || r === 'super_admin';
+};
+export const ROLE_LABEL: Record<UserRole, string> = { member: 'Member', recruiter: 'Recruiter', super_admin: 'Super Admin' };
 
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  /** 'admin' can open the admin dashboard; everyone else is 'user'. */
+  /** 'super_admin' opens the platform console, 'recruiter' the talent dashboard; others are 'member'. */
   role?: UserRole;
   /** false for accounts created via social login only (they can add a password). */
   hasPassword?: boolean;
@@ -270,7 +285,7 @@ export interface ActiveRoom {
 
 export interface AdminStats {
   totalUsers: number;
-  byRole: { admin: number; user: number };
+  byRole: { member: number; recruiter: number; super_admin: number };
   recentSignups: number;
   recentLogins: number;
   dailyActivity: { day: string; count: number }[];

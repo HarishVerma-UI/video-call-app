@@ -1,4 +1,4 @@
-import { ApiError, type Ad, type ApiClient, type ConnectionState, type Post, type Profile } from '@vca/shared';
+import { ApiError, isSuperAdmin, type Ad, type ApiClient, type ConnectionState, type Post, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { ago } from '../../format';
@@ -414,7 +414,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
         ) : (
           <>
             {searchQuery.trim() && <h3 className="feed-people__title feed-people__title--posts">Posts</h3>}
-            {displayPosts.map((p) => <PostCard key={p.id} post={p} api={api} me={user.id} isAdmin={user.role === 'admin'} onChange={update} onDelete={remove} nav={nav} />)}
+            {displayPosts.map((p) => <PostCard key={p.id} post={p} api={api} me={user.id} isAdmin={isSuperAdmin(user.role)} onChange={update} onDelete={remove} nav={nav} />)}
             {!searchQuery && hasMore && <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />}
           </>
         )}

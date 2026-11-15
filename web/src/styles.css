@@ -2619,6 +2619,9 @@ svg {
 
 .pill--admin { background: var(--accent-soft); color: var(--accent); }
 .pill--user { background: var(--surface-3); color: var(--muted); }
+.pill--role-super_admin { background: var(--accent-soft); color: var(--accent); }
+.pill--role-recruiter { background: var(--spark-soft); color: var(--accent-text, var(--accent)); }
+.pill--role-member { background: var(--surface-3); color: var(--muted); }
 .line__hint { color: var(--faint); font-size: 0.8rem; margin: 4px 0 0; }
 
 /* ===== modal ===== */

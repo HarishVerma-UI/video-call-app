@@ -10,6 +10,7 @@ import { HttpError, readJson, sendJson } from '../http.js';
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
 import { publicApplication, publicJob, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
+import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const cleanName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
@@ -27,7 +28,7 @@ function passwordError(pw) {
   if (!/[a-zA-Z]/.test(pw) || !/\d/.test(pw)) return 'Include at least one letter and one number.';
   return null;
 }
-const roleOk = (r) => r === 'user' || r === 'admin';
+const roleOk = (r) => isValidRole(r);
 
 /**
  * @param {{ store: any, requireUser: (req)=>Promise<any>, log?: Function, getStats?: ()=>object, social?: object }} opts
@@ -35,7 +36,7 @@ const roleOk = (r) => r === 'user' || r === 'admin';
 export function createAdmin(opts) {
   async function requireAdmin(req) {
     const user = await opts.requireUser(req);
-    if (user.role !== 'admin') throw new HttpError(403, 'Admins only.', { code: 'forbidden' });
+    if (!isSuperAdmin(user.role)) throw new HttpError(403, 'Super-admins only.', { code: 'forbidden' });
     return user;
   }
 
@@ -55,7 +56,7 @@ export function createAdmin(opts) {
     const name = cleanName(body?.name);
     const email = cleanEmail(body?.email);
     const password = typeof body?.password === 'string' ? body.password : '';
-    const role = body?.role ?? 'user';
+    const role = body?.role ?? 'member';
 
     const fields = {};
     const ne = nameError(name);
@@ -64,7 +65,7 @@ export function createAdmin(opts) {
     if (ne) fields.name = ne;
     if (ee) fields.email = ee;
     if (pe) fields.password = pe;
-    if (!roleOk(role)) fields.role = 'Role must be "user" or "admin".';
+    if (!roleOk(role)) fields.role = 'Role must be member, recruiter, or super_admin.';
     if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
 
     let user;
@@ -101,8 +102,8 @@ export function createAdmin(opts) {
       else patch.email = email;
     }
     if (body.role !== undefined) {
-      if (!roleOk(body.role)) fields.role = 'Role must be "user" or "admin".';
-      else if (target.id === admin.id && body.role !== 'admin') fields.role = 'You can’t remove your own admin access.';
+      if (!roleOk(body.role)) fields.role = 'Role must be member, recruiter, or super_admin.';
+      else if (target.id === admin.id && normalizeRole(body.role) !== 'super_admin') fields.role = 'You can’t remove your own super-admin access.';
       else patch.role = body.role;
     }
     if (body.password !== undefined && body.password !== '') {
@@ -343,8 +344,8 @@ export function createAdmin(opts) {
   async function statsHandler(req, res) {
     await requireAdmin(req);
     const [users, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
-    const byRole = { admin: 0, user: 0 };
-    for (const u of users) byRole[u.role || 'user']++;
+    const byRole = { member: 0, recruiter: 0, super_admin: 0 };
+    for (const u of users) byRole[normalizeRole(u.role)]++;
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const recentSignups = users.filter((u) => new Date(u.createdAt).getTime() > weekAgo).length;
