@@ -327,7 +327,42 @@ export function createAdmin(opts) {
       return { day: d.toLocaleDateString('en', { weekday: 'short' }), count };
     });
     const extra = typeof opts.getStats === 'function' ? opts.getStats() : { activeCalls: { rooms: 0, participants: 0 }, activeRooms: [], uptimeSec: 0 };
-    sendJson(res, 200, { totalUsers: total, byRole, recentSignups, recentLogins, dailyActivity, ...extra });
+
+    // Platform (jobs & applications) metrics for the super-admin console.
+    const platform = { jobsTotal: 0, jobsActive: 0, jobsByCategory: { tech: 0, 'non-tech': 0 }, applicationsTotal: 0, applicationsByStatus: { applied: 0, shortlisted: 0, rejected: 0 } };
+    const jobsStore = opts.social?.jobs;
+    if (jobsStore) {
+      const jobs = await jobsStore.list({ activeOnly: false });
+      platform.jobsTotal = jobs.length;
+      for (const j of jobs) {
+        if (j.active !== false) platform.jobsActive++;
+        platform.jobsByCategory[j.category === 'non-tech' ? 'non-tech' : 'tech']++;
+      }
+      const ids = jobs.map((j) => j.id);
+      const apps = ids.length ? await jobsStore.applicationsForJobIds(ids) : [];
+      platform.applicationsTotal = apps.length;
+      for (const a of apps) if (platform.applicationsByStatus[a.status] !== undefined) platform.applicationsByStatus[a.status]++;
+    }
+
+    sendJson(res, 200, { totalUsers: total, byRole, recentSignups, recentLogins, dailyActivity, ...platform, ...extra });
+  }
+
+  async function listRecruiters(req, res) {
+    await requireAdmin(req);
+    const users = await opts.store.list({ limit: 500 });
+    const recruiters = users.filter((u) => ['recruiter', 'super_admin'].includes(normalizeRole(u.role)));
+    const jobsStore = opts.social?.jobs;
+    const counts = jobsStore ? await jobsStore.applicantCounts() : {};
+    const allJobs = jobsStore ? await jobsStore.list({ activeOnly: false }) : [];
+    const out = recruiters.map((u) => {
+      const theirs = allJobs.filter((j) => j.postedBy === u.id);
+      return {
+        ...publicUser(u),
+        jobCount: theirs.length,
+        applicantCount: theirs.reduce((s, j) => s + (counts[j.id] ?? 0), 0),
+      };
+    });
+    sendJson(res, 200, { recruiters: out });
   }
 
   /** Returns true if the request was an admin route (and has been answered). */
@@ -336,6 +371,7 @@ export function createAdmin(opts) {
     if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res, url);
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
+    else if (pathname === '/api/admin/recruiters' && req.method === 'GET') await listRecruiters(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'GET') await listAds(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
     else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
