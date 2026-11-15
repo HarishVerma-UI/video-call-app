@@ -585,23 +585,7 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
           </label>
           <label className="jobs__remote"><input type="checkbox" checked={!!filters.remote} onChange={(e) => set('remote', e.target.checked)} /> Remote only</label>
           {activeFilters && <button className="link-btn" onClick={clearFilters} data-testid="clear-filters">Clear filters</button>}
-
-          <button className="btn btn--primary jobs__alert-btn" onClick={saveAlert}>🔔 Create job alert</button>
-          <div className="jobs__alerts">
-            <strong>Job alerts</strong>
-            {alerts.length === 0 ? (
-              <p>Save a search to get a quick filter here.</p>
-            ) : (
-              <ul>
-                {alerts.map((a) => (
-                  <li key={a.id}>
-                    <button className="jobs__alert-chip" onClick={() => setFilters(a.filters)} title="Apply this search">{a.label}</button>
-                    <button className="jobs__alert-x" onClick={() => persistAlerts(alerts.filter((x) => x.id !== a.id))} aria-label="Remove alert">×</button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+ 
         </aside>
 
         {/* center: list or my applications */}

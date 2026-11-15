@@ -152,50 +152,34 @@ test.describe('UI: Feed visibility', () => {
   });
 });
 
-test.describe('UI: People tab', () => {
-  test('newly registered user appears in People tab', async ({ page, request }) => {
-    const target = freshCreds('Visible Person');
-    const viewer = freshCreds('Viewer');
-
-    await request.post('/api/auth/register', { data: target });
-    const viewerRes = await (await request.post('/api/auth/register', { data: viewer })).json();
-
-    // Viewer logs in
-    await page.goto('/');
-    await page.getByLabel(/email/i).fill(viewer.email);
-    await page.getByLabel(/password/i).fill(viewer.password);
-    await page.getByRole('button', { name: /sign in|log in/i }).click();
-    await expect(page.locator('[data-testid="rail-people"]')).toBeVisible({ timeout: 5000 });
-
-    // Navigate to People tab
-    await page.locator('[data-testid="rail-people"]').click();
-
-    // Should see the target user listed
-    await expect(page.getByText(target.name)).toBeVisible({ timeout: 5000 });
-  });
-
-  test('search finds a user by name', async ({ page, request }) => {
-    const target = freshCreds('Searchable Unicorn');
-    const searcher = freshCreds('SearchUser');
+test.describe('UI: People search', () => {
+  test('global search finds registered people from Home', async ({ page, request }) => {
+    const target = freshCreds('Searchable Person');
+    const searcher = freshCreds('Searcher');
 
     await request.post('/api/auth/register', { data: target });
     await request.post('/api/auth/register', { data: searcher });
 
-    // Searcher logs in
     await page.goto('/');
     await page.getByLabel(/email/i).fill(searcher.email);
     await page.getByLabel(/password/i).fill(searcher.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();
-    await expect(page.locator('[data-testid="rail-people"]')).toBeVisible({ timeout: 5000 });
 
-    // Go to People tab and search
-    await page.locator('[data-testid="rail-people"]').click();
-    const searchInput = page.getByPlaceholder(/search|find/i);
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('Unicorn');
-      // Wait for results
-      await expect(page.getByText(target.name)).toBeVisible({ timeout: 5000 });
-    }
+    await page.getByTestId('global-search').fill(target.name);
+    await expect(page.getByText(target.name)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('legacy /people URL redirects to Home', async ({ page, request }) => {
+    const user = freshCreds('LegacyRouteUser');
+    await request.post('/api/auth/register', { data: user });
+    await page.goto('/');
+    await page.getByLabel(/email/i).fill(user.email);
+    await page.getByLabel(/password/i).fill(user.password);
+    await page.getByRole('button', { name: /sign in|log in/i }).click();
+
+    await page.goto('/people');
+    await expect(page).toHaveURL('/');
+    await expect(page.locator('[data-testid="rail-feed"]')).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -209,10 +193,6 @@ test.describe('UI: Navigation', () => {
     await page.getByLabel(/password/i).fill(user.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();
     await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
-
-    // Navigate to People
-    await page.locator('[data-testid="rail-people"]').click();
-    await expect(page).toHaveURL(/\/people/);
 
     // Navigate to Network
     await page.locator('[data-testid="rail-network"]').click();

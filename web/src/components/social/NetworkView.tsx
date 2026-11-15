@@ -46,7 +46,7 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
   return (
     <section className="network-layout" aria-label="Your network" data-testid="network">
       <div className="network-main">
-        <h1 className="social-head">Your network</h1>
+        <h3 className="social-head">Your network</h3>
 
         {/* Stats bar */}
         <div className="network-stats">
