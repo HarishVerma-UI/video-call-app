@@ -7,6 +7,7 @@ import { Avatar } from './RoomBadge';
 import { uploadFile } from '../upload';
 
 type Draft = { name: string; email: string; password: string; role: UserRole };
+const ADMIN_DIRECTORY_PAGE_SIZE = 50;
 
 const fmtUptime = (sec: number) => {
   const d = Math.floor(sec / 86400);
@@ -885,38 +886,78 @@ function JobsManager() {
 export function AdminView() {
   const { api, user } = useAuth();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
-  const [total, setTotal] = useState(0);
+  const [recentUsers, setRecentUsers] = useState<AdminUser[]>([]);
+  const [recruiterRequests, setRecruiterRequests] = useState<AuthUser[] | null>(null);
+  const [directoryTotal, setDirectoryTotal] = useState(0);
+  const [directoryPage, setDirectoryPage] = useState(1);
+  const [directorySearch, setDirectorySearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [directoryLoading, setDirectoryLoading] = useState(true);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<AuthUser | null>(null);
   const [showForm, setShowForm] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadDirectory = useCallback(async (page = 1, search = directorySearch) => {
+    setDirectoryLoading(true);
     setError(null);
     try {
-      const [usersRes, statsRes] = await Promise.all([api.adminListUsers(), api.adminStats()]);
+      const usersRes = await api.adminListUsers({ page, limit: ADMIN_DIRECTORY_PAGE_SIZE, search });
       setUsers(usersRes.users);
-      setTotal(usersRes.total);
+      setDirectoryTotal(usersRes.total);
+      setDirectoryPage(usersRes.page);
+      if (page === 1 && !search) setRecentUsers(usersRes.users);
+    } catch (ex) {
+      setError(ex instanceof ApiError ? ex.message : 'Could not load users.');
+      setUsers((current) => current ?? []);
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }, [api, directorySearch]);
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [statsRes, requestsRes] = await Promise.all([
+        api.adminStats(),
+        api.adminListRecruiterRequests(),
+      ]);
       setStats(statsRes);
+      setRecruiterRequests(requestsRes.requests);
     } catch (ex) {
       setError(ex instanceof ApiError ? ex.message : 'Could not load dashboard data.');
-      setUsers([]);
     }
   }, [api]);
 
   useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 30000);
+    void loadDirectory();
+  }, [loadDirectory]);
+
+  useEffect(() => {
+    void loadDashboard();
+    const t = setInterval(() => void loadDashboard(), 30000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [loadDashboard]);
+
+  const changeDirectoryPage = (page: number) => {
+    if (page < 1 || directoryLoading) return;
+    void loadDirectory(page);
+  };
+  const applyDirectorySearch = (event: FormEvent) => {
+    event.preventDefault();
+    const nextSearch = searchInput.trim();
+    setDirectoryPage(1);
+    if (nextSearch === directorySearch) void loadDirectory(1, nextSearch);
+    else setDirectorySearch(nextSearch);
+  };
 
   const openNew = () => { setEditing(null); setShowForm(true); };
   const openEdit = (u: AuthUser) => { setEditing(u); setShowForm(true); };
   const onSaved = (_u: AuthUser, verb: string) => {
     setShowForm(false);
     setFlash(`${_u.name || _u.email} ${verb}.`);
-    void load();
+    void loadDirectory(1);
+    void loadDashboard();
   };
   const remove = async (u: AuthUser) => {
     if (!window.confirm(`Delete ${u.name || u.email}? This cannot be undone.`)) return;
@@ -925,9 +966,22 @@ export function AdminView() {
     try {
       await api.adminDeleteUser(u.id);
       setFlash(`Deleted ${u.name || u.email}.`);
-      void load();
+      void loadDirectory(Math.max(1, directoryPage - (users?.length === 1 ? 1 : 0)));
+      void loadDashboard();
     } catch (ex) {
       setError(ex instanceof ApiError ? ex.message : 'Could not delete this user.');
+    }
+  };
+  const reviewRecruiterRequest = async (request: AuthUser, status: 'approved' | 'rejected') => {
+    setError(null);
+    setFlash(null);
+    try {
+      await api.adminUpdateUser(request.id, { recruiterApplicationStatus: status });
+      setFlash(`${request.name || request.email}’s recruiter request was ${status}.`);
+      void loadDirectory(directoryPage);
+      void loadDashboard();
+    } catch (ex) {
+      setError(ex instanceof ApiError ? ex.message : 'Could not review this recruiter request.');
     }
   };
 
@@ -958,8 +1012,8 @@ export function AdminView() {
       }
     }
   }
-  if (users) {
-    const sorted = [...users].sort((a, b) => {
+  if (recentUsers.length) {
+    const sorted = [...recentUsers].sort((a, b) => {
       const ta = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0;
       const tb = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0;
       return tb - ta;
@@ -967,13 +1021,14 @@ export function AdminView() {
     for (const u of sorted.slice(0, 6)) {
       if (u.lastLoginAt) recentActivity.push({ icon: 'login', text: `${u.name || u.email} signed in`, time: ago(u.lastLoginAt) });
     }
-    const newUsers = [...users].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const newUsers = [...recentUsers].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     for (const u of newUsers.slice(0, 3)) {
       recentActivity.push({ icon: 'signup', text: `${u.name || u.email} registered`, time: ago(u.createdAt) });
     }
   }
 
-  const loading = users === null;
+  const total = stats?.totalUsers ?? 0;
+  const loading = stats === null;
 
   return (
     <div className="admin-shell">
@@ -996,6 +1051,7 @@ export function AdminView() {
       <nav className="admin-dash__nav" aria-label="Dashboard sections">
         <a href="#overview">Overview</a>
         <a href="#users">Users</a>
+        <a href="#recruiter-requests">Recruiter requests{recruiterRequests?.length ? ` (${recruiterRequests.length})` : ''}</a>
         <a href="#recruiters">Recruiters</a>
         <a href="#jobs">Jobs</a>
         <a href="#audit">Activity</a>
@@ -1020,10 +1076,41 @@ export function AdminView() {
           <header className="card__head">
             <h2><PeopleIcon width={18} height={18} /> User Directory</h2>
           </header>
-          {loading ? (
+          <div className="admin-dir__toolbar">
+            <form className="admin-dir__search" onSubmit={applyDirectorySearch}>
+              <input
+                type="search"
+                aria-label="Search users by name, email, or role"
+                placeholder="Search name, email, or role"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                maxLength={100}
+              />
+              <button className="btn btn--secondary btn--small" type="submit" disabled={directoryLoading}>Search</button>
+              {(searchInput || directorySearch) && (
+                <button
+                  className="btn btn--secondary btn--small"
+                  type="button"
+                  onClick={() => {
+                    setSearchInput('');
+                    setDirectoryPage(1);
+                    if (!directorySearch) void loadDirectory(1, '');
+                    else setDirectorySearch('');
+                  }}
+                  disabled={directoryLoading}
+                >
+                  Clear
+                </button>
+              )}
+            </form>
+            <span className="admin-dir__count" aria-live="polite">
+              Showing {directoryTotal === 0 ? 0 : (directoryPage - 1) * ADMIN_DIRECTORY_PAGE_SIZE + 1}–{Math.min(directoryPage * ADMIN_DIRECTORY_PAGE_SIZE, directoryTotal)} of {directoryTotal} users
+            </span>
+          </div>
+          {directoryLoading ? (
             <div className="skeleton-list" aria-hidden="true"><i /></div>
           ) : users!.length === 0 ? (
-            <p className="card__empty">No accounts yet.</p>
+            <p className="card__empty">{directorySearch ? 'No users match that search.' : 'No accounts yet.'}</p>
           ) : (
             <div className="admin-dir__table-wrap">
               <table className="admin-users-table" data-testid="user-table">
@@ -1057,6 +1144,27 @@ export function AdminView() {
               </table>
             </div>
           )}
+          <footer className="admin-dir__pagination">
+            <span>Page {directoryPage} of {Math.max(1, Math.ceil(directoryTotal / ADMIN_DIRECTORY_PAGE_SIZE))}</span>
+            <div>
+              <button
+                className="btn btn--secondary btn--small"
+                type="button"
+                onClick={() => changeDirectoryPage(directoryPage - 1)}
+                disabled={directoryPage <= 1 || directoryLoading}
+              >
+                Previous
+              </button>
+              <button
+                className="btn btn--secondary btn--small"
+                type="button"
+                onClick={() => changeDirectoryPage(directoryPage + 1)}
+                disabled={directoryPage >= Math.ceil(directoryTotal / ADMIN_DIRECTORY_PAGE_SIZE) || directoryLoading}
+              >
+                Next
+              </button>
+            </div>
+          </footer>
         </div>
 
         {/* right column */}
@@ -1091,6 +1199,43 @@ export function AdminView() {
           </div>
         </div>
       </div>
+
+      <section className="card admin-dash__requests" id="recruiter-requests" aria-labelledby="recruiter-requests-title">
+        <header className="card__head">
+          <div>
+            <h2 id="recruiter-requests-title">Recruiter applications</h2>
+            <p>Approve an application to grant access to recruiter tools and job requirements.</p>
+          </div>
+          {recruiterRequests && <span className="pill">{recruiterRequests.length} pending</span>}
+        </header>
+        {recruiterRequests === null ? (
+          <div className="skeleton-list" aria-hidden="true"><i /></div>
+        ) : recruiterRequests.length === 0 ? (
+          <p className="card__empty">No pending recruiter applications.</p>
+        ) : (
+          <ul className="admin-requests">
+            {recruiterRequests.map((request) => {
+              const application = request.recruiterApplication;
+              if (!application) return null;
+              return (
+                <li key={request.id} className="admin-requests__item">
+                  <div className="admin-requests__content">
+                    <strong>{request.name}</strong>
+                    <span>{request.email} · {application.company}</span>
+                    {application.website && <a href={application.website} target="_blank" rel="noreferrer">{application.website}</a>}
+                    <p>{application.reason}</p>
+                    <small>Requested {new Date(application.requestedAt).toLocaleDateString()}</small>
+                  </div>
+                  <div className="admin-requests__actions">
+                    <button className="btn btn--primary btn--small" onClick={() => void reviewRecruiterRequest(request, 'approved')}>Approve</button>
+                    <button className="btn btn--secondary btn--small" onClick={() => void reviewRecruiterRequest(request, 'rejected')}>Reject</button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       {/* ─ bottom row ─ */}
       <div className="admin-dash__bottom" id="audit">

@@ -77,8 +77,8 @@ export function createApp(
   const logStore = createLogStore();
   log = logStore.wrapLog(log); // capture every log line for the /logs UI
   const chatPosts = createRateLimiter({ limit: 5, windowMs: 5000 });
-  const onRegister = async (user) => {
-    await social.profiles.upsert(user.id, { name: user.name });
+  const onRegister = async (user, profile = {}) => {
+    await social.profiles.upsert(user.id, { ...profile, name: user.name });
     log(`social auto-profile created for ${user.id}`);
   };
   const auth = createAuth({

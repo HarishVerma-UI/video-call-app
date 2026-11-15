@@ -19,6 +19,16 @@ export const isStaff = (role?: string | null): boolean => {
 };
 export const ROLE_LABEL: Record<UserRole, string> = { member: 'Member', recruiter: 'Recruiter', super_admin: 'Super Admin' };
 
+export interface RecruiterApplication {
+  status: 'pending' | 'approved' | 'rejected';
+  company: string;
+  website: string;
+  reason: string;
+  requestedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -29,6 +39,7 @@ export interface AuthUser {
   hasPassword?: boolean;
   /** OAuth provider when the account was created via social login, else null. */
   provider?: string | null;
+  recruiterApplication?: RecruiterApplication | null;
   createdAt: string;
   lastLoginAt?: string | null;
 }
@@ -333,8 +344,23 @@ export interface RecruiterSummary extends AuthUser {
 }
 
 export interface ApiClient {
-  register(input: { name: string; email: string; password: string }): Promise<AuthResponse>;
-  login(input: { email: string; password: string }): Promise<AuthResponse>;
+  register(input: {
+    name: string;
+    email: string;
+    password: string;
+    profile?: {
+      headline?: string;
+      location?: string;
+      expectedSalary?: string;
+      mobile?: string;
+      skills?: string[];
+      experience?: Experience[];
+      education?: Education[];
+    };
+    applyAsRecruiter?: boolean;
+    recruiterApplication?: { company: string; website?: string; reason: string };
+  }): Promise<AuthResponse>;
+  login(input: { email: string; password: string; mode?: 'user' | 'recruiter' }): Promise<AuthResponse>;
   me(): Promise<{ user: AuthUser }>;
   /** Change name and/or email (email needs currentPassword). Returns a fresh token. */
   updateProfile(input: { name?: string; email?: string; currentPassword?: string }): Promise<AuthResponse>;
@@ -344,12 +370,13 @@ export interface ApiClient {
   providers(): Promise<{ providers: Providers }>;
 
   // --- admin dashboard (admin role only) ---
-  adminListUsers(): Promise<{ users: AdminUser[]; total: number }>;
+  adminListUsers(input?: { page?: number; limit?: number; search?: string }): Promise<{ users: AdminUser[]; total: number; page: number; limit: number }>;
   adminCreateUser(input: { name: string; email: string; password: string; role?: UserRole }): Promise<{ user: AuthUser }>;
-  adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string }): Promise<{ user: AuthUser }>;
+  adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string; recruiterApplicationStatus?: 'approved' | 'rejected' }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
   adminStats(): Promise<AdminStats>;
   adminListRecruiters(): Promise<{ recruiters: RecruiterSummary[] }>;
+  adminListRecruiterRequests(): Promise<{ requests: AuthUser[] }>;
 
   // --- ads (admin manages; everyone sees active ones in the feed) ---
   ads(): Promise<{ ads: Ad[] }>;
@@ -472,12 +499,17 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     updateProfile: (input) => request('PATCH', '/api/auth/me', input),
     changePassword: (input) => request('POST', '/api/auth/password', input),
     providers: () => request('GET', '/api/auth/providers'),
-    adminListUsers: () => request('GET', '/api/admin/users?limit=100'),
+    adminListUsers: ({ page = 1, limit = 50, search = '' } = {}) => {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) params.set('search', search.trim());
+      return request('GET', `/api/admin/users?${params}`);
+    },
     adminCreateUser: (input) => request('POST', '/api/admin/users', input),
     adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),
     adminStats: () => request('GET', '/api/admin/stats'),
     adminListRecruiters: () => request('GET', '/api/admin/recruiters'),
+    adminListRecruiterRequests: () => request('GET', '/api/admin/recruiter-applications'),
     ads: () => request('GET', '/api/ads'),
     stats: () => request('GET', '/api/stats'),
     notifications: () => request('GET', '/api/notifications'),

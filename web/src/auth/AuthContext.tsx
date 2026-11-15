@@ -18,8 +18,8 @@ interface AuthValue {
   token: string | null;
   api: ApiClient;
   /** `beforeEnter` runs after the server accepts, before the app switches screens (for the exit animation). */
-  login: (email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
-  register: (name: string, email: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
+  login: (email: string, password: string, mode?: 'user' | 'recruiter', beforeEnter?: () => Promise<void>) => Promise<void>;
+  register: (input: Parameters<ApiClient['register']>[0], beforeEnter?: () => Promise<void>) => Promise<void>;
   logout: (reason?: string) => void;
   /** Change name/email; keeps you signed in with the fresh token. */
   updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
@@ -174,14 +174,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api,
     notice,
     logout,
-    login: async (email, password, beforeEnter) => {
-      const r = await api.login({ email, password });
+    login: async (email, password, mode = 'user', beforeEnter) => {
+      const r = await api.login({ email, password, mode });
       await beforeEnter?.();
       accept(r);
     },
-    register: async (name, email, password, beforeEnter) => {
-      const r = await api.register({ name, email, password });
-      await beforeEnter?.();
+    register: async (input, beforeEnter) => {
+      const r = await api.register(input);
+      tokenRef.current = r.token;
+      try {
+        await beforeEnter?.();
+      } catch (error) {
+        tokenRef.current = null;
+        throw error;
+      }
       accept(r);
     },
     updateProfile: async (input) => {

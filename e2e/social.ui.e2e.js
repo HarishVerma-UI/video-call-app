@@ -22,6 +22,8 @@ async function registerViaUI(page, creds) {
   await page.getByLabel(/email/i).fill(creds.email);
   await page.getByLabel(/password/i).fill(creds.password);
   await page.getByTestId('password-submit').click();
+  await expect(page.getByRole('heading', { name: 'Professional profile' })).toBeVisible();
+  await page.getByTestId('password-submit').click();
   // Wait for the app shell to load (feed is the default view)
   await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
 }

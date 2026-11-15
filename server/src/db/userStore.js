@@ -12,8 +12,8 @@
 //   adminUpdate(id, { name?, email?, role?, passwordHash? }) -> user  (throws DuplicateEmailError)
 //   setPassword(id, passwordHash, { revokeSessions }) -> user  (by default bumps tokenVersion)
 //   setRole(id, role) -> user
-//   list({ limit?, skip? }) -> user[]                 (newest first; for the admin dashboard)
-//   count() -> number
+//   list({ limit?, skip?, search? }) -> user[]        (newest first; for the admin dashboard)
+//   count({ search? }) -> number
 //   remove(id) -> boolean
 //   ping() -> void
 //   close() -> void
@@ -33,6 +33,11 @@ export class DuplicateEmailError extends Error {
   }
 }
 
+function userSearchPattern(search) {
+  const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+}
+
 /** Shape sent to clients — never includes the password hash. */
 export function publicUser(u) {
   if (!u) return null;
@@ -43,6 +48,7 @@ export function publicUser(u) {
     role: normalizeRole(u.role),
     hasPassword: !!u.passwordHash,
     provider: u.provider ?? null,
+    recruiterApplication: u.recruiterApplication ?? null,
     createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
     lastLoginAt: u.lastLoginAt instanceof Date ? u.lastLoginAt.toISOString() : (u.lastLoginAt ?? null),
   };
@@ -54,7 +60,7 @@ export function createMemoryUserStore() {
   const byEmail = new Map();
   return {
     kind: 'memory',
-    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null }) {
+    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null, recruiterApplication = null }) {
       if (email && byEmail.has(email)) throw new DuplicateEmailError();
       const now = new Date();
       const user = {
@@ -65,6 +71,7 @@ export function createMemoryUserStore() {
         role,
         provider,
         providerId,
+        recruiterApplication,
         tokenVersion: 0,
         createdAt: now,
         lastLoginAt: null,
@@ -101,7 +108,7 @@ export function createMemoryUserStore() {
       if (name) u.name = name;
       return { ...u };
     },
-    async adminUpdate(id, { name, email, role, passwordHash }) {
+    async adminUpdate(id, { name, email, role, passwordHash, recruiterApplication }) {
       const u = byId.get(id);
       if (!u) return null;
       if (email && email !== u.email) {
@@ -112,6 +119,7 @@ export function createMemoryUserStore() {
       }
       if (name) u.name = name;
       if (role) u.role = role;
+      if (recruiterApplication !== undefined) u.recruiterApplication = recruiterApplication;
       if (passwordHash !== undefined) {
         u.passwordHash = passwordHash;
         u.tokenVersion = (u.tokenVersion ?? 0) + 1; // force re-login on password reset
@@ -131,14 +139,20 @@ export function createMemoryUserStore() {
       u.role = role;
       return { ...u };
     },
-    async list({ limit = 500, skip = 0 } = {}) {
+    async list({ limit = 500, skip = 0, search = '' } = {}) {
+      const query = search.trim().toLowerCase();
       return [...byId.values()]
+        .filter((user) => !query || [user.name, user.email, normalizeRole(user.role)].some((value) => String(value ?? '').toLowerCase().includes(query)))
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(skip, skip + limit)
         .map((u) => ({ ...u }));
     },
-    async count() {
-      return byId.size;
+    async count({ search = '' } = {}) {
+      const query = search.trim().toLowerCase();
+      if (!query) return byId.size;
+      return [...byId.values()].filter((user) =>
+        [user.name, user.email, normalizeRole(user.role)].some((value) => String(value ?? '').toLowerCase().includes(query)),
+      ).length;
     },
     async remove(id) {
       const u = byId.get(id);
@@ -169,6 +183,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       role: doc.role ?? 'user',
       provider: doc.provider ?? null,
       providerId: doc.providerId ?? null,
+      recruiterApplication: doc.recruiterApplication ?? null,
       tokenVersion: doc.tokenVersion ?? 0,
       createdAt: doc.createdAt,
       lastLoginAt: doc.lastLoginAt ?? null,
@@ -177,7 +192,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
 
   return {
     kind: 'mongodb',
-    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null }) {
+    async create({ name, email, passwordHash, role = 'member', provider = null, providerId = null, recruiterApplication = null }) {
       const now = new Date();
       const doc = {
         name,
@@ -186,6 +201,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
         role,
         provider,
         providerId,
+        recruiterApplication,
         tokenVersion: 0,
         createdAt: now,
         updatedAt: now,
@@ -227,7 +243,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       }
       return toUser(await users.findOne({ _id }));
     },
-    async adminUpdate(id, { name, email, role, passwordHash }) {
+    async adminUpdate(id, { name, email, role, passwordHash, recruiterApplication }) {
       const _id = oid(id);
       if (!_id) return null;
       const $set = { updatedAt: new Date() };
@@ -235,6 +251,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       if (name) $set.name = name;
       if (email) $set.email = email;
       if (role) $set.role = role;
+      if (recruiterApplication !== undefined) $set.recruiterApplication = recruiterApplication;
       if (passwordHash !== undefined) {
         $set.passwordHash = passwordHash;
         $inc.tokenVersion = 1;
@@ -262,12 +279,16 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       await users.updateOne({ _id }, { $set: { role, updatedAt: new Date() } });
       return toUser(await users.findOne({ _id }));
     },
-    async list({ limit = 500, skip = 0 } = {}) {
-      const docs = await users.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray();
+    async list({ limit = 500, skip = 0, search = '' } = {}) {
+      const pattern = search.trim() ? userSearchPattern(search.trim()) : null;
+      const filter = pattern ? { $or: [{ name: pattern }, { email: pattern }, { role: pattern }] } : {};
+      const docs = await users.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).toArray();
       return docs.map(toUser);
     },
-    async count() {
-      return users.countDocuments();
+    async count({ search = '' } = {}) {
+      const pattern = search.trim() ? userSearchPattern(search.trim()) : null;
+      const filter = pattern ? { $or: [{ name: pattern }, { email: pattern }, { role: pattern }] } : {};
+      return users.countDocuments(filter);
     },
     async remove(id) {
       const _id = oid(id);
@@ -304,6 +325,7 @@ export async function connectMongoUserStore(uri, dbName, log = () => {}) {
     await users.createIndex(emailIndex.key, emailIndex.options);
   }
   await users.createIndex({ provider: 1, providerId: 1 }, { name: 'provider_lookup', sparse: true });
+  await users.createIndex({ createdAt: -1, _id: -1 }, { name: 'created_at_directory' });
   log(`MongoDB connected (db="${db.databaseName}")`);
   const store = mongoUserStoreFromCollection(users, ObjectId, {
     ping: () => db.command({ ping: 1 }),

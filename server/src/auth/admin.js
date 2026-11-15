@@ -1,7 +1,7 @@
 // Admin dashboard API: list, create, update and delete user accounts.
 // Every route requires a signed-in user whose role is "admin".
 //
-//   GET    /api/admin/users        → { users: [...], total }
+//   GET    /api/admin/users?page=1&limit=50&search=… → paged { users, total, page, limit }
 //   POST   /api/admin/users        → create { name, email, password, role? }
 //   PATCH  /api/admin/users/:id     → update { name?, email?, role?, password? }
 //   DELETE /api/admin/users/:id     → remove
@@ -44,10 +44,13 @@ export function createAdmin(opts) {
   async function listUsers(req, res, url) {
     await requireAdmin(req);
     const page = Math.max(1, Number(url?.searchParams?.get('page')) || 1);
-    const limit = Math.min(100, Math.max(1, Number(url?.searchParams?.get('limit')) || 20));
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams?.get('limit')) || 50));
+    const search = (url?.searchParams?.get('search') ?? '').trim().slice(0, 100);
     const skip = (page - 1) * limit;
-    const [allUsers, total] = await Promise.all([opts.store.list({ limit: 500 }), opts.store.count()]);
-    const paged = allUsers.slice(skip, skip + limit);
+    const [paged, total] = await Promise.all([
+      opts.store.list({ limit, skip, search }),
+      opts.store.count({ search }),
+    ]);
     const profiles = opts.social?.profiles ? await opts.social.profiles.getMany(paged.map((user) => user.id)) : [];
     const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
     const users = await Promise.all(paged.map(async (user) => {
@@ -131,6 +134,21 @@ export function createAdmin(opts) {
       const e = passwordError(body.password);
       if (e) fields.password = e;
       else patch.passwordHash = await hashPassword(body.password);
+    }
+    if (body.recruiterApplicationStatus !== undefined) {
+      if (!['approved', 'rejected'].includes(body.recruiterApplicationStatus)) {
+        fields.recruiterApplicationStatus = 'Choose approved or rejected.';
+      } else if (target.recruiterApplication?.status !== 'pending') {
+        throw new HttpError(409, 'This recruiter application is no longer pending.');
+      } else {
+        patch.recruiterApplication = {
+          ...target.recruiterApplication,
+          status: body.recruiterApplicationStatus,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: admin.id,
+        };
+        if (body.recruiterApplicationStatus === 'approved') patch.role = 'recruiter';
+      }
     }
     if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
     if (!Object.keys(patch).length) {
@@ -385,6 +403,15 @@ export function createAdmin(opts) {
     sendJson(res, 200, { recruiters: out });
   }
 
+  async function listRecruiterApplications(req, res) {
+    await requireAdmin(req);
+    const users = await opts.store.list({ limit: 500 });
+    const requests = users
+      .filter((user) => user.recruiterApplication?.status === 'pending')
+      .map((user) => publicUser(user));
+    sendJson(res, 200, { requests });
+  }
+
   /** Returns true if the request was an admin route (and has been answered). */
   async function handle(req, res, pathname, url) {
     if (!pathname.startsWith('/api/admin/')) return false;
@@ -392,6 +419,7 @@ export function createAdmin(opts) {
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
     else if (pathname === '/api/admin/recruiters' && req.method === 'GET') await listRecruiters(req, res);
+    else if (pathname === '/api/admin/recruiter-applications' && req.method === 'GET') await listRecruiterApplications(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'GET') await listAds(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
     else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
