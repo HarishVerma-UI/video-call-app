@@ -170,6 +170,64 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
   );
 }
 
+/* ── Left profile rail ── */
+
+function FeedLeft({ nav }: { nav: FeedNav }) {
+  const { api, user, photoUrl } = useAuth();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [connCount, setConnCount] = useState<number | null>(null);
+  useEffect(() => {
+    api.myProfile().then(({ profile: p }) => setProfile(p)).catch(() => {});
+    api.listConnections().then(({ connections }) => setConnCount(connections.length)).catch(() => setConnCount(0));
+  }, [api]);
+  if (!user) return null;
+  const headline = profile?.headline?.trim();
+  const location = profile?.location?.trim();
+  const skillCount = profile?.skills?.length ?? 0;
+  return (
+    <aside className="feed-left" aria-label="Your summary">
+      <div className="sidebar-card feed-me">
+        <div className="feed-me__cover" aria-hidden="true" />
+        <a className="feed-me__id" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
+          <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={72} />
+          <strong className="feed-me__name">{user.name}</strong>
+          {headline ? <span className="feed-me__headline">{headline}</span> : <span className="feed-me__headline feed-me__headline--muted">Add a headline to your profile</span>}
+          {location && <span className="feed-me__loc">{location}</span>}
+        </a>
+        <div className="feed-me__stats">
+          <a className="feed-me__stat" href="/network">
+            <b>{connCount ?? '—'}</b>
+            <span>Connections</span>
+          </a>
+          <a className="feed-me__stat" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
+            <b>{skillCount}</b>
+            <span>Skills</span>
+          </a>
+        </div>
+      </div>
+
+      <nav className="sidebar-card feed-left__nav" aria-label="Shortcuts">
+        <a className="feed-left__link" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+          <span>Your profile</span>
+        </a>
+        <a className="feed-left__link" href="/network">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+          <span>My network</span>
+        </a>
+        <a className="feed-left__link" href="/jobs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
+          <span>Jobs</span>
+        </a>
+        <a className="feed-left__link" href="/messages">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+          <span>Messages</span>
+        </a>
+      </nav>
+    </aside>
+  );
+}
+
 /* ── Right sidebar ── */
 
 function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Profile[]; ads: Ad[]; api: ApiClient; nav: FeedNav; onConn: (id: string, s: ConnectionState) => void }) {
@@ -363,6 +421,7 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
 
   return (
     <section className="feed-layout" aria-label="Feed" data-testid="feed">
+      <FeedLeft nav={nav} />
       <div className="feed-main">
         {searchQuery.trim() && (
           <div className="feed-results-head">
