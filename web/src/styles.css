@@ -2505,28 +2505,9 @@ svg {
 .btn--social:hover { background: var(--surface-3); }
 .btn--social svg { flex: 0 0 auto; }
 
-/* ===== admin dashboard v2 ===== */
-/* sidebar shell */
-.admin-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 0; align-items: start; min-height: 0; }
+/* ===== admin and recruiter dashboards ===== */
+.admin-shell { display: block; min-height: 0; }
 .admin-shell > .admin-dash { min-width: 0; }
-.admin-side { position: sticky; top: 0; align-self: start; display: flex; flex-direction: column; gap: 6px; padding: 20px 16px; border-right: 1px solid var(--line); min-height: 100%; }
-.admin-side__brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 14px; }
-.admin-side__mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: 0 0 auto; }
-.admin-side__brand strong { display: block; font-size: .9rem; }
-.admin-side__brand em { font-style: normal; font-size: .72rem; color: var(--muted); }
-.admin-side__nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
-.admin-side__link { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--r); border: 0; background: none; color: var(--muted); font: inherit; font-size: .86rem; font-weight: 500; cursor: pointer; text-align: left; text-decoration: none; transition: all .15s; }
-.admin-side__link:hover { background: var(--surface-2); color: var(--text); }
-.admin-side__link.is-on { background: var(--accent-soft); color: var(--accent); }
-.admin-side__link svg { flex: 0 0 auto; }
-.admin-side__invite { align-self: stretch; justify-content: center; }
-@media (max-width: 920px) {
-  .admin-shell { grid-template-columns: 1fr; }
-  .admin-side { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; min-height: 0; }
-  .admin-side__brand { padding: 0 8px 0 0; border-right: 1px solid var(--line); }
-  .admin-side__nav { flex-direction: row; flex-wrap: wrap; margin-bottom: 0; }
-  .admin-side__invite { margin-left: auto; align-self: center; }
-}
 
 .admin-dash__head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
 .admin-dash__headtext { flex: 1 1 auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -2554,7 +2535,7 @@ svg {
 .admin-dash__calls { flex: 0 0 auto; }
 
 /* bottom 2-column row */
-.admin-dash__bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.admin-dash__bottom { display: grid; grid-template-columns: 1fr; gap: 18px; }
 .admin-dash__log { max-height: 320px; overflow-y: auto; }
 
 /* user directory rows */
@@ -2611,16 +2592,6 @@ svg {
 .admin-chart__area { fill: var(--accent); opacity: 0.12; }
 .admin-chart__line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .admin-chart__dot { fill: var(--accent); stroke: var(--surface-2); stroke-width: 2; cursor: default; }
-
-/* quick resources grid */
-.admin-resources__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px 16px; }
-.admin-resources__item {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 16px 8px; border-radius: var(--r); background: var(--surface-3);
-  color: var(--text); text-decoration: none; font-size: 0.82rem; font-weight: 500;
-  transition: background 0.15s;
-}
-.admin-resources__item:hover { background: var(--accent-soft); color: var(--accent); }
 
 /* ===== admin platform intelligence ===== */
 .admin-sys { font-size: 0.74rem; color: var(--green, #22c55e); font-weight: 500; white-space: nowrap; }
@@ -2694,7 +2665,6 @@ svg {
 }
 @media (max-width: 520px) {
   .admin-dash__stats { grid-template-columns: 1fr; }
-  .admin-resources__grid { grid-template-columns: 1fr; }
 }
 
 /* ===== professional network ===== */
@@ -3383,13 +3353,7 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
   .jobd__actions { flex-direction: column; }
   .jobd__actions .btn { width: 100%; }
 }
-/* admin + recruiter sidebar shells collapse to a stacked strip on phones */
 @media (max-width: 620px) {
-  .admin-side { flex-direction: column; align-items: stretch; }
-  .admin-side__brand { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
-  .admin-side__nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0; }
-  .admin-side__link { white-space: nowrap; }
-  .admin-side__invite { margin-left: 0; margin-top: 10px; }
   .rec__head, .admin-dash__head { flex-wrap: wrap; }
   .rec__head .btn, .admin-dash__head .btn { flex: 1 1 auto; }
 }

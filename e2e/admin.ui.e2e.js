@@ -28,16 +28,11 @@ test.describe('UI: Admin dashboard', () => {
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
     await expect(page.getByRole('heading', { name: 'Platform Administration & Intelligence' })).toBeVisible();
-    for (const [label, path] of [
-      ['User Directory', '/admin/users'],
-      ['Jobs & Moderation', '/admin/jobs'],
-      ['Recruiter Directory', '/admin/recruiters'],
-      ['Activity & Audit', '/admin/audit'],
-      ['Overview', '/admin'],
-    ]) {
-      await page.getByRole('link', { name: label }).click();
-      await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));
-    }
+    await expect(page.getByRole('link', { name: /User Directory|Jobs & Moderation|Recruiter Directory|Activity & Audit/ })).toHaveCount(0);
+    const jobsHeading = page.getByRole('heading', { name: 'Jobs Manager' });
+    await jobsHeading.scrollIntoViewIfNeeded();
+    await expect(jobsHeading).toBeVisible();
+    await expect(page).toHaveURL(/\/admin$/);
 
     await page.getByTestId('add-user').click();
     await expect(page.getByRole('dialog', { name: 'Add user' })).toBeVisible();
@@ -70,10 +65,10 @@ test.describe('UI: Admin dashboard', () => {
     test.setTimeout(90_000);
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
-    await page.getByRole('link', { name: 'User Directory' }).click();
-    await expect(page).toHaveURL(/\/admin\/users$/);
+    await expect(page.getByRole('link', { name: 'User Directory' })).toHaveCount(0);
 
     const selfRow = page.getByTestId('user-table').locator('.admin-dir__row').filter({ hasText: ADMIN.email });
+    await selfRow.scrollIntoViewIfNeeded();
     await expect(selfRow).toContainText('E2E Admin');
     await selfRow.getByRole('button', { name: 'Actions' }).click();
     await selfRow.getByRole('button', { name: 'Edit' }).click();
