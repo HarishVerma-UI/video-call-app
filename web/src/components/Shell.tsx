@@ -18,12 +18,10 @@ import { FeedView } from './social/FeedView';
 import { NotificationBell } from './NotificationBell';
 import { MessagesView } from './social/MessagesView';
 import { NetworkView } from './social/NetworkView';
-import { PeopleView } from './social/PeopleView';
 import { PersonView } from './social/PersonView';
 
 export type Route =
   | { view: 'feed' }
-  | { view: 'people' }
   | { view: 'network' }
   | { view: 'messages'; user: string }
   | { view: 'person'; id: string }
@@ -46,7 +44,6 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'profile') return { view: 'profile' };
   if (seg[0] === 'admin') return { view: 'admin' };
   if (seg[0] === 'logs') return { view: 'logs' };
-  if (seg[0] === 'people') return { view: 'people' };
   if (seg[0] === 'network') return { view: 'network' };
   if (seg[0] === 'messages') return { view: 'messages', user: seg[1] ?? '' };
   if (seg[0] === 'u') return { view: 'person', id: seg[1] ?? '' };
@@ -64,11 +61,19 @@ export function routePath(r: Route): string {
   return `/${r.view}`;
 }
 
+function readRoute(): Route {
+  if (location.pathname.replace(/\/+$/, '') === '/people') {
+    history.replaceState(null, '', '/');
+    return { view: 'feed' };
+  }
+  return parseRoute();
+}
+
 /** Tiny router: the URL is the source of truth, Back/Forward work. */
 export function useRoute(): [Route, (r: Route, replace?: boolean) => void] {
-  const [route, setRoute] = useState<Route>(() => parseRoute());
+  const [route, setRoute] = useState<Route>(readRoute);
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute());
+    const onPop = () => setRoute(readRoute());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -243,7 +248,6 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'logs' && <LogsView />}
         {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
-        {route.view === 'people' && <PeopleView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
         {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} />}
         {route.view === 'person' && (
@@ -251,7 +255,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             key={route.id}
             userId={route.id}
             openMessages={(id) => go({ view: 'messages', user: id })}
-            back={() => go({ view: 'people' })}
+            back={() => go({ view: 'feed' })}
           />
         )}
         {route.view === 'not-found' && (

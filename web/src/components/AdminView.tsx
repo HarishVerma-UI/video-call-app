@@ -1085,10 +1085,6 @@ export function AdminView() {
         <div className="card admin-dash__resources">
           <header className="card__head"><h2>Quick Resources</h2></header>
           <div className="admin-resources__grid">
-            <a className="admin-resources__item" href="/people">
-              <PeopleIcon width={22} height={22} />
-              <span>Browse Users</span>
-            </a>
             <a className="admin-resources__item" href="/network">
               <UserIcon width={22} height={22} />
               <span>Connections</span>

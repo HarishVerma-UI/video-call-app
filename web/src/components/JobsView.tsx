@@ -31,7 +31,6 @@ function salaryText(j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>):
 const matchBand = (s: number) => (s >= 75 ? 'high' : s >= 50 ? 'mid' : 'low');
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 
-interface SavedAlert { id: string; label: string; filters: JobFilters }
 const EMPTY: JobFilters = { q: '', category: '', country: '', type: '', experience: '', remote: false };
 
 type JobSort = 'match' | 'recent' | 'salary';
@@ -459,9 +458,6 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
   const [applying, setApplying] = useState<Job | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [apps, setApps] = useState<JobApplication[] | null>(null);
-  const [alerts, setAlerts] = useState<SavedAlert[]>(() => {
-    try { return JSON.parse(localStorage.getItem('huddle.jobAlerts') || '[]'); } catch { return []; }
-  });
 
   const completion = useMemo(() => profileCompletion(profile), [profile]);
 
@@ -510,22 +506,6 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
       setApplying(job);
       setSelected(null);
     }
-  };
-
-  const persistAlerts = (next: SavedAlert[]) => {
-    setAlerts(next);
-    try { localStorage.setItem('huddle.jobAlerts', JSON.stringify(next)); } catch { /* ignore */ }
-  };
-  const saveAlert = () => {
-    const parts = [
-      filters.q,
-      filters.category && CAT_LABEL[filters.category as JobCategory],
-      filters.type && TYPE_LABEL[filters.type as JobType],
-      filters.experience && EXP_LABEL[filters.experience as JobExperience],
-      filters.country,
-      filters.remote && 'Remote',
-    ].filter(Boolean);
-    persistAlerts([{ id: String(Date.now()), label: parts.join(' · ') || 'All openings', filters }, ...alerts.filter((a) => a.label)].slice(0, 6));
   };
 
   if (selected) {
@@ -585,23 +565,7 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
           </label>
           <label className="jobs__remote"><input type="checkbox" checked={!!filters.remote} onChange={(e) => set('remote', e.target.checked)} /> Remote only</label>
           {activeFilters && <button className="link-btn" onClick={clearFilters} data-testid="clear-filters">Clear filters</button>}
-
-          <button className="btn btn--primary jobs__alert-btn" onClick={saveAlert}>🔔 Create job alert</button>
-          <div className="jobs__alerts">
-            <strong>Job alerts</strong>
-            {alerts.length === 0 ? (
-              <p>Save a search to get a quick filter here.</p>
-            ) : (
-              <ul>
-                {alerts.map((a) => (
-                  <li key={a.id}>
-                    <button className="jobs__alert-chip" onClick={() => setFilters(a.filters)} title="Apply this search">{a.label}</button>
-                    <button className="jobs__alert-x" onClick={() => persistAlerts(alerts.filter((x) => x.id !== a.id))} aria-label="Remove alert">×</button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+ 
         </aside>
 
         {/* center: list or my applications */}
