@@ -20,6 +20,9 @@ import { MessagesView } from './social/MessagesView';
 import { NetworkView } from './social/NetworkView';
 import { PersonView } from './social/PersonView';
 
+export type AdminSection = 'overview' | 'users' | 'jobs' | 'recruiters' | 'audit';
+export type RecruiterSection = 'overview' | 'funnel' | 'jobs' | 'applicants';
+
 export type Route =
   | { view: 'feed' }
   | { view: 'network' }
@@ -30,7 +33,8 @@ export type Route =
   | { view: 'jobs' }
   | { view: 'calls' }
   | { view: 'profile' }
-  | { view: 'admin' }
+  | { view: 'admin'; section?: AdminSection }
+  | { view: 'recruiter'; section?: RecruiterSection }
   | { view: 'logs' }
   | { view: 'not-found' };
 
@@ -42,7 +46,16 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'jobs') return { view: 'jobs' };
   if (seg[0] === 'calls') return { view: 'calls' };
   if (seg[0] === 'profile') return { view: 'profile' };
-  if (seg[0] === 'admin') return { view: 'admin' };
+  if (seg[0] === 'admin') {
+    const section = seg[1] ?? 'overview';
+    if (seg.length > 2 || !['overview', 'users', 'jobs', 'recruiters', 'audit'].includes(section)) return { view: 'not-found' };
+    return { view: 'admin', section: section as AdminSection };
+  }
+  if (seg[0] === 'recruiter') {
+    const section = seg[1] ?? 'overview';
+    if (seg.length > 2 || !['overview', 'funnel', 'jobs', 'applicants'].includes(section)) return { view: 'not-found' };
+    return { view: 'recruiter', section: section as RecruiterSection };
+  }
   if (seg[0] === 'logs') return { view: 'logs' };
   if (seg[0] === 'network') return { view: 'network' };
   if (seg[0] === 'messages') return { view: 'messages', user: seg[1] ?? '' };
@@ -57,6 +70,7 @@ export function routePath(r: Route): string {
   if (r.view === 'chat') return r.room ? `/chat/${encodeURIComponent(r.room)}` : '/chat';
   if (r.view === 'messages') return r.user ? `/messages/${encodeURIComponent(r.user)}` : '/messages';
   if (r.view === 'person') return `/u/${encodeURIComponent(r.id)}`;
+  if (r.view === 'admin' || r.view === 'recruiter') return r.section && r.section !== 'overview' ? `/${r.view}/${r.section}` : `/${r.view}`;
   if (r.view === 'not-found') return location.pathname;
   return `/${r.view}`;
 }
@@ -107,6 +121,15 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
   const { api, photoUrl } = useAuth();
   const [search, setSearch] = useState('');
   const [pendingReqs, setPendingReqs] = useState(0);
+
+  useEffect(() => {
+    if (route.view === 'admin' && !isSuperAdmin(user.role)) {
+      go(isStaff(user.role) ? { view: 'recruiter', section: 'overview' } : { view: 'feed' }, true);
+    } else if (route.view === 'recruiter') {
+      if (isSuperAdmin(user.role)) go({ view: 'admin', section: 'overview' }, true);
+      else if (!isStaff(user.role)) go({ view: 'feed' }, true);
+    }
+  }, [route.view, user.role, go]);
 
   const loadRequests = useCallback(() => {
     api.listRequests().then(({ requests }) => setPendingReqs(requests.length)).catch(() => {});
@@ -198,9 +221,9 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         ))}
         {isStaff(user.role) && (
           <button
-            className={`rail__item${route.view === 'admin' ? ' is-on' : ''}`}
-            onClick={() => go({ view: 'admin' })}
-            aria-current={route.view === 'admin' ? 'page' : undefined}
+            className={`rail__item${route.view === 'admin' || route.view === 'recruiter' ? ' is-on' : ''}`}
+            onClick={() => isSuperAdmin(user.role) ? go({ view: 'admin', section: 'overview' }) : go({ view: 'recruiter', section: 'overview' })}
+            aria-current={route.view === 'admin' || route.view === 'recruiter' ? 'page' : undefined}
             data-testid="rail-admin"
           >
             {isSuperAdmin(user.role) ? <ShieldIcon /> : <BriefcaseIcon />}
@@ -244,7 +267,12 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         {route.view === 'chat' && <ChatView user={user} room={route.room} openRoom={(room) => go({ view: 'chat', room })} onJoin={onJoin} />}
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
         {route.view === 'profile' && <ProfileView />}
-        {route.view === 'admin' && (isSuperAdmin(user.role) ? <AdminView /> : isStaff(user.role) ? <RecruiterDashboard /> : null)}
+        {route.view === 'admin' && isSuperAdmin(user.role) && (
+          <AdminView section={route.section ?? 'overview'} navigate={(section) => go({ view: 'admin', section })} />
+        )}
+        {route.view === 'recruiter' && isStaff(user.role) && !isSuperAdmin(user.role) && (
+          <RecruiterDashboard section={route.section ?? 'overview'} navigate={(section) => go({ view: 'recruiter', section })} />
+        )}
         {route.view === 'logs' && <LogsView />}
         {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}

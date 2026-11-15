@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, ChatIcon, CloseIcon, PencilIcon, PeopleIcon, PlusIcon, SparkIcon, TrashIcon } from './Icons';
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
+import type { RecruiterSection } from './Shell';
 
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 const salaryText = (j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>) => {
@@ -157,7 +158,7 @@ function ApplicantsModal({ job, onClose, onChanged }: { job: Job; onClose: () =>
 }
 
 /* ── main ── */
-export function RecruiterDashboard() {
+export function RecruiterDashboard({ section, navigate }: { section: RecruiterSection; navigate: (section: RecruiterSection) => void }) {
   const { api, user } = useAuth();
   const [data, setData] = useState<Dash | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -178,20 +179,23 @@ export function RecruiterDashboard() {
     try { await api.recruiterSetApplicationStatus(a.id, status); load(); } catch { /* ignore */ }
   };
 
-  const [activeSec, setActiveSec] = useState('overview');
+  const [activeSec, setActiveSec] = useState<RecruiterSection>(section);
   useEffect(() => {
-    const ids = ['overview', 'funnel', 'reqs', 'applicants'];
+    const ids: RecruiterSection[] = ['overview', 'funnel', 'jobs', 'applicants'];
     const obs = new IntersectionObserver(
       (entries) => {
         const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (vis[0]) setActiveSec(vis[0].target.id);
+        if (vis[0]) setActiveSec(vis[0].target.id as RecruiterSection);
       },
       { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
     );
     for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
     return () => obs.disconnect();
   }, [data]);
-  const goSec = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveSec(id); };
+  useEffect(() => {
+    setActiveSec(section);
+    if (section !== 'overview') document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [section, data]);
 
   const exportAts = () => {
     if (!data) return;
@@ -216,10 +220,10 @@ export function RecruiterDashboard() {
   ];
   const maxStage = Math.max(1, ...stages.map((s) => s.n));
 
-  const NAV: { id: string; label: string; icon: ReactNode }[] = [
+  const NAV: { id: RecruiterSection; label: string; icon: ReactNode }[] = [
     { id: 'overview', label: 'Talent Dashboard', icon: <SparkIcon width={18} height={18} /> },
     { id: 'funnel', label: 'Candidate Funnel', icon: <PeopleIcon width={18} height={18} /> },
-    { id: 'reqs', label: 'Job Requisitions', icon: <BriefcaseIcon width={18} height={18} /> },
+    { id: 'jobs', label: 'Job Requisitions', icon: <BriefcaseIcon width={18} height={18} /> },
     { id: 'applicants', label: 'Recent Applicants', icon: <ChatIcon width={18} height={18} /> },
   ];
 
@@ -232,9 +236,9 @@ export function RecruiterDashboard() {
         </div>
         <nav className="admin-side__nav">
           {NAV.map((n) => (
-            <button key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} onClick={() => goSec(n.id)} aria-current={activeSec === n.id ? 'true' : undefined}>
+            <a key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} href={n.id === 'overview' ? '/recruiter' : `/recruiter/${n.id}`} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(n.id); }} aria-current={activeSec === n.id ? 'page' : undefined}>
               {n.icon}<span>{n.label}</span>
-            </button>
+            </a>
           ))}
         </nav>
         <button className="btn btn--secondary btn--small admin-side__invite" onClick={() => { setEditing(null); setFormOpen(true); }}>
@@ -295,7 +299,7 @@ export function RecruiterDashboard() {
         </div>
       </div>
 
-      <div className="card rec-reqs" id="reqs">
+      <div className="card rec-reqs" id="jobs">
         <header className="rec-reqs__head"><h2>Active requisitions</h2><span className="rec-reqs__count">{jobCount} role{jobCount !== 1 ? 's' : ''}</span></header>
         {jobs.length === 0 ? (
           <p className="card__empty">You haven’t posted any roles yet. Post one to start sourcing.</p>

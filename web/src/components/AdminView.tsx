@@ -5,6 +5,7 @@ import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, 
 import { Line } from './Line';
 import { Avatar } from './RoomBadge';
 import { uploadFile } from '../upload';
+import type { AdminSection } from './Shell';
 
 type Draft = { name: string; email: string; password: string; role: UserRole };
 
@@ -363,7 +364,7 @@ function AdsManager() {
 /* ─── platform intelligence: jobs-by-domain + recruiter directory ─── */
 
 function JobsByDomain({ stats }: { stats: AdminStats | null }) {
-  if (!stats) return <div className="card admin-domain"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
+  if (!stats) return <div className="card admin-domain" id="jobs"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
   const t = stats.jobsByCategory.tech;
   const nt = stats.jobsByCategory['non-tech'];
   const total = Math.max(1, t + nt);
@@ -375,7 +376,7 @@ function JobsByDomain({ stats }: { stats: AdminStats | null }) {
     </div>
   );
   return (
-    <div className="card admin-domain" id="moderation">
+    <div className="card admin-domain" id="jobs">
       <header className="card__head"><h2>Jobs by domain &amp; moderation</h2></header>
       <div className="admin-domain__bars">
         {bar('Tech', t, 'tech')}
@@ -837,7 +838,7 @@ function JobsManager() {
 
 /* ─── main dashboard ───────────────────────────────────── */
 
-export function AdminView() {
+export function AdminView({ section, navigate }: { section: AdminSection; navigate: (section: AdminSection) => void }) {
   const { api, user } = useAuth();
   const [users, setUsers] = useState<AuthUser[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -887,20 +888,23 @@ export function AdminView() {
   };
 
   // Left-nav sections (scroll-to with active tracking).
-  const [activeSec, setActiveSec] = useState('overview');
+  const [activeSec, setActiveSec] = useState<AdminSection>(section);
   useEffect(() => {
-    const ids = ['overview', 'directory', 'moderation', 'recruiters', 'audit'];
+    const ids: AdminSection[] = ['overview', 'users', 'jobs', 'recruiters', 'audit'];
     const obs = new IntersectionObserver(
       (entries) => {
         const vis = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (vis[0]) setActiveSec(vis[0].target.id);
+        if (vis[0]) setActiveSec(vis[0].target.id as AdminSection);
       },
       { rootMargin: '-20% 0px -60% 0px', threshold: [0, 0.25, 0.5] },
     );
     for (const id of ids) { const el = document.getElementById(id); if (el) obs.observe(el); }
     return () => obs.disconnect();
   }, [users]);
-  const goSec = (id: string) => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActiveSec(id); };
+  useEffect(() => {
+    setActiveSec(section);
+    if (section !== 'overview') document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [section]);
 
   const exportReport = () => {
     if (!stats) return;
@@ -946,10 +950,10 @@ export function AdminView() {
 
   const loading = users === null;
 
-  const NAV: { id: string; label: string; icon: ReactNode; badge?: number }[] = [
+  const NAV: { id: AdminSection; label: string; icon: ReactNode; badge?: number }[] = [
     { id: 'overview', label: 'Overview', icon: <ShieldIcon width={18} height={18} /> },
-    { id: 'directory', label: 'User Directory', icon: <PeopleIcon width={18} height={18} /> },
-    { id: 'moderation', label: 'Jobs & Moderation', icon: <BriefcaseIcon width={18} height={18} /> },
+    { id: 'users', label: 'User Directory', icon: <PeopleIcon width={18} height={18} /> },
+    { id: 'jobs', label: 'Jobs & Moderation', icon: <BriefcaseIcon width={18} height={18} /> },
     { id: 'recruiters', label: 'Recruiter Directory', icon: <UserIcon width={18} height={18} /> },
     { id: 'audit', label: 'Activity & Audit', icon: <VideoIcon width={18} height={18} /> },
   ];
@@ -957,15 +961,11 @@ export function AdminView() {
   return (
     <div className="admin-shell">
       <aside className="admin-side" aria-label="Admin sections">
-        <div className="admin-side__brand">
-          <span className="admin-side__mark"><ShieldIcon width={20} height={20} /></span>
-          <div><strong>Huddle Admin Suite</strong><em>Enterprise Tier</em></div>
-        </div>
         <nav className="admin-side__nav">
           {NAV.map((n) => (
-            <button key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} onClick={() => goSec(n.id)} aria-current={activeSec === n.id ? 'true' : undefined}>
+            <a key={n.id} className={`admin-side__link${activeSec === n.id ? ' is-on' : ''}`} href={n.id === 'overview' ? '/admin' : `/admin/${n.id}`} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(n.id); }} aria-current={activeSec === n.id ? 'page' : undefined}>
               {n.icon}<span>{n.label}</span>
-            </button>
+            </a>
           ))}
         </nav>
         <button className="btn btn--secondary btn--small admin-side__invite" onClick={openNew}>
@@ -1001,7 +1001,7 @@ export function AdminView() {
       </div>
 
       {/* ─ main grid ─ */}
-      <div className="admin-dash__grid" id="directory">
+      <div className="admin-dash__grid" id="users">
         {/* left: user directory */}
         <div className="card admin-dash__dir">
           <header className="card__head">

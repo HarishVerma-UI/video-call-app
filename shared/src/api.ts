@@ -458,7 +458,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     updateProfile: (input) => request('PATCH', '/api/auth/me', input),
     changePassword: (input) => request('POST', '/api/auth/password', input),
     providers: () => request('GET', '/api/auth/providers'),
-    adminListUsers: () => request('GET', '/api/admin/users'),
+    adminListUsers: () => request('GET', '/api/admin/users?limit=100'),
     adminCreateUser: (input) => request('POST', '/api/admin/users', input),
     adminUpdateUser: (id, patch) => request('PATCH', `/api/admin/users/${encodeURIComponent(id)}`, patch),
     adminDeleteUser: (id) => request('DELETE', `/api/admin/users/${encodeURIComponent(id)}`),

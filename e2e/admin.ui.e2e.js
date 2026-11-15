@@ -27,28 +27,38 @@ test.describe('UI: Admin dashboard', () => {
 
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
-    await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Platform Administration & Intelligence' })).toBeVisible();
+    for (const [label, path] of [
+      ['User Directory', '/admin/users'],
+      ['Jobs & Moderation', '/admin/jobs'],
+      ['Recruiter Directory', '/admin/recruiters'],
+      ['Activity & Audit', '/admin/audit'],
+      ['Overview', '/admin'],
+    ]) {
+      await page.getByRole('link', { name: label }).click();
+      await expect(page).toHaveURL(new RegExp(`${path.replaceAll('/', '\\/')}$`));
+    }
 
     await page.getByTestId('add-user').click();
     await expect(page.getByRole('dialog', { name: 'Add user' })).toBeVisible();
     await page.getByLabel('Name', { exact: true }).fill(user.name);
     await page.getByLabel('Email', { exact: true }).fill(user.email);
     await page.getByLabel('Password', { exact: true }).fill(user.password);
-    await page.getByTestId('user-role').selectOption('user');
+    await page.getByTestId('user-role').selectOption('member');
     await page.getByTestId('save-user').click();
 
     const row = page.getByTestId('user-table').locator('.admin-dir__row').filter({ hasText: user.email });
     await expect(row).toContainText(user.name);
-    await expect(row).toContainText('User');
+    await expect(row).toContainText('Member');
 
     await row.getByRole('button', { name: 'Actions' }).click();
     await row.getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Name', { exact: true }).fill(user.updatedName);
-    await page.getByTestId('user-role').selectOption('admin');
+    await page.getByTestId('user-role').selectOption('recruiter');
     await page.getByTestId('save-user').click();
 
     await expect(row).toContainText(user.updatedName);
-    await expect(row).toContainText('Admin');
+    await expect(row).toContainText('Recruiter');
 
     page.once('dialog', (dialog) => dialog.accept());
     await row.getByRole('button', { name: 'Actions' }).click();
@@ -60,6 +70,8 @@ test.describe('UI: Admin dashboard', () => {
     test.setTimeout(90_000);
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
+    await page.getByRole('link', { name: 'User Directory' }).click();
+    await expect(page).toHaveURL(/\/admin\/users$/);
 
     const selfRow = page.getByTestId('user-table').locator('.admin-dir__row').filter({ hasText: ADMIN.email });
     await expect(selfRow).toContainText('E2E Admin');

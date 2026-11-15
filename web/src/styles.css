@@ -2515,7 +2515,7 @@ svg {
 .admin-side__brand strong { display: block; font-size: .9rem; }
 .admin-side__brand em { font-style: normal; font-size: .72rem; color: var(--muted); }
 .admin-side__nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
-.admin-side__link { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--r); border: 0; background: none; color: var(--muted); font: inherit; font-size: .86rem; font-weight: 500; cursor: pointer; text-align: left; transition: all .15s; }
+.admin-side__link { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--r); border: 0; background: none; color: var(--muted); font: inherit; font-size: .86rem; font-weight: 500; cursor: pointer; text-align: left; text-decoration: none; transition: all .15s; }
 .admin-side__link:hover { background: var(--surface-2); color: var(--text); }
 .admin-side__link.is-on { background: var(--accent-soft); color: var(--accent); }
 .admin-side__link svg { flex: 0 0 auto; }
