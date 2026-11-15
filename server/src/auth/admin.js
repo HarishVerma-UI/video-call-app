@@ -11,6 +11,7 @@ import { DuplicateEmailError, publicUser } from '../db/userStore.js';
 import { publicApplication, publicJob, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
 import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
+import { APPLICATION_STATUSES, jobPatchFrom } from '../jobsValidate.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const cleanName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
@@ -206,38 +207,6 @@ export function createAdmin(opts) {
   }
 
   // --- Jobs: admin-managed listings + applicant review ---
-  const jobNum = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
-  const JOB_CATS = ['tech', 'non-tech'];
-  const JOB_TYPES = ['full-time', 'part-time', 'contract', 'internship'];
-  const JOB_EXPS = ['entry', 'mid', 'senior', 'lead'];
-  const STATUSES = ['applied', 'shortlisted', 'rejected'];
-  const list40 = (v, max) => (Array.isArray(v) ? v.slice(0, 40).map((x) => adStr(x, max)).filter(Boolean) : []);
-
-  function jobPatchFrom(body, { partial }) {
-    const patch = {};
-    if (!partial || body.title !== undefined) patch.title = adStr(body.title, 160);
-    if (!partial || body.company !== undefined) patch.company = adStr(body.company, 160);
-    if (!partial || body.category !== undefined) patch.category = JOB_CATS.includes(body.category) ? body.category : 'tech';
-    if (!partial || body.country !== undefined) patch.country = adStr(body.country, 80);
-    if (!partial || body.type !== undefined) patch.type = JOB_TYPES.includes(body.type) ? body.type : 'full-time';
-    if (!partial || body.experience !== undefined) patch.experience = JOB_EXPS.includes(body.experience) ? body.experience : 'mid';
-    if (!partial || body.salaryMin !== undefined) patch.salaryMin = jobNum(body.salaryMin);
-    if (!partial || body.salaryMax !== undefined) patch.salaryMax = jobNum(body.salaryMax);
-    if (!partial || body.salaryCurrency !== undefined) patch.salaryCurrency = adStr(body.salaryCurrency, 8) || 'USD';
-    if (!partial || body.remote !== undefined) patch.remote = body.remote === true;
-    if (!partial || body.description !== undefined) patch.description = adStr(body.description, 8000);
-    if (!partial || body.requirements !== undefined) patch.requirements = list40(body.requirements, 200);
-    if (!partial || body.skills !== undefined) patch.skills = list40(body.skills, 60);
-    if (!partial || body.active !== undefined) patch.active = body.active !== false;
-    if (!partial || body.applyUrl !== undefined) {
-      const u = adStr(body.applyUrl, 500);
-      if (u && !/^https?:\/\//i.test(u)) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { applyUrl: 'Link must start with http:// or https://' } });
-      patch.applyUrl = u;
-    }
-    if (!partial || body.source !== undefined) patch.source = adStr(body.source, 80);
-    return patch;
-  }
-
   async function listJobs(req, res) {
     await requireAdmin(req);
     if (!opts.social?.jobs) return sendJson(res, 200, { jobs: [] });
@@ -246,14 +215,14 @@ export function createAdmin(opts) {
   }
 
   async function createJob(req, res) {
-    await requireAdmin(req);
+    const admin = await requireAdmin(req);
     if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
     const patch = jobPatchFrom(await readJson(req), { partial: false });
     const fields = {};
     if (!patch.title) fields.title = 'A title is required.';
     if (!patch.company) fields.company = 'A company is required.';
     if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
-    const job = await opts.social.jobs.create(patch);
+    const job = await opts.social.jobs.create({ ...patch, postedBy: admin.id, postedByName: admin.name });
     opts.log?.(`admin  created job ${job.id}`);
     sendJson(res, 201, { job: publicJob(job) });
   }
@@ -334,7 +303,7 @@ export function createAdmin(opts) {
     await requireAdmin(req);
     if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
     const { status } = await readJson(req);
-    if (!STATUSES.includes(status)) throw new HttpError(400, 'Invalid status.');
+    if (!APPLICATION_STATUSES.includes(status)) throw new HttpError(400, 'Invalid status.');
     const app = await opts.social.jobs.setApplicationStatus(id, status);
     if (!app) throw new HttpError(404, 'Application not found.');
     opts.log?.(`admin  set application ${id} → ${status}`);

@@ -11,6 +11,7 @@ import { createMemoryMessageStore } from './db/messageStore.js';
 import { createMemorySocialStores } from './db/socialStore.js';
 import { createMedia } from './media.js';
 import { createSocial } from './social.js';
+import { createRecruiter } from './recruiter.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
 import { createLogStore } from './logStore.js';
@@ -103,6 +104,7 @@ export function createApp(
   // Late-bound: signaling is created below, but social only calls notify at request time.
   const notify = (userId, payload) => signaling?.notifyUser(userId, payload) ?? 0;
   const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, notify, log });
+  const recruiterApi = createRecruiter({ requireUser: auth.requireUser, social, log });
 
   const cors = (req) => {
     const origin = req.headers.origin;
@@ -143,6 +145,7 @@ export function createApp(
     }
     if (await auth.handle(req, res, path)) return;
     if (await admin.handle(req, res, path, url)) return;
+    if (await recruiterApi.handle(req, res, path)) return;
     if (await media.handleLocal(req, res, url)) return;
     if (await socialApi.handle(req, res, path, url)) return;
 
