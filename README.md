@@ -1,18 +1,25 @@
-# Huddle: group video meetings with chat (React · React Native · Node.js · MongoDB)
+# Huddle: a professional network with video, jobs & hiring (React · React Native · Node.js · MongoDB)
 
-Private group video meetings for up to 10 people, on **web, Android and iOS**,
-built from scratch on **WebRTC** — now wrapped in a **professional network** with
-a Facebook-style home feed, profiles, connections, direct messages and
-admin-managed ads. You **sign in with your email and password**, or with
-**Google or GitHub**, and an **admin dashboard** lets an administrator manage
-accounts and the ads shown in the feed. No paid video vendor is involved: the
-Node.js server only introduces people to each other, and audio and video flow
-directly between devices.
+Huddle is a **professional network** built on top of private **group video
+meetings** for up to 10 people, on **web, Android and iOS**, built from scratch
+on **WebRTC**. Around the calls it adds a LinkedIn-style experience: a
+three-column home feed, professional profiles with a CV, connections, direct
+messages — and a full **Jobs & Careers platform** with a jobs board, skill-based
+matching, a tabbed job-detail page, one-click apply, a **recruiter ATS
+dashboard** and a **super-admin platform console**.
+
+You **sign in with your email and password**, or with **Google or GitHub**.
+Everyone is one of three roles — **Member**, **Recruiter** or **Super Admin** —
+and the app adapts to each. No paid video vendor is involved: the Node.js server
+only introduces people to each other, and audio and video flow directly between
+devices.
 
 The web app is laid out like a social network: a top bar with **one search for
 posts and people** plus Messages and connection-request shortcuts, a left rail
-(**Home, Network, Messages, Meet**, and Admin/Logs for admins), and a centered
-feed with a "people you may know" and sponsored sidebar.
+(**Home, Network, Messages, Meet**, and a role-aware Admin/Recruiter + Logs
+entry for staff), a **three-column home** (profile summary · feed · suggestions),
+and dedicated Jobs, Profile and dashboard surfaces. On phones the rail becomes a
+bottom tab bar and every surface reflows to a single column.
 
 > **▶ Live demo: [harish007.duckdns.org](https://harish007.duckdns.org)**
 > Create an account and start a meeting. It's best with two
@@ -35,6 +42,36 @@ feed with a "people you may know" and sponsored sidebar.
 | ![Chat](docs/screenshots/chat-tab.png) | ![Calls](docs/screenshots/calls-tab.png) | ![Profile](docs/screenshots/profile-face.png) | ![Phone](docs/screenshots/phone-chat.png) |
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
+
+### Jobs & hiring surfaces (design)
+
+These are the **design mockups** that the Jobs, recruiter and super-admin work was
+built to. The shipped app follows this layout but renders **real data** — it does
+not show the demo revenue, verification queues, per-category "role-fit %", or the
+sample company logos and names used in the mockups (those aren't tracked by the app).
+
+| Job-detail page | Super-admin console & recruiter dashboard |
+|---|---|
+| ![Job-detail page design](docs/design/job-detail.png) | ![Super-admin + recruiter dashboards design](docs/design/admin-recruiter-dashboards.png) |
+
+### Admin Control Center
+
+A **standalone admin dashboard** — its own app shell (separate sidebar, not the
+member chrome) for tracking everything on the platform. The **Dashboard** is
+metrics-only (users, active, connections, posts, comments, jobs, applications +
+growth / activity / domain / funnel graphs); separate menu pages cover **Users,
+Connections, Posts, Comments, Jobs, Applications** and a full **Activity Logs**
+audit trail. Every management table has a selection checkbox column with row and
+bulk CRUD actions. (A clickable prototype lives at
+[`docs/design/admin-dashboard-mock.html`](docs/design/admin-dashboard-mock.html).)
+
+| Dashboard (metrics & graphs) | Activity Logs (audit trail) |
+|---|---|
+| ![Admin dashboard](docs/screenshots/admin-dashboard.png) | ![Admin activity logs](docs/screenshots/admin-logs.png) |
+
+| Users (checkbox + CRUD) | Dark mode | Mobile |
+|---|---|---|
+| ![Admin users](docs/screenshots/admin-users.png) | ![Admin dashboard dark](docs/screenshots/admin-dashboard-dark.png) | ![Admin mobile](docs/screenshots/admin-mobile.png) |
 
 ## Put it online
 
@@ -60,14 +97,29 @@ server, with HTTPS at [harish007.duckdns.org](https://harish007.duckdns.org).
   `http://localhost:5173/api/auth/oauth/google/callback` as an authorized redirect
   URI. Keep provider secrets in `server/.env` locally or `deploy/.env` in production.
   With credentials missing, the corresponding button is hidden.
-- **Admin dashboard.** An account with the **admin** role gets an **Admin** tab
-  that lists everyone who has registered, with full create / edit / delete and
-  the ability to change a user's role, plus an **Ads Manager** for the promo cards
-  shown in the feed. On first start the server seeds an admin account from
-  `ADMIN_EMAIL` / `ADMIN_PASSWORD` (default **admin / admin** — change the password
-  before going live) and gives it a social profile so it can be connected to and
-  messaged like anyone else. Admins can't delete themselves or drop their own admin
-  role, so you can't lock yourself out.
+- **Three roles.** Every account is a **Member** (default), a **Recruiter**, or a
+  **Super Admin**. The role decides what the role-aware rail entry opens:
+  super-admins get the **platform console**, recruiters get the **ATS dashboard**,
+  and members get neither. Legacy accounts are migrated transparently (old
+  `user` → member, old `admin` → super_admin) so nothing breaks on upgrade.
+- **Super-admin console.** A super-admin gets an **Admin** tab — an enterprise
+  console with a left section nav (Overview, User Directory, Jobs & Moderation,
+  Recruiter Directory, Activity & Audit): full user create / edit / delete and
+  role changes, real platform metrics (users by role, live jobs, applications),
+  a recruiter directory with each recruiter's job and applicant counts, a
+  jobs-by-domain / moderation split, a live activity stream, an **Ads Manager**,
+  and an **Export report** button that downloads the real metrics as JSON. On
+  first start the server seeds a super-admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+  (default **admin / admin** — change the password before going live) and gives it
+  a social profile so it can be connected to and messaged like anyone else.
+  Super-admins can't delete themselves or drop their own role, so you can't lock
+  yourself out.
+- **Recruiter ATS dashboard.** A recruiter gets a **Recruiter** tab — a talent
+  workspace scoped to only the roles they posted: candidate funnel (applied /
+  shortlisted / not selected), recent applicants with one-click status moves,
+  requisition cards with live candidate counts, post / edit / delete roles, and an
+  **Export ATS data** (CSV) button. Recruiters never see another recruiter's
+  pipeline; the server enforces ownership on every recruiter endpoint.
 - **Demo data.** `node server/src/seed.js` (or `docker compose exec app node
   server/src/seed.js`) fills the network with 30 sample users, profiles, photos
   and posts so the feed isn't empty — handy for a demo.
@@ -96,6 +148,40 @@ find mentors and guidance** — the **server, web UI and tests are in place**:
   active toggle) in the dashboard; active ones render in every member's feed.
 - **Your profile photo shows everywhere** — top bar, rail and feed composer update the moment
   you upload a new one.
+- **Three-column home** — a left **profile summary rail** (cover, avatar, headline, real
+  connection + skill counts, shortcuts to profile/network/jobs/messages), the center feed, and
+  the right suggestions/sponsored sidebar. The left rail drops first on mid-width screens, then
+  both rails collapse on phones.
+- **Section-wise profile editor** — Basics, Contact, Skills & interests, CV / Resume, Experience
+  (with an editable description per role) and Education, each its own section, with a live
+  profile-completion meter and a sticky save bar.
+
+### Jobs, careers & hiring
+
+A full **Jobs & Careers platform** sits alongside the network. It reuses the same accounts,
+profiles and skills, so matching and one-click apply "just work".
+
+- **Jobs board** — browse open roles with search and filters (category, type, experience,
+  country, remote), **quick-filter chips** (Remote / Tech / Senior / …), and a **sort** control
+  (best match / newest / top salary). Each card shows a **skill-match score** computed from the
+  overlap between the job's skills and your profile, with matched skills highlighted.
+- **Full job-detail page** — a breadcrumb back bar, a header with the match score and
+  "why you're a strong candidate" chips, **tabs** (Overview / Responsibilities / Skills & Tech /
+  Salary & Benefits), and an insight rail: **Role Fit Analysis** (your matched vs missing skills),
+  the **hiring team** (the real recruiter who posted, linking to their profile), and
+  **similar open roles** ranked by shared skills. **Save Job** persists per browser.
+- **One-click apply** — internal roles apply with your Huddle profile once it's **≥ 70 % complete**
+  (a gate nudges you to finish it first); external roles open the **company's own apply link** and
+  still record the application so it shows in your pipeline.
+- **CV auto-fill** — upload a PDF/DOCX CV and a dependency-free parser pre-fills your headline,
+  location, skills, experience and education for you to review before saving.
+- **Applications hub** — your submitted / active / shortlisted / closed counts, a "You're
+  shortlisted" next-steps card, and salary insights (median + range) across the jobs you're viewing.
+- **Posting & importing** — recruiters post roles from their dashboard; super-admins can import
+  roles **one at a time** or paste **JSON that's verified before import**, and a
+  [script](server/scripts/README.md) bulk-imports real, recent jobs from public job APIs or a CSV,
+  keeping each job's original apply link.
+- **Mobile Jobs tab** — the React Native app has its own Jobs browsing + apply screen.
 
 ### Real-time (presence, notifications & calling)
 
@@ -158,7 +244,9 @@ so signed-in members get live pushes wherever they are:
 
 **Accounts**
 - Sign in with **email and password**, or with **Google or GitHub** (optional social login)
-- **Admin dashboard** (admin role): see everyone who has registered, and create, edit, delete or re-role accounts
+- Three roles — **Member / Recruiter / Super Admin** — with a role-aware rail entry
+- **Super-admin console**: platform metrics, user management, recruiter directory, moderation, ads, JSON export
+- **Recruiter ATS dashboard**: own-roles-only funnel, applicants, requisition cards, CSV export
 - A social account can add a password in Profile, so it can also sign in by email
 - Accounts in **MongoDB** with **scrypt**-hashed passwords; **JWT** sessions (7 days by default)
 - Rate limiting, identical errors for "wrong password" and "no such account", invite links that survive sign-in
@@ -186,6 +274,14 @@ so signed-in members get live pushes wherever they are:
 - **Ads**: admins manage promo cards in the dashboard; active ads appear in the member feed
 - **Uploads** (photos, CVs, post images) served from a stable `/media/...` URL, or Amazon S3 when configured
 
+**Jobs & hiring**
+- **Jobs board** with search, filters, quick-filter chips, sort, and a per-role **skill-match score**
+- **Full job-detail page**: tabs, why-you-fit chips, Role Fit Analysis, hiring team, similar roles, Save Job
+- **One-click apply** for internal roles (70%-complete profile gate) or the company's own link for external roles
+- **CV auto-fill** from an uploaded PDF/DOCX; **applications hub** with pipeline counts and salary insights
+- **Recruiter posting** + **super-admin import** (single, verified-JSON, or the bulk importer script)
+- **Mobile Jobs tab** for browsing and applying on Android/iOS
+
 ## Project layout
 
 ```
@@ -197,8 +293,15 @@ video-call-app/
 ├── docker-compose.yml     — local MongoDB for development
 ├── Dockerfile             — production image (web build + Node server)
 ├── deploy/                — production stack: Caddy (HTTPS), MongoDB, coturn, backups, setup.sh
-└── docs/                  — screenshots
+├── server/scripts/        — the real-jobs importer (public APIs / CSV) — see its README
+└── docs/                  — screenshots + design mockups (incl. the admin dashboard prototype)
 ```
+
+The server is plain Node (no framework): `social.js` holds the network + jobs
+routes, `auth/admin.js` the super-admin console API, `recruiter.js` the
+ownership-scoped recruiter API, and `auth/roles.js` the three-tier role helpers
+(member / recruiter / super_admin). The web app is one SPA; the super-admin and
+recruiter dashboards and the Jobs surfaces are components under `web/src/components/`.
 
 See **[ARCHITECTURE.md](./ARCHITECTURE.md)** for diagrams of the system, the sign-in flow and the call flow.
 
@@ -289,6 +392,11 @@ Build in the cloud: `npx eas build --profile development --platform android`.
 | POST | `/api/admin/ads` | Bearer (admin) | `{ title, body?, linkUrl?, imageKey?, active? }` → `201 { ad }` |
 | PATCH | `/api/admin/ads/:id` | Bearer (admin) | ad fields → `{ ad }` |
 | DELETE | `/api/admin/ads/:id` | Bearer (admin) | → `{ ok, id }` |
+| GET | `/api/admin/stats` | Bearer (super admin) | → `{ totalUsers, byRole, jobsTotal, jobsActive, jobsByCategory, applicationsTotal, applicationsByStatus, … }` (platform metrics) |
+| GET | `/api/admin/jobs` | Bearer (super admin) | → `{ jobs }` (all jobs) |
+| POST | `/api/admin/jobs` | Bearer (super admin) | job fields → `201 { job }` (stamps `postedBy`) |
+| POST | `/api/admin/jobs/import` | Bearer (super admin) | `{ jobs, dedupe? }` → `{ created, skipped }` (bulk / verified-JSON import) |
+| GET | `/api/admin/recruiters` | Bearer (super admin) | → `{ recruiters }` (each with `jobCount`, `applicantCount`) |
 | GET | `/api/rooms/:id` | Bearer | → `{ roomId, participants, people, maxPeers, full }` |
 | POST | `/api/rooms/:id/messages` | Bearer | `{ text }` → `201 { message }`; also sent live to people in the meeting |
 | GET | `/api/chats` | Bearer | → `{ chats }`: your rooms, last message, who's in the meeting now |
@@ -334,6 +442,25 @@ All require a Bearer token. Profile responses are shaped by the viewer's connect
 | POST | `/api/dm/:userId` | `{ text }` → `201 { message }` (connections only) |
 | POST | `/api/call/:userId/invite` | `{ roomId }` → `201 { ok, message }` (posts a call message in the DM + notifies; connections only) |
 
+### Jobs, careers & recruiter API
+
+All require a Bearer token. Job responses include a per-viewer `matchScore` and `matchedSkills` from the overlap with your profile.
+
+| Method | Path | Body → Response |
+|---|---|---|
+| GET | `/api/jobs?q=&category=&type=&experience=&country=&remote=` | → `{ jobs, total }` (board, filtered, with match score) |
+| GET | `/api/jobs/:id` | → `{ job }` |
+| POST | `/api/jobs/:id/apply` | `{ note? }` → `{ application }` (internal roles; profile must be ≥70% complete) |
+| GET | `/api/applications` | → `{ applications }` (your submitted applications) |
+| POST | `/api/profile/cv/parse` | CV file (PDF/DOCX) → `{ parsed }` (headline, skills, experience, education for review) |
+| GET | `/api/recruiter/dashboard` | → `{ jobCount, funnel, jobs, recentApplicants }` (recruiter's own pipeline) |
+| GET | `/api/recruiter/jobs` | → `{ jobs }` (roles you posted) |
+| POST | `/api/recruiter/jobs` | job fields → `{ job }` (stamps you as `postedBy`) |
+| PATCH | `/api/recruiter/jobs/:id` | patch → `{ job }` (owner only) |
+| DELETE | `/api/recruiter/jobs/:id` | → `{ ok, id }` (owner only) |
+| GET | `/api/recruiter/jobs/:id/applicants` | → `{ job, applicants }` (owner only) |
+| PATCH | `/api/recruiter/applications/:id` | `{ status }` → `{ application }` (`applied`/`shortlisted`/`rejected`; owner only) |
+
 **Presence WebSocket** (`/ws`, same endpoint as signalling): after connecting, send
 `{ type: "hello", token }` to register for live pushes without joining a call. The server then
 delivers `{ type: "notification", … }` and call invites. Call signalling messages:
@@ -374,6 +501,7 @@ Each folder has a `.env.example`.
 - **Server:**
   - **Accounts & admin:** register / sign-in validation, duplicate emails, new accounts defaulting to the `user` role, the social-providers endpoint, and the admin API — list, create, update and delete users, role changes, and the guards that stop an admin from deleting or demoting themselves.
   - **Professional network:** profiles and partial visibility, connections (request / accept / decline / remove, idempotent requests), posts & feed (create, like, comment, before-paging), direct messages (connections only), and a regression test that a **profile-less account like the seeded admin can still receive and accept connection requests**.
+  - **Roles, jobs & hiring:** the three-tier role helpers and normalization (legacy `user`→member, `admin`→super_admin); the jobs board (filters, skill-match scoring), apply with the profile-completeness gate, bulk/CSV import with de-duplication; and the **recruiter API ownership scoping** — a recruiter sees only their own roles, applicants and funnel, with cross-recruiter access returning 404 and super-admin override returning 200.
   - **Ads:** admin create / edit / delete, and that only *active* ads reach members' feeds.
   - **Notifications & calling:** a like/comment notifies the post author (and not yourself), mark-read clears the unread count, the community user count, and that calling a connection posts a call message in the DM thread with the room plus a `call` notification (and rejects calling a non-connection).
   - **Media:** local uploads saved and served from the static `/media/...` URL (no signature, no expiry), with path-traversal and bad-key rejections, content-type and 10 MB limits.
@@ -397,5 +525,8 @@ Each folder has a `.env.example`.
 - [x] **Email + password and social login** (Google / GitHub / Facebook), an **admin dashboard** with user management, and a Teams-style layout with Chat and Calls tabs
 - [x] **Professional network**: profiles + CV, connections with partial visibility, a merged Facebook-style home feed with unified post/people search, **direct messages**, admin-managed **ads**, and static-folder media uploads
 - [x] **Real-time**: a presence WebSocket powering live like/comment/call **notifications**, **1:1 calling with ring/accept**, add-people-mid-call, call-from-a-conversation (join link + notification), a live member count, and camera/mic requested only when calling
+- [x] **Jobs & careers**: a jobs board with skill-match scoring, a tabbed job-detail page, one-click / external apply, CV auto-fill, an applications hub, a real-jobs importer, and a mobile Jobs tab
+- [x] **Three-tier roles & dashboards**: member / recruiter / super-admin, a recruiter ATS dashboard (own-pipeline only) and a super-admin platform console, plus the 3-column home and section-wise profile
+- [ ] **Admin Control Center**: a standalone admin app (metrics dashboard + Users/Jobs/Logs pages with checkbox CRUD) and a real activity-audit log — *in progress*
 - [ ] Forgot-password email, refresh tokens
 - [ ] **Step 3**: SFU (mediasoup) for bigger rooms (10–20+)
