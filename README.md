@@ -22,7 +22,8 @@ feed with a "people you may know" and sponsored sidebar.
 
 *A quick tour — start a meeting, share your screen and chat, all in one place.*
 Lofin Page 
-<img width="3510" height="1937" alt="image" src="https://github.com/user-attachments/assets/9c841357-e328-41c3-84cf-60f92c3cd7af" />
+![Uploading image.png…]()
+
 
 <img width="3520" height="1943" alt="image" src="https://github.com/user-attachments/assets/6e4f9648-5196-4f03-99b5-8959ecc2845a" />
 <img width="3533" height="1931" alt="image" src="https://github.com/user-attachments/assets/143f5624-b822-4312-a404-e10adf9bd115" />
