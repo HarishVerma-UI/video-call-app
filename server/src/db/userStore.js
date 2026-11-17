@@ -38,6 +38,18 @@ function userSearchPattern(search) {
   return new RegExp(escaped, 'i');
 }
 
+/** Build a Mongo filter for the admin user list: text search + canonical-role filter
+    (accounting for legacy stored roles: 'admin'→super_admin, 'user'/absent→member). */
+function userListFilter(search = '', role = '') {
+  const and = [];
+  const q = String(search).trim();
+  if (q) { const p = userSearchPattern(q); and.push({ $or: [{ name: p }, { email: p }, { role: p }] }); }
+  if (role === 'recruiter') and.push({ role: 'recruiter' });
+  else if (role === 'super_admin') and.push({ role: { $in: ['super_admin', 'admin'] } });
+  else if (role === 'member') and.push({ role: { $nin: ['recruiter', 'super_admin', 'admin'] } });
+  return and.length ? { $and: and } : {};
+}
+
 /** Shape sent to clients — never includes the password hash. */
 export function publicUser(u) {
   if (!u) return null;
@@ -139,19 +151,20 @@ export function createMemoryUserStore() {
       u.role = role;
       return { ...u };
     },
-    async list({ limit = 500, skip = 0, search = '' } = {}) {
+    async list({ limit = 500, skip = 0, search = '', role = '' } = {}) {
       const query = search.trim().toLowerCase();
       return [...byId.values()]
         .filter((user) => !query || [user.name, user.email, normalizeRole(user.role)].some((value) => String(value ?? '').toLowerCase().includes(query)))
+        .filter((user) => !role || normalizeRole(user.role) === role)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(skip, skip + limit)
         .map((u) => ({ ...u }));
     },
-    async count({ search = '' } = {}) {
+    async count({ search = '', role = '' } = {}) {
       const query = search.trim().toLowerCase();
-      if (!query) return byId.size;
       return [...byId.values()].filter((user) =>
-        [user.name, user.email, normalizeRole(user.role)].some((value) => String(value ?? '').toLowerCase().includes(query)),
+        (!query || [user.name, user.email, normalizeRole(user.role)].some((value) => String(value ?? '').toLowerCase().includes(query))) &&
+        (!role || normalizeRole(user.role) === role),
       ).length;
     },
     async remove(id) {
@@ -279,16 +292,13 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       await users.updateOne({ _id }, { $set: { role, updatedAt: new Date() } });
       return toUser(await users.findOne({ _id }));
     },
-    async list({ limit = 500, skip = 0, search = '' } = {}) {
-      const pattern = search.trim() ? userSearchPattern(search.trim()) : null;
-      const filter = pattern ? { $or: [{ name: pattern }, { email: pattern }, { role: pattern }] } : {};
+    async list({ limit = 500, skip = 0, search = '', role = '' } = {}) {
+      const filter = userListFilter(search, role);
       const docs = await users.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).toArray();
       return docs.map(toUser);
     },
-    async count({ search = '' } = {}) {
-      const pattern = search.trim() ? userSearchPattern(search.trim()) : null;
-      const filter = pattern ? { $or: [{ name: pattern }, { email: pattern }, { role: pattern }] } : {};
-      return users.countDocuments(filter);
+    async count({ search = '', role = '' } = {}) {
+      return users.countDocuments(userListFilter(search, role));
     },
     async remove(id) {
       const _id = oid(id);

@@ -47,10 +47,12 @@ export function createAdmin(opts) {
     const page = Math.max(1, Number(url?.searchParams?.get('page')) || 1);
     const limit = Math.min(100, Math.max(1, Number(url?.searchParams?.get('limit')) || 50));
     const search = (url?.searchParams?.get('search') ?? '').trim().slice(0, 100);
+    const roleRaw = url?.searchParams?.get('role') ?? '';
+    const role = ['member', 'recruiter', 'super_admin'].includes(roleRaw) ? roleRaw : '';
     const skip = (page - 1) * limit;
     const [paged, total] = await Promise.all([
-      opts.store.list({ limit, skip, search }),
-      opts.store.count({ search }),
+      opts.store.list({ limit, skip, search, role }),
+      opts.store.count({ search, role }),
     ]);
     const profiles = opts.social?.profiles ? await opts.social.profiles.getMany(paged.map((user) => user.id)) : [];
     const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
@@ -249,11 +251,21 @@ export function createAdmin(opts) {
   }
 
   // --- Jobs: admin-managed listings + applicant review ---
-  async function listJobs(req, res) {
+  async function listJobs(req, res, url) {
     await requireAdmin(req);
-    if (!opts.social?.jobs) return sendJson(res, 200, { jobs: [] });
-    const [jobs, counts] = await Promise.all([opts.social.jobs.list({ activeOnly: false }), opts.social.jobs.applicantCounts()]);
-    sendJson(res, 200, { jobs: jobs.map((j) => ({ ...publicJob(j), applicantCount: counts[j.id] ?? 0 })) });
+    const { page, limit, search, status, category } = pageParams(url);
+    if (!opts.social?.jobs) return sendJson(res, 200, { jobs: [], total: 0, page, limit });
+    const [all, counts] = await Promise.all([opts.social.jobs.list({ activeOnly: false }), opts.social.jobs.applicantCounts()]);
+    const q = search.toLowerCase();
+    let jobs = all;
+    if (q) jobs = jobs.filter((j) => (j.title || '').toLowerCase().includes(q) || (j.company || '').toLowerCase().includes(q));
+    if (status === 'live') jobs = jobs.filter((j) => j.active !== false);
+    else if (status === 'closed') jobs = jobs.filter((j) => j.active === false);
+    if (category === 'tech' || category === 'non-tech') jobs = jobs.filter((j) => (j.category === 'non-tech' ? 'non-tech' : 'tech') === category);
+    const total = jobs.length;
+    const skip = (page - 1) * limit;
+    const paged = jobs.slice(skip, skip + limit);
+    sendJson(res, 200, { jobs: paged.map((j) => ({ ...publicJob(j), applicantCount: counts[j.id] ?? 0 })), total, page, limit });
   }
 
   async function createJob(req, res) {
@@ -410,16 +422,14 @@ export function createAdmin(opts) {
   async function auditHandler(req, res, url) {
     await requireAdmin(req);
     const auditStore = opts.social?.audit;
-    if (!auditStore) { sendJson(res, 200, { events: [], total: 0 }); return; }
-    const q = url?.searchParams;
-    const limit = Math.min(200, Math.max(1, parseInt(q?.get('limit') ?? '50', 10) || 50));
-    const category = q?.get('category') || undefined;
-    const before = q?.get('before') || undefined;
+    const { page, limit } = pageParams(url, 50, 200);
+    const category = url?.searchParams?.get('category') || undefined;
+    if (!auditStore) { sendJson(res, 200, { events: [], total: 0, page, limit }); return; }
     const [events, count] = await Promise.all([
-      auditStore.list({ limit, category, before }),
-      auditStore.count ? auditStore.count() : Promise.resolve(0),
+      auditStore.list({ page, limit, category }),
+      auditStore.count ? auditStore.count({ category }) : Promise.resolve(0),
     ]);
-    sendJson(res, 200, { events, total: count });
+    sendJson(res, 200, { events, total: count, page, limit });
   }
 
   // Bulk delete users (skips self), returns how many were removed.
@@ -491,33 +501,46 @@ export function createAdmin(opts) {
     const n = parseInt(url?.searchParams?.get('limit') ?? '', 10);
     return Number.isFinite(n) ? Math.min(max, Math.max(1, n)) : def;
   }
+  function pageParams(url, def = 25, max = 100) {
+    const p = parseInt(url?.searchParams?.get('page') ?? '', 10);
+    return {
+      page: Number.isFinite(p) ? Math.max(1, p) : 1,
+      limit: qLimit(url, def, max),
+      search: (url?.searchParams?.get('search') ?? '').trim().slice(0, 100),
+      status: url?.searchParams?.get('status') || undefined,
+      category: url?.searchParams?.get('category') || undefined,
+    };
+  }
 
   async function listPosts(req, res, url) {
     await requireAdmin(req);
     const store = opts.social?.posts;
-    if (!store?.listAll) { sendJson(res, 200, { posts: [], total: 0 }); return; }
-    const { items, total } = await store.listAll({ limit: qLimit(url) });
+    const { page, limit, search } = pageParams(url);
+    if (!store?.listAll) { sendJson(res, 200, { posts: [], total: 0, page, limit }); return; }
+    const { items, total } = await store.listAll({ page, limit, search });
     const posts = items.map((p) => ({
       ...publicPost(p),
       likeCount: (p.likes ?? []).length,
       commentCount: (p.comments ?? []).length,
     }));
-    sendJson(res, 200, { posts, total });
+    sendJson(res, 200, { posts, total, page, limit });
   }
 
   async function listComments(req, res, url) {
     await requireAdmin(req);
     const store = opts.social?.posts;
-    if (!store?.listComments) { sendJson(res, 200, { comments: [], total: 0 }); return; }
-    const { items, total } = await store.listComments({ limit: qLimit(url) });
-    sendJson(res, 200, { comments: items, total });
+    const { page, limit, search } = pageParams(url);
+    if (!store?.listComments) { sendJson(res, 200, { comments: [], total: 0, page, limit }); return; }
+    const { items, total } = await store.listComments({ page, limit, search });
+    sendJson(res, 200, { comments: items, total, page, limit });
   }
 
   async function listConnections(req, res, url) {
     await requireAdmin(req);
     const store = opts.social?.connections;
-    if (!store?.listAll) { sendJson(res, 200, { connections: [], total: 0 }); return; }
-    const { items, total } = await store.listAll({ limit: qLimit(url) });
+    const { page, limit, status } = pageParams(url);
+    if (!store?.listAll) { sendJson(res, 200, { connections: [], total: 0, page, limit }); return; }
+    const { items, total } = await store.listAll({ page, limit, status: status === 'pending' || status === 'accepted' ? status : undefined });
     // resolve display names for the (bounded) page
     const ids = [...new Set(items.flatMap((c) => c.users))];
     const names = {};
@@ -530,14 +553,16 @@ export function createAdmin(opts) {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     }));
-    sendJson(res, 200, { connections, total });
+    sendJson(res, 200, { connections, total, page, limit });
   }
 
   async function listApplications(req, res, url) {
     await requireAdmin(req);
     const store = opts.social?.jobs;
-    if (!store?.applicationsAll) { sendJson(res, 200, { applications: [], total: 0 }); return; }
-    const { items, total } = await store.applicationsAll({ limit: qLimit(url) });
+    const { page, limit, search, status } = pageParams(url);
+    const st = ['applied', 'shortlisted', 'rejected'].includes(status) ? status : undefined;
+    if (!store?.applicationsAll) { sendJson(res, 200, { applications: [], total: 0, page, limit }); return; }
+    const { items, total } = await store.applicationsAll({ page, limit, search, status: st });
     const jobIds = [...new Set(items.map((a) => a.jobId))];
     const jobsById = {};
     await Promise.all(jobIds.map(async (id) => { jobsById[id] = await store.byId(id); }));
@@ -545,7 +570,7 @@ export function createAdmin(opts) {
       const j = jobsById[a.jobId];
       return { ...publicApplication(a), jobTitle: j?.title ?? '—', company: j?.company ?? '', jobCategory: j?.category ?? '' };
     });
-    sendJson(res, 200, { applications, total });
+    sendJson(res, 200, { applications, total, page, limit });
   }
 
   async function bulkDeletePosts(req, res) {
@@ -582,7 +607,7 @@ export function createAdmin(opts) {
     else if (pathname === '/api/admin/recruiter-applications' && req.method === 'GET') await listRecruiterApplications(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'GET') await listAds(req, res);
     else if (pathname === '/api/admin/ads' && req.method === 'POST') await createAd(req, res);
-    else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
+    else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res, url);
     else if (pathname === '/api/admin/jobs' && req.method === 'POST') await createJob(req, res);
     else if (pathname === '/api/admin/jobs/import' && req.method === 'POST') await importJobs(req, res);
     else if (pathname === '/api/admin/posts' && req.method === 'GET') await listPosts(req, res, url);

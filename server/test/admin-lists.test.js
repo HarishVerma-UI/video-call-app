@@ -68,6 +68,38 @@ test('the content lists are forbidden to non-admins', async () => {
   }
 });
 
+test('posts list paginates and searches', async () => {
+  // create several posts with a unique marker
+  const marker = `zz${Date.now()}`;
+  for (let i = 0; i < 5; i++) await api(t.base, 'POST', '/api/posts', { text: `${marker} post ${i}` }, alice.token);
+  // page 1 of 2
+  const p1 = await api(t.base, 'GET', `/api/admin/posts?search=${marker}&page=1&limit=2`, null, admin.token);
+  assert.equal(p1.status, 200);
+  assert.equal(p1.body.posts.length, 2);
+  assert.equal(p1.body.total, 5);
+  assert.equal(p1.body.page, 1);
+  const p3 = await api(t.base, 'GET', `/api/admin/posts?search=${marker}&page=3&limit=2`, null, admin.token);
+  assert.equal(p3.body.posts.length, 1); // 5 total → last page has 1
+});
+
+test('users list filters by role', async () => {
+  const rec = await registerUser(t.base, 'Rec Filter');
+  await t.store.setRole(rec.user.id, 'recruiter');
+  const res = await api(t.base, 'GET', '/api/admin/users?role=recruiter&limit=100', null, admin.token);
+  assert.equal(res.status, 200);
+  assert.ok(res.body.users.length >= 1);
+  assert.ok(res.body.users.every((u) => u.role === 'recruiter'), 'only recruiters returned');
+});
+
+test('jobs list searches and filters by status', async () => {
+  await api(t.base, 'POST', '/api/admin/jobs', { title: 'Unique Backend Role', company: 'Zeta' }, admin.token);
+  const res = await api(t.base, 'GET', '/api/admin/jobs?search=Unique%20Backend&status=live', null, admin.token);
+  assert.equal(res.status, 200);
+  assert.ok(res.body.jobs.some((j) => j.title === 'Unique Backend Role'));
+  assert.ok(res.body.jobs.every((j) => j.active !== false));
+  assert.equal(typeof res.body.total, 'number');
+});
+
 test('admin can bulk-delete posts and delete a comment', async () => {
   const p1 = await api(t.base, 'POST', '/api/posts', { text: 'doomed one' }, alice.token);
   const p2 = await api(t.base, 'POST', '/api/posts', { text: 'doomed two' }, alice.token);

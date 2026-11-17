@@ -414,21 +414,21 @@ export interface ApiClient {
   providers(): Promise<{ providers: Providers }>;
 
   // --- admin dashboard (admin role only) ---
-  adminListUsers(input?: { page?: number; limit?: number; search?: string }): Promise<{ users: AdminUser[]; total: number; page: number; limit: number }>;
+  adminListUsers(input?: { page?: number; limit?: number; search?: string; role?: UserRole | '' }): Promise<{ users: AdminUser[]; total: number; page: number; limit: number }>;
   adminCreateUser(input: { name: string; email: string; password: string; role?: UserRole }): Promise<{ user: AuthUser }>;
   adminUpdateUser(id: string, patch: { name?: string; email?: string; role?: UserRole; password?: string; recruiterApplicationStatus?: 'approved' | 'rejected' }): Promise<{ user: AuthUser }>;
   adminDeleteUser(id: string): Promise<{ ok: boolean; id: string }>;
   adminStats(): Promise<AdminStats>;
   adminListRecruiters(): Promise<{ recruiters: RecruiterSummary[] }>;
   adminListRecruiterRequests(): Promise<{ requests: AuthUser[] }>;
-  /** Paginated audit log (super-admin only). `before` is a ts cursor. */
-  adminAudit(opts?: { category?: AuditCategory; before?: number; limit?: number }): Promise<{ events: AuditEvent[]; total: number }>;
+  /** Paginated audit log (super-admin only). */
+  adminAudit(opts?: { category?: AuditCategory; page?: number; limit?: number }): Promise<{ events: AuditEvent[]; total: number; page: number; limit: number }>;
   adminBulkDeleteUsers(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
   adminBulkDeleteJobs(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
-  adminListPosts(opts?: { limit?: number }): Promise<{ posts: AdminPost[]; total: number }>;
-  adminListComments(opts?: { limit?: number }): Promise<{ comments: AdminComment[]; total: number }>;
-  adminListConnections(opts?: { limit?: number }): Promise<{ connections: AdminConnection[]; total: number }>;
-  adminListApplications(opts?: { limit?: number }): Promise<{ applications: AdminApplication[]; total: number }>;
+  adminListPosts(opts?: { page?: number; limit?: number; search?: string }): Promise<{ posts: AdminPost[]; total: number; page: number; limit: number }>;
+  adminListComments(opts?: { page?: number; limit?: number; search?: string }): Promise<{ comments: AdminComment[]; total: number; page: number; limit: number }>;
+  adminListConnections(opts?: { page?: number; limit?: number; status?: 'pending' | 'accepted' | '' }): Promise<{ connections: AdminConnection[]; total: number; page: number; limit: number }>;
+  adminListApplications(opts?: { page?: number; limit?: number; search?: string; status?: string }): Promise<{ applications: AdminApplication[]; total: number; page: number; limit: number }>;
   adminBulkDeletePosts(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
   adminDeleteComment(postId: string, commentId: string): Promise<{ ok: boolean }>;
 
@@ -493,7 +493,7 @@ export interface ApiClient {
   myApplications(): Promise<{ applications: JobApplication[] }>;
 
   // --- jobs admin (admin role only) ---
-  adminListJobs(): Promise<{ jobs: Job[] }>;
+  adminListJobs(opts?: { page?: number; limit?: number; search?: string; status?: string; category?: string }): Promise<{ jobs: Job[]; total: number; page: number; limit: number }>;
   adminCreateJob(input: JobInput): Promise<{ job: Job }>;
   adminUpdateJob(id: string, patch: Partial<JobInput>): Promise<{ job: Job }>;
   adminDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
@@ -553,9 +553,10 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     updateProfile: (input) => request('PATCH', '/api/auth/me', input),
     changePassword: (input) => request('POST', '/api/auth/password', input),
     providers: () => request('GET', '/api/auth/providers'),
-    adminListUsers: ({ page = 1, limit = 50, search = '' } = {}) => {
+    adminListUsers: ({ page = 1, limit = 50, search = '', role = '' } = {}) => {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (search.trim()) params.set('search', search.trim());
+      if (role) params.set('role', role);
       return request('GET', `/api/admin/users?${params}`);
     },
     adminCreateUser: (input) => request('POST', '/api/admin/users', input),
@@ -564,20 +565,34 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminStats: () => request('GET', '/api/admin/stats'),
     adminListRecruiters: () => request('GET', '/api/admin/recruiters'),
     adminListRecruiterRequests: () => request('GET', '/api/admin/recruiter-applications'),
-    adminAudit: (opts = {}) => {
-      const q = new URLSearchParams();
-      if (opts.category) q.set('category', opts.category);
-      if (opts.before) q.set('before', String(opts.before));
-      if (opts.limit) q.set('limit', String(opts.limit));
-      const qs = q.toString();
-      return request('GET', `/api/admin/audit${qs ? `?${qs}` : ''}`);
+    adminAudit: ({ page = 1, limit = 50, category } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (category) q.set('category', category);
+      return request('GET', `/api/admin/audit?${q}`);
     },
     adminBulkDeleteUsers: (ids) => request('POST', '/api/admin/users/bulk-delete', { ids }),
     adminBulkDeleteJobs: (ids) => request('POST', '/api/admin/jobs/bulk-delete', { ids }),
-    adminListPosts: (opts = {}) => request('GET', `/api/admin/posts${opts.limit ? `?limit=${opts.limit}` : ''}`),
-    adminListComments: (opts = {}) => request('GET', `/api/admin/comments${opts.limit ? `?limit=${opts.limit}` : ''}`),
-    adminListConnections: (opts = {}) => request('GET', `/api/admin/connections${opts.limit ? `?limit=${opts.limit}` : ''}`),
-    adminListApplications: (opts = {}) => request('GET', `/api/admin/applications${opts.limit ? `?limit=${opts.limit}` : ''}`),
+    adminListPosts: ({ page = 1, limit = 25, search = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      return request('GET', `/api/admin/posts?${q}`);
+    },
+    adminListComments: ({ page = 1, limit = 25, search = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      return request('GET', `/api/admin/comments?${q}`);
+    },
+    adminListConnections: ({ page = 1, limit = 25, status = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (status) q.set('status', status);
+      return request('GET', `/api/admin/connections?${q}`);
+    },
+    adminListApplications: ({ page = 1, limit = 25, search = '', status = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      if (status) q.set('status', status);
+      return request('GET', `/api/admin/applications?${q}`);
+    },
     adminBulkDeletePosts: (ids) => request('POST', '/api/admin/posts/bulk-delete', { ids }),
     adminDeleteComment: (postId, commentId) => request('DELETE', `/api/admin/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`),
     ads: () => request('GET', '/api/ads'),
@@ -669,7 +684,13 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     job: (id) => request('GET', `/api/jobs/${encodeURIComponent(id)}`),
     applyToJob: (id, input = {}) => request('POST', `/api/jobs/${encodeURIComponent(id)}/apply`, input),
     myApplications: () => request('GET', '/api/applications'),
-    adminListJobs: () => request('GET', '/api/admin/jobs'),
+    adminListJobs: ({ page = 1, limit = 25, search = '', status = '', category = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      if (status) q.set('status', status);
+      if (category) q.set('category', category);
+      return request('GET', `/api/admin/jobs?${q}`);
+    },
     adminCreateJob: (input) => request('POST', '/api/admin/jobs', input),
     adminUpdateJob: (id, patch) => request('PATCH', `/api/admin/jobs/${encodeURIComponent(id)}`, patch),
     adminDeleteJob: (id) => request('DELETE', `/api/admin/jobs/${encodeURIComponent(id)}`),
