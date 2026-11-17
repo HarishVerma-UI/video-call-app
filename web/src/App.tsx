@@ -1,7 +1,8 @@
-import { generateRoomId } from '@vca/shared';
+import { generateRoomId, isSuperAdmin } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './auth/AuthContext';
 import { CallingContext, IncomingCallModal } from './calling';
+import { AdminApp } from './components/admin/AdminApp';
 import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
 import { Shell, useRoute } from './components/Shell';
@@ -158,6 +159,8 @@ function SignedInApp() {
         <small>Allow access when your browser asks.</small>
       </div>
     )
+  ) : route.view === 'admin' && isSuperAdmin(user.role) ? (
+    <AdminApp exit={() => go({ view: 'feed' })} />
   ) : (
     <Shell user={user} media={media} route={route} go={go} notice={notice} onJoin={join} />
   );
