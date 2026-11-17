@@ -36,6 +36,30 @@ feed with a "people you may know" and sponsored sidebar.
 
 *(Screenshots come from automated tests that use Chrome's fake camera, so the videos show green test patterns.)*
 
+### Admin Control Center
+
+A **standalone admin dashboard** — its own app shell (a dedicated sidebar, not the
+member chrome) for tracking everything on the platform. The **Dashboard** is
+metrics-only (users, active, connections, posts, comments, jobs, applications,
+plus growth / activity / jobs-by-domain / funnel graphs); separate menu pages
+cover **Users, Connections, Posts, Comments, Jobs, Applications** and a full
+**Activity Logs** audit trail, and every management table has a selection
+checkbox with row and bulk CRUD actions. A clickable prototype lives at
+[`docs/design/admin-dashboard-mock.html`](docs/design/admin-dashboard-mock.html).
+
+| Dashboard (metrics & graphs) | Activity Logs (audit trail) |
+|---|---|
+| ![Admin dashboard](docs/screenshots/admin-dashboard.png) | ![Admin activity logs](docs/screenshots/admin-logs.png) |
+
+| Users (checkbox + CRUD) | Dark mode | Mobile |
+|---|---|---|
+| ![Admin users](docs/screenshots/admin-users.png) | ![Admin dashboard dark](docs/screenshots/admin-dashboard-dark.png) | ![Admin mobile](docs/screenshots/admin-mobile.png) |
+
+The screenshots render with sample data; the shipped app wires these surfaces to
+real platform data (user/activity/job metrics and the audit log). The earlier
+job-detail and admin/recruiter design mockups are in
+[`docs/design/`](docs/design/).
+
 ## Put it online
 
 **[DEPLOY.md](./DEPLOY.md)**: rent a small server, get a free DuckDNS address, run one
