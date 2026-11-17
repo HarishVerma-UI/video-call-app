@@ -8,7 +8,7 @@
 
 import { HttpError, readJson, sendJson } from '../http.js';
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
-import { publicApplication, publicJob, publicProfile } from '../db/socialStore.js';
+import { publicApplication, publicJob, publicPost, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
 import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
 import { APPLICATION_STATUSES, jobPatchFrom } from '../jobsValidate.js';
@@ -486,6 +486,89 @@ export function createAdmin(opts) {
     sendJson(res, 200, { requests });
   }
 
+  // ---- global content lists for the admin console ----
+  function qLimit(url, def = 50, max = 200) {
+    const n = parseInt(url?.searchParams?.get('limit') ?? '', 10);
+    return Number.isFinite(n) ? Math.min(max, Math.max(1, n)) : def;
+  }
+
+  async function listPosts(req, res, url) {
+    await requireAdmin(req);
+    const store = opts.social?.posts;
+    if (!store?.listAll) { sendJson(res, 200, { posts: [], total: 0 }); return; }
+    const { items, total } = await store.listAll({ limit: qLimit(url) });
+    const posts = items.map((p) => ({
+      ...publicPost(p),
+      likeCount: (p.likes ?? []).length,
+      commentCount: (p.comments ?? []).length,
+    }));
+    sendJson(res, 200, { posts, total });
+  }
+
+  async function listComments(req, res, url) {
+    await requireAdmin(req);
+    const store = opts.social?.posts;
+    if (!store?.listComments) { sendJson(res, 200, { comments: [], total: 0 }); return; }
+    const { items, total } = await store.listComments({ limit: qLimit(url) });
+    sendJson(res, 200, { comments: items, total });
+  }
+
+  async function listConnections(req, res, url) {
+    await requireAdmin(req);
+    const store = opts.social?.connections;
+    if (!store?.listAll) { sendJson(res, 200, { connections: [], total: 0 }); return; }
+    const { items, total } = await store.listAll({ limit: qLimit(url) });
+    // resolve display names for the (bounded) page
+    const ids = [...new Set(items.flatMap((c) => c.users))];
+    const names = {};
+    await Promise.all(ids.map(async (id) => { const u = await opts.store.findById(id); names[id] = u?.name || u?.email || 'Unknown'; }));
+    const connections = items.map((c) => ({
+      pair: c.pair,
+      from: { id: c.requester, name: names[c.requester] ?? 'Unknown' },
+      to: { id: c.users.find((u) => u !== c.requester) ?? c.users[0], name: names[c.users.find((u) => u !== c.requester) ?? c.users[0]] ?? 'Unknown' },
+      status: c.status,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    }));
+    sendJson(res, 200, { connections, total });
+  }
+
+  async function listApplications(req, res, url) {
+    await requireAdmin(req);
+    const store = opts.social?.jobs;
+    if (!store?.applicationsAll) { sendJson(res, 200, { applications: [], total: 0 }); return; }
+    const { items, total } = await store.applicationsAll({ limit: qLimit(url) });
+    const jobIds = [...new Set(items.map((a) => a.jobId))];
+    const jobsById = {};
+    await Promise.all(jobIds.map(async (id) => { jobsById[id] = await store.byId(id); }));
+    const applications = items.map((a) => {
+      const j = jobsById[a.jobId];
+      return { ...publicApplication(a), jobTitle: j?.title ?? '—', company: j?.company ?? '', jobCategory: j?.category ?? '' };
+    });
+    sendJson(res, 200, { applications, total });
+  }
+
+  async function bulkDeletePosts(req, res) {
+    const admin = await requireAdmin(req);
+    const store = opts.social?.posts;
+    const body = await readJson(req);
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string') : [];
+    let deleted = 0;
+    if (store) for (const id of ids) { const ok = await store.remove(id); if (ok) deleted++; }
+    recordAudit({ ...actorOf(admin), action: 'removed posts', category: 'admin', target: `${deleted} post${deleted !== 1 ? 's' : ''}` });
+    sendJson(res, 200, { ok: true, deleted });
+  }
+
+  async function deleteComment(req, res, postId, commentId) {
+    const admin = await requireAdmin(req);
+    const store = opts.social?.posts;
+    if (!store) throw new HttpError(503, 'Posts are not available.');
+    const updated = await store.removeComment(postId, commentId);
+    if (!updated) throw new HttpError(404, 'Comment not found.');
+    recordAudit({ ...actorOf(admin), action: 'removed a comment', category: 'admin', target: '' });
+    sendJson(res, 200, { ok: true });
+  }
+
   /** Returns true if the request was an admin route (and has been answered). */
   async function handle(req, res, pathname, url) {
     if (!pathname.startsWith('/api/admin/')) return false;
@@ -502,13 +585,20 @@ export function createAdmin(opts) {
     else if (pathname === '/api/admin/jobs' && req.method === 'GET') await listJobs(req, res);
     else if (pathname === '/api/admin/jobs' && req.method === 'POST') await createJob(req, res);
     else if (pathname === '/api/admin/jobs/import' && req.method === 'POST') await importJobs(req, res);
+    else if (pathname === '/api/admin/posts' && req.method === 'GET') await listPosts(req, res, url);
+    else if (pathname === '/api/admin/posts/bulk-delete' && req.method === 'POST') await bulkDeletePosts(req, res);
+    else if (pathname === '/api/admin/comments' && req.method === 'GET') await listComments(req, res, url);
+    else if (pathname === '/api/admin/connections' && req.method === 'GET') await listConnections(req, res, url);
+    else if (pathname === '/api/admin/applications' && req.method === 'GET') await listApplications(req, res, url);
     else {
       const adMatch = pathname.match(/^\/api\/admin\/ads\/([^/]+)$/);
+      const commentMatch = pathname.match(/^\/api\/admin\/posts\/([^/]+)\/comments\/([^/]+)$/);
       const m = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
       const jobAppMatch = pathname.match(/^\/api\/admin\/jobs\/([^/]+)\/applicants$/);
       const jobMatch = pathname.match(/^\/api\/admin\/jobs\/([^/]+)$/);
       const appMatch = pathname.match(/^\/api\/admin\/applications\/([^/]+)$/);
-      if (adMatch && req.method === 'PATCH') await updateAd(req, res, decodeURIComponent(adMatch[1]));
+      if (commentMatch && req.method === 'DELETE') await deleteComment(req, res, decodeURIComponent(commentMatch[1]), decodeURIComponent(commentMatch[2]));
+      else if (adMatch && req.method === 'PATCH') await updateAd(req, res, decodeURIComponent(adMatch[1]));
       else if (adMatch && req.method === 'DELETE') await deleteAd(req, res, decodeURIComponent(adMatch[1]));
       else if (jobAppMatch && req.method === 'GET') await jobApplicants(req, res, decodeURIComponent(jobAppMatch[1]));
       else if (jobMatch && req.method === 'PATCH') await updateJob(req, res, decodeURIComponent(jobMatch[1]));

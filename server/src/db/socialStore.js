@@ -169,6 +169,12 @@ export function createMemoryConnectionStore() {
     async listFor(userId, status) {
       return [...byPair.values()].filter((c) => c.users.includes(userId) && (!status || c.status === status)).map(shape);
     },
+    async listAll({ limit = 100, status } = {}) {
+      let list = [...byPair.values()];
+      if (status) list = list.filter((c) => c.status === status);
+      list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      return { items: list.slice(0, limit).map(shape), total: list.length };
+    },
     async areConnected(a, b) {
       const c = byPair.get(pairKey(a, b));
       return !!c && c.status === 'accepted';
@@ -211,6 +217,15 @@ function mongoConnectionStore(col) {
       if (status) filter.status = status;
       return (await col.find(filter).toArray()).map(shape);
     },
+    async listAll({ limit = 100, status } = {}) {
+      const filter = {};
+      if (status) filter.status = status;
+      const [items, total] = await Promise.all([
+        col.find(filter).sort({ updatedAt: -1 }).limit(limit).toArray(),
+        col.countDocuments(filter),
+      ]);
+      return { items: items.map(shape), total };
+    },
     async areConnected(a, b) {
       return !!(await col.findOne({ _id: pairKey(a, b), status: 'accepted' }));
     },
@@ -246,6 +261,18 @@ export function createMemoryPostStore() {
       if (authorIds) { const set = new Set(authorIds); list = list.filter((p) => set.has(p.authorId)); }
       if (before) list = list.filter((p) => new Date(p.createdAt).getTime() < before);
       return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, limit).map((p) => ({ ...p }));
+    },
+    async listAll({ limit = 50, before } = {}) {
+      let list = [...byId.values()];
+      if (before) list = list.filter((p) => new Date(p.createdAt).getTime() < before);
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return { items: list.slice(0, limit).map((p) => ({ ...p })), total: byId.size };
+    },
+    async listComments({ limit = 50 } = {}) {
+      const all = [];
+      for (const p of byId.values()) for (const c of p.comments) all.push({ ...c, postId: p.id, postAuthor: p.authorName, postExcerpt: (p.text || '').slice(0, 80) });
+      all.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      return { items: all.slice(0, limit), total: all.length };
     },
     async toggleLike(id, userId) {
       const p = byId.get(id);
@@ -311,6 +338,22 @@ function mongoPostStore(col, ObjectId) {
       const filter = authorIds ? { authorId: { $in: authorIds } } : {};
       if (before) filter.createdAt = { $lt: new Date(before) };
       return (await col.find(filter).sort({ createdAt: -1 }).limit(limit).toArray()).map(toPost);
+    },
+    async listAll({ limit = 50, before } = {}) {
+      const filter = {};
+      if (before) filter.createdAt = { $lt: new Date(before) };
+      const [rows, total] = await Promise.all([
+        col.find(filter).sort({ createdAt: -1 }).limit(limit).toArray(),
+        col.estimatedDocumentCount(),
+      ]);
+      return { items: rows.map(toPost), total };
+    },
+    async listComments({ limit = 50 } = {}) {
+      const rows = await col.find({ 'comments.0': { $exists: true } }).sort({ createdAt: -1 }).limit(200).toArray();
+      const all = [];
+      for (const d of rows) for (const c of d.comments ?? []) all.push({ ...c, postId: d._id.toString(), postAuthor: d.authorName, postExcerpt: (d.text || '').slice(0, 80) });
+      all.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      return { items: all.slice(0, limit), total: all.length };
     },
     async toggleLike(id, userId) {
       const _id = oid(id);
@@ -697,6 +740,12 @@ export function createMemoryJobStore() {
       const set = new Set(ids);
       return [...apps.values()].filter((a) => set.has(a.jobId)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((a) => ({ ...a }));
     },
+    async applicationsAll({ limit = 50, status } = {}) {
+      let list = [...apps.values()];
+      if (status) list = list.filter((a) => a.status === status);
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return { items: list.slice(0, limit).map((a) => ({ ...a })), total: list.length };
+    },
     async applicationById(id) {
       const a = apps.get(id);
       return a ? { ...a } : null;
@@ -789,6 +838,15 @@ function mongoJobStore(jobsCol, appsCol, ObjectId) {
     },
     async applicationsForJobIds(ids) {
       return (await appsCol.find({ jobId: { $in: ids } }).sort({ createdAt: -1 }).toArray()).map(toApp);
+    },
+    async applicationsAll({ limit = 50, status } = {}) {
+      const filter = {};
+      if (status) filter.status = status;
+      const [rows, total] = await Promise.all([
+        appsCol.find(filter).sort({ createdAt: -1 }).limit(limit).toArray(),
+        appsCol.countDocuments(filter),
+      ]);
+      return { items: rows.map(toApp), total };
     },
     async applicationById(id) {
       const _id = oid(id);
