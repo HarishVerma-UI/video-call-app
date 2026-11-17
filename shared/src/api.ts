@@ -339,6 +339,35 @@ export interface AdminStats {
   applicationsByStatus: { applied: number; shortlisted: number; rejected: number };
 }
 
+/** Admin console content-list rows. */
+export interface AdminPost extends Post {
+  likeCount: number;
+  commentCount: number;
+}
+export interface AdminComment {
+  id: string;
+  userId: string;
+  name: string;
+  text: string;
+  ts: number;
+  postId: string;
+  postAuthor: string;
+  postExcerpt: string;
+}
+export interface AdminConnection {
+  pair: string;
+  from: { id: string; name: string };
+  to: { id: string; name: string };
+  status: 'pending' | 'accepted';
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AdminApplication extends JobApplication {
+  jobTitle: string;
+  company: string;
+  jobCategory: string;
+}
+
 /** One entry in the platform audit log. */
 export type AuditCategory = 'auth' | 'content' | 'jobs' | 'admin' | 'system';
 export interface AuditEvent {
@@ -396,6 +425,12 @@ export interface ApiClient {
   adminAudit(opts?: { category?: AuditCategory; before?: number; limit?: number }): Promise<{ events: AuditEvent[]; total: number }>;
   adminBulkDeleteUsers(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
   adminBulkDeleteJobs(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
+  adminListPosts(opts?: { limit?: number }): Promise<{ posts: AdminPost[]; total: number }>;
+  adminListComments(opts?: { limit?: number }): Promise<{ comments: AdminComment[]; total: number }>;
+  adminListConnections(opts?: { limit?: number }): Promise<{ connections: AdminConnection[]; total: number }>;
+  adminListApplications(opts?: { limit?: number }): Promise<{ applications: AdminApplication[]; total: number }>;
+  adminBulkDeletePosts(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
+  adminDeleteComment(postId: string, commentId: string): Promise<{ ok: boolean }>;
 
   // --- ads (admin manages; everyone sees active ones in the feed) ---
   ads(): Promise<{ ads: Ad[] }>;
@@ -539,6 +574,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     },
     adminBulkDeleteUsers: (ids) => request('POST', '/api/admin/users/bulk-delete', { ids }),
     adminBulkDeleteJobs: (ids) => request('POST', '/api/admin/jobs/bulk-delete', { ids }),
+    adminListPosts: (opts = {}) => request('GET', `/api/admin/posts${opts.limit ? `?limit=${opts.limit}` : ''}`),
+    adminListComments: (opts = {}) => request('GET', `/api/admin/comments${opts.limit ? `?limit=${opts.limit}` : ''}`),
+    adminListConnections: (opts = {}) => request('GET', `/api/admin/connections${opts.limit ? `?limit=${opts.limit}` : ''}`),
+    adminListApplications: (opts = {}) => request('GET', `/api/admin/applications${opts.limit ? `?limit=${opts.limit}` : ''}`),
+    adminBulkDeletePosts: (ids) => request('POST', '/api/admin/posts/bulk-delete', { ids }),
+    adminDeleteComment: (postId, commentId) => request('DELETE', `/api/admin/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`),
     ads: () => request('GET', '/api/ads'),
     stats: () => request('GET', '/api/stats'),
     notifications: () => request('GET', '/api/notifications'),
