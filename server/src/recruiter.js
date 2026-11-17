@@ -15,6 +15,7 @@ import { HttpError, readJson, sendJson } from './http.js';
 import { publicApplication, publicJob, publicProfile } from './db/socialStore.js';
 import { APPLICATION_STATUSES, jobPatchFrom } from './jobsValidate.js';
 import { isStaff, isSuperAdmin } from './auth/roles.js';
+import { recordAudit, actorOf } from './audit.js';
 
 export function createRecruiter(opts) {
   const { requireUser, social, log } = opts;
@@ -120,6 +121,8 @@ export function createRecruiter(opts) {
     const { status } = await readJson(req);
     if (!APPLICATION_STATUSES.includes(status)) throw new HttpError(400, 'Invalid status.');
     const updated = await jobsStore().setApplicationStatus(id, status);
+    const verb = status === 'shortlisted' ? 'shortlisted a candidate' : status === 'rejected' ? 'declined a candidate' : 'updated an application';
+    recordAudit({ ...actorOf(user), action: verb, category: 'jobs', target: `${app.userName || 'candidate'} · ${job.title}` });
     sendJson(res, 200, { application: publicApplication(updated) });
   }
 

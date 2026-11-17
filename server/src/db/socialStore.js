@@ -812,6 +812,69 @@ function mongoJobStore(jobsCol, appsCol, ObjectId) {
   };
 }
 
+// ===================== AUDIT LOG (every tracked platform action) =====================
+export function publicAuditEvent(e) {
+  if (!e) return null;
+  return {
+    id: e.id,
+    actorId: e.actorId ?? null,
+    actorName: e.actorName ?? 'System',
+    action: e.action ?? '',
+    category: e.category ?? 'system',
+    target: e.target ?? '',
+    meta: e.meta ?? '',
+    ts: typeof e.ts === 'number' ? e.ts : new Date(e.ts ?? now()).getTime(),
+  };
+}
+
+const AUDIT_CATEGORIES = ['auth', 'content', 'jobs', 'admin', 'system'];
+function auditFilter(f = {}) {
+  const cat = AUDIT_CATEGORIES.includes(f.category) ? f.category : null;
+  const before = f.before ? Number(f.before) : null;
+  return { cat, before };
+}
+
+export function createMemoryAuditStore() {
+  const events = []; // newest first
+  return {
+    kind: 'memory',
+    async record({ actorId, actorName, action, category, target, meta }) {
+      const e = { id: id12(), actorId: actorId ?? null, actorName: actorName ?? 'System', action: action ?? '', category: AUDIT_CATEGORIES.includes(category) ? category : 'system', target: target ?? '', meta: meta ?? '', ts: Date.now() };
+      events.unshift(e);
+      if (events.length > 5000) events.length = 5000;
+      return { ...e };
+    },
+    async list({ limit = 50, category, before } = {}) {
+      const { cat, before: b } = auditFilter({ category, before });
+      let list = events;
+      if (cat) list = list.filter((e) => e.category === cat);
+      if (b) list = list.filter((e) => e.ts < b);
+      return list.slice(0, limit).map((e) => ({ ...e }));
+    },
+    async count() { return events.length; },
+  };
+}
+
+function mongoAuditStore(col) {
+  return {
+    kind: 'mongodb',
+    async record({ actorId, actorName, action, category, target, meta }) {
+      const doc = { actorId: actorId ?? null, actorName: actorName ?? 'System', action: action ?? '', category: AUDIT_CATEGORIES.includes(category) ? category : 'system', target: target ?? '', meta: meta ?? '', ts: Date.now() };
+      const res = await col.insertOne(doc);
+      return { id: res.insertedId.toString(), ...doc };
+    },
+    async list({ limit = 50, category, before } = {}) {
+      const { cat, before: b } = auditFilter({ category, before });
+      const q = {};
+      if (cat) q.category = cat;
+      if (b) q.ts = { $lt: b };
+      const rows = await col.find(q).sort({ ts: -1 }).limit(limit).toArray();
+      return rows.map((d) => ({ id: d._id.toString(), ...d }));
+    },
+    async count() { return col.estimatedDocumentCount(); },
+  };
+}
+
 // ===================== wiring =====================
 export async function connectSocialStores(db, log = () => {}) {
   const { ObjectId } = await import('mongodb');
@@ -822,6 +885,7 @@ export async function connectSocialStores(db, log = () => {}) {
   const ads = mongoAdStore(db.collection('ads'), ObjectId);
   const notifications = mongoNotificationStore(db.collection('notifications'));
   const jobs = mongoJobStore(db.collection('jobs'), db.collection('jobApplications'), ObjectId);
+  const audit = mongoAuditStore(db.collection('auditEvents'));
   await db.collection('profiles').createIndex({ updatedAt: -1 }, { name: 'profiles_recent' });
   await db.collection('connections').createIndex({ users: 1 }, { name: 'connections_users' });
   await db.collection('posts').createIndex({ authorId: 1, createdAt: -1 }, { name: 'posts_author' });
@@ -831,8 +895,10 @@ export async function connectSocialStores(db, log = () => {}) {
   await db.collection('jobs').createIndex({ createdAt: -1 }, { name: 'jobs_recent' });
   await db.collection('jobApplications').createIndex({ jobId: 1, userId: 1 }, { name: 'job_apps_unique', unique: true });
   await db.collection('jobApplications').createIndex({ userId: 1, createdAt: -1 }, { name: 'job_apps_user' });
-  log('social stores ready (profiles, connections, posts, dms, ads, notifications, jobs)');
-  return { profiles, connections, posts, dms, ads, notifications, jobs };
+  await db.collection('auditEvents').createIndex({ ts: -1 }, { name: 'audit_recent' });
+  await db.collection('auditEvents').createIndex({ category: 1, ts: -1 }, { name: 'audit_category' });
+  log('social stores ready (profiles, connections, posts, dms, ads, notifications, jobs, audit)');
+  return { profiles, connections, posts, dms, ads, notifications, jobs, audit };
 }
 
 export function createMemorySocialStores() {
@@ -844,5 +910,6 @@ export function createMemorySocialStores() {
     ads: createMemoryAdStore(),
     notifications: createMemoryNotificationStore(),
     jobs: createMemoryJobStore(),
+    audit: createMemoryAuditStore(),
   };
 }

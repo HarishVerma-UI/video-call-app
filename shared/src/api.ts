@@ -326,6 +326,8 @@ export interface AdminStats {
   recentSignups: number;
   recentLogins: number;
   dailyActivity: { day: string; count: number }[];
+  /** 12-month cumulative user growth for the admin dashboard. */
+  userGrowth: { label: string; total: number }[];
   activeCalls: { rooms: number; participants: number };
   activeRooms: ActiveRoom[];
   uptimeSec: number;
@@ -335,6 +337,19 @@ export interface AdminStats {
   jobsByCategory: { tech: number; 'non-tech': number };
   applicationsTotal: number;
   applicationsByStatus: { applied: number; shortlisted: number; rejected: number };
+}
+
+/** One entry in the platform audit log. */
+export type AuditCategory = 'auth' | 'content' | 'jobs' | 'admin' | 'system';
+export interface AuditEvent {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  action: string;
+  category: AuditCategory;
+  target: string;
+  meta: string;
+  ts: number;
 }
 
 /** A recruiter in the super-admin directory, with their posting activity. */
@@ -377,6 +392,10 @@ export interface ApiClient {
   adminStats(): Promise<AdminStats>;
   adminListRecruiters(): Promise<{ recruiters: RecruiterSummary[] }>;
   adminListRecruiterRequests(): Promise<{ requests: AuthUser[] }>;
+  /** Paginated audit log (super-admin only). `before` is a ts cursor. */
+  adminAudit(opts?: { category?: AuditCategory; before?: number; limit?: number }): Promise<{ events: AuditEvent[]; total: number }>;
+  adminBulkDeleteUsers(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
+  adminBulkDeleteJobs(ids: string[]): Promise<{ ok: boolean; deleted: number }>;
 
   // --- ads (admin manages; everyone sees active ones in the feed) ---
   ads(): Promise<{ ads: Ad[] }>;
@@ -510,6 +529,16 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     adminStats: () => request('GET', '/api/admin/stats'),
     adminListRecruiters: () => request('GET', '/api/admin/recruiters'),
     adminListRecruiterRequests: () => request('GET', '/api/admin/recruiter-applications'),
+    adminAudit: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.category) q.set('category', opts.category);
+      if (opts.before) q.set('before', String(opts.before));
+      if (opts.limit) q.set('limit', String(opts.limit));
+      const qs = q.toString();
+      return request('GET', `/api/admin/audit${qs ? `?${qs}` : ''}`);
+    },
+    adminBulkDeleteUsers: (ids) => request('POST', '/api/admin/users/bulk-delete', { ids }),
+    adminBulkDeleteJobs: (ids) => request('POST', '/api/admin/jobs/bulk-delete', { ids }),
     ads: () => request('GET', '/api/ads'),
     stats: () => request('GET', '/api/stats'),
     notifications: () => request('GET', '/api/notifications'),

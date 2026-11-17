@@ -12,6 +12,7 @@ import { publicApplication, publicJob, publicProfile } from '../db/socialStore.j
 import { hashPassword } from './password.js';
 import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
 import { APPLICATION_STATUSES, jobPatchFrom } from '../jobsValidate.js';
+import { recordAudit, actorOf } from '../audit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const cleanName = (v) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '');
@@ -75,7 +76,7 @@ export function createAdmin(opts) {
   }
 
   async function createUser(req, res) {
-    await requireAdmin(req);
+    const admin = await requireAdmin(req);
     const body = await readJson(req);
     const name = cleanName(body?.name);
     const email = cleanEmail(body?.email);
@@ -102,6 +103,7 @@ export function createAdmin(opts) {
     }
     opts.log?.(`admin  created ${email} (${role})`);
     if (opts.onRegister) await opts.onRegister(user);
+    recordAudit({ ...actorOf(admin), action: 'created a user', category: 'admin', target: `${user.name} · ${normalizeRole(user.role)}` });
     sendJson(res, 201, { user: publicUser(user) });
   }
 
@@ -165,6 +167,7 @@ export function createAdmin(opts) {
       throw err;
     }
     opts.log?.(`admin  updated ${updated.email}`);
+    recordAudit({ ...actorOf(admin), action: patch.role ? 'changed a user role' : 'updated a user', category: 'admin', target: `${updated.name}${patch.role ? ' → ' + normalizeRole(updated.role) : ''}` });
     sendJson(res, 200, { user: publicUser(updated) });
   }
 
@@ -187,6 +190,7 @@ export function createAdmin(opts) {
       opts.log?.(`admin  cascaded social data deletion for ${id}`);
     }
     opts.log?.(`admin  deleted ${target.email || target.id}`);
+    recordAudit({ ...actorOf(admin), action: 'deleted a user', category: 'admin', target: target.name || target.email || id });
     sendJson(res, 200, { ok: true, id });
   }
 
@@ -262,6 +266,7 @@ export function createAdmin(opts) {
     if (Object.keys(fields).length) throw new HttpError(400, 'Please fix the highlighted fields.', { fields });
     const job = await opts.social.jobs.create({ ...patch, postedBy: admin.id, postedByName: admin.name });
     opts.log?.(`admin  created job ${job.id}`);
+    recordAudit({ ...actorOf(admin), action: 'posted a job', category: 'jobs', target: `${job.title} · ${job.company}` });
     sendJson(res, 201, { job: publicJob(job) });
   }
 
@@ -278,7 +283,7 @@ export function createAdmin(opts) {
   }
 
   async function importJobs(req, res) {
-    await requireAdmin(req);
+    const admin = await requireAdmin(req);
     if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
     const body = await readJson(req, 4 * 1024 * 1024);
     const incoming = Array.isArray(body.jobs) ? body.jobs : [];
@@ -310,15 +315,17 @@ export function createAdmin(opts) {
       created++;
     }
     opts.log?.(`admin  imported ${created} jobs (${skipped} skipped)`);
+    recordAudit({ ...actorOf(admin), action: 'imported jobs', category: 'jobs', target: `${created} added, ${skipped} skipped` });
     sendJson(res, 201, { created, skipped });
   }
 
   async function deleteJob(req, res, id) {
-    await requireAdmin(req);
+    const admin = await requireAdmin(req);
     if (!opts.social?.jobs) throw new HttpError(503, 'Jobs are not available.');
     const ok = await opts.social.jobs.remove(id);
     if (!ok) throw new HttpError(404, 'Job not found.');
     opts.log?.(`admin  deleted job ${id}`);
+    recordAudit({ ...actorOf(admin), action: 'removed a job', category: 'jobs', target: typeof ok === 'object' && ok ? `${ok.title} · ${ok.company}` : id });
     sendJson(res, 200, { ok: true, id });
   }
 
@@ -364,6 +371,21 @@ export function createAdmin(opts) {
       const count = users.filter((u) => u.lastLoginAt && new Date(u.lastLoginAt).getTime() >= dayStart && new Date(u.lastLoginAt).getTime() < dayEnd).length;
       return { day: d.toLocaleDateString('en', { weekday: 'short' }), count };
     });
+    // 12-month cumulative user growth (from signup timestamps).
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - i, 1);
+      months.push({ key: d.getFullYear() * 12 + d.getMonth(), label: d.toLocaleDateString('en', { month: 'short' }), total: 0 });
+    }
+    for (const u of users) {
+      const t = new Date(u.createdAt).getTime();
+      if (!t) continue;
+      const k = new Date(t); const mk = k.getFullYear() * 12 + k.getMonth();
+      for (const m of months) if (m.key >= mk) m.total++;
+    }
+    const userGrowth = months.map((m) => ({ label: m.label, total: m.total }));
+
     const extra = typeof opts.getStats === 'function' ? opts.getStats() : { activeCalls: { rooms: 0, participants: 0 }, activeRooms: [], uptimeSec: 0 };
 
     // Platform (jobs & applications) metrics for the super-admin console.
@@ -382,7 +404,59 @@ export function createAdmin(opts) {
       for (const a of apps) if (platform.applicationsByStatus[a.status] !== undefined) platform.applicationsByStatus[a.status]++;
     }
 
-    sendJson(res, 200, { totalUsers: total, byRole, recentSignups, recentLogins, dailyActivity, ...platform, ...extra });
+    sendJson(res, 200, { totalUsers: total, byRole, recentSignups, recentLogins, dailyActivity, userGrowth, ...platform, ...extra });
+  }
+
+  async function auditHandler(req, res, url) {
+    await requireAdmin(req);
+    const auditStore = opts.social?.audit;
+    if (!auditStore) { sendJson(res, 200, { events: [], total: 0 }); return; }
+    const q = url?.searchParams;
+    const limit = Math.min(200, Math.max(1, parseInt(q?.get('limit') ?? '50', 10) || 50));
+    const category = q?.get('category') || undefined;
+    const before = q?.get('before') || undefined;
+    const [events, count] = await Promise.all([
+      auditStore.list({ limit, category, before }),
+      auditStore.count ? auditStore.count() : Promise.resolve(0),
+    ]);
+    sendJson(res, 200, { events, total: count });
+  }
+
+  // Bulk delete users (skips self), returns how many were removed.
+  async function bulkDeleteUsers(req, res) {
+    const admin = await requireAdmin(req);
+    const body = await readJson(req);
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string' && x !== admin.id) : [];
+    let deleted = 0;
+    for (const id of ids) {
+      const target = await opts.store.findById(id);
+      if (!target) continue;
+      await opts.store.remove(id);
+      deleted++;
+      if (opts.social) {
+        const { profiles, connections, posts, dms, jobs } = opts.social;
+        await Promise.all([
+          profiles?.remove?.(id),
+          connections?.removeByUser?.(id),
+          posts?.removeByAuthor?.(id),
+          dms?.removeByUser?.(id),
+          jobs?.removeApplicationsByUser?.(id),
+        ].filter(Boolean));
+      }
+    }
+    recordAudit({ ...actorOf(admin), action: 'bulk-deleted users', category: 'admin', target: `${deleted} account${deleted !== 1 ? 's' : ''}` });
+    sendJson(res, 200, { ok: true, deleted });
+  }
+
+  async function bulkDeleteJobs(req, res) {
+    const admin = await requireAdmin(req);
+    const body = await readJson(req);
+    const jobsStore = opts.social?.jobs;
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string') : [];
+    let deleted = 0;
+    if (jobsStore) for (const id of ids) { const ok = await jobsStore.remove(id); if (ok) deleted++; }
+    recordAudit({ ...actorOf(admin), action: 'bulk-deleted jobs', category: 'admin', target: `${deleted} role${deleted !== 1 ? 's' : ''}` });
+    sendJson(res, 200, { ok: true, deleted });
   }
 
   async function listRecruiters(req, res) {
@@ -417,6 +491,9 @@ export function createAdmin(opts) {
     if (!pathname.startsWith('/api/admin/')) return false;
     if (pathname === '/api/admin/users' && req.method === 'GET') await listUsers(req, res, url);
     else if (pathname === '/api/admin/users' && req.method === 'POST') await createUser(req, res);
+    else if (pathname === '/api/admin/users/bulk-delete' && req.method === 'POST') await bulkDeleteUsers(req, res);
+    else if (pathname === '/api/admin/jobs/bulk-delete' && req.method === 'POST') await bulkDeleteJobs(req, res);
+    else if (pathname === '/api/admin/audit' && req.method === 'GET') await auditHandler(req, res, url);
     else if (pathname === '/api/admin/stats' && req.method === 'GET') await statsHandler(req, res);
     else if (pathname === '/api/admin/recruiters' && req.method === 'GET') await listRecruiters(req, res);
     else if (pathname === '/api/admin/recruiter-applications' && req.method === 'GET') await listRecruiterApplications(req, res);
