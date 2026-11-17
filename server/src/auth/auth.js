@@ -8,6 +8,7 @@ import { dummyVerify, hashPassword, verifyPassword } from './password.js';
 import { createOAuth } from './oauth.js';
 import { createRateLimiter } from './rateLimit.js';
 import { isRecruiter, isSuperAdmin } from './roles.js';
+import { recordAudit, actorOf } from '../audit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -162,6 +163,7 @@ export function createAuth(opts) {
       throw err;
     }
     opts.log?.(`auth   registered ${email}`);
+    recordAudit({ ...actorOf(user), action: 'registered', category: 'auth', meta: 'email/password' });
     if (opts.onRegister) await opts.onRegister(user, registrationDetails(body));
     sendJson(res, 201, issue(user));
   }
@@ -203,6 +205,7 @@ export function createAuth(opts) {
     }
     await opts.store.recordLogin(user.id);
     opts.log?.(`auth   login ${email}`);
+    recordAudit({ ...actorOf(user), action: 'signed in', category: 'auth', meta: 'email/password' });
     sendJson(res, 200, issue(user));
   }
 

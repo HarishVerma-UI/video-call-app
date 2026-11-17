@@ -4,6 +4,7 @@
 
 import { HttpError, readJson, readRaw, sendJson } from './http.js';
 import { isSuperAdmin } from './auth/roles.js';
+import { recordAudit, actorOf } from './audit.js';
 import { parseCv } from './cv.js';
 import { MediaError } from './media.js';
 import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
@@ -137,6 +138,7 @@ export function createSocial(deps) {
     const note = str((await readJson(req)).note, 2000);
     const application = await jobs.apply({ jobId: id, userId: me.id, userName: me.name, note });
     log(`job application ${me.id} -> ${id}`);
+    recordAudit({ ...actorOf(me), action: 'applied to a job', category: 'jobs', target: `${job.title} · ${job.company}` });
     sendJson(res, 201, { application: publicApplication(application) });
   }
 
@@ -271,6 +273,7 @@ export function createSocial(deps) {
     if (!c || c.status !== 'pending' || c.requester === me.id) throw new HttpError(404, 'No pending request from this person.');
     if (accept) {
       await connections.accept(me.id, target);
+      recordAudit({ ...actorOf(me), action: 'accepted a connection', category: 'content', target: '' });
       sendJson(res, 200, { status: 'connected' });
     } else {
       await connections.remove(me.id, target);
@@ -315,6 +318,7 @@ export function createSocial(deps) {
     if (!text && !imageKey) throw new HttpError(400, 'Write something or add a photo.');
     const myProf = await profiles.get(user.id);
     const post = await posts.create({ authorId: user.id, authorName: user.name, authorPhotoKey: myProf?.photoKey ?? null, text, imageKey });
+    recordAudit({ ...actorOf(user), action: 'created a post', category: 'content', target: text ? text.slice(0, 60) : 'a photo' });
     sendJson(res, 201, { post: await postOut(post, user.id) });
   }
 

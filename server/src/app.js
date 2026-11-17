@@ -12,6 +12,7 @@ import { createMemorySocialStores } from './db/socialStore.js';
 import { createMedia } from './media.js';
 import { createSocial } from './social.js';
 import { createRecruiter } from './recruiter.js';
+import { setAuditStore } from './audit.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
 import { createLogStore } from './logStore.js';
@@ -98,6 +99,7 @@ export function createApp(
     activeRooms: signaling ? signaling.activeRooms() : [],
     uptimeSec: Math.round((Date.now() - startedAt) / 1000),
   });
+  setAuditStore(social.audit);
   const media = createMedia(config.s3 ?? {}, log);
   const admin = createAdmin({ store, requireUser: auth.requireUser, log, getStats, onRegister, social, media });
   let signaling;
