@@ -21,6 +21,20 @@ feed with a "people you may know" and sponsored sidebar.
 ![Huddle demo: start a meeting, screen share and chat](docs/screenshots/demo.gif)
 
 *A quick tour — start a meeting, share your screen and chat, all in one place.*
+Lofin Page 
+<img width="1049" height="1510" alt="image" src="https://github.com/user-attachments/assets/910a344f-9782-46a0-a521-6003e88d5dae" />
+<img width="1049" height="1510" alt="image" src="https://github.com/user-attachments/assets/dfcc9adf-ed6f-4f3d-bcef-a97552828029" />
+<img width="1385" height="1542" alt="image" src="https://github.com/user-attachments/assets/1d155dc8-6d7f-425b-bd5b-cc040bbaefc1" />
+<img width="3520" height="1943" alt="image" src="https://github.com/user-attachments/assets/6e4f9648-5196-4f03-99b5-8959ecc2845a" />
+<img width="3533" height="1931" alt="image" src="https://github.com/user-attachments/assets/143f5624-b822-4312-a404-e10adf9bd115" />
+<img width="3538" height="1960" alt="image" src="https://github.com/user-attachments/assets/81567328-0518-45ed-a6de-f18f932633a3" />
+<img width="3523" height="1956" alt="image" src="https://github.com/user-attachments/assets/959c7f46-f5d2-4a8a-940e-a197863d63b8" />
+
+<img width="3523" height="1956" alt="image" src="https://github.com/user-attachments/assets/76fc78d8-06ec-442f-bbc9-89d74c907d41" />
+
+
+
+
 
 | Meet (dark) | Meet (light) |
 |---|---|
