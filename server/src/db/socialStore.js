@@ -764,6 +764,17 @@ export function createMemoryJobStore() {
       const skip = (Math.max(1, page) - 1) * limit;
       return { items: list.slice(skip, skip + limit).map((a) => ({ ...a })), total };
     },
+    async applicationsPage({ jobIds, page = 1, limit = 25, status, search = '' } = {}) {
+      const set = new Set(jobIds || []);
+      let list = [...apps.values()].filter((a) => set.has(a.jobId));
+      if (status) list = list.filter((a) => a.status === status);
+      const q = String(search).trim().toLowerCase();
+      if (q) list = list.filter((a) => (a.userName || '').toLowerCase().includes(q));
+      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const total = list.length;
+      const skip = (Math.max(1, page) - 1) * limit;
+      return { items: list.slice(skip, skip + limit).map((a) => ({ ...a })), total };
+    },
     async applicationById(id) {
       const a = apps.get(id);
       return a ? { ...a } : null;
@@ -859,6 +870,18 @@ function mongoJobStore(jobsCol, appsCol, ObjectId) {
     },
     async applicationsAll({ page = 1, limit = 50, status, search = '' } = {}) {
       const filter = {};
+      if (status) filter.status = status;
+      const q = String(search).trim();
+      if (q) filter.userName = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const skip = (Math.max(1, page) - 1) * limit;
+      const [rows, total] = await Promise.all([
+        appsCol.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+        appsCol.countDocuments(filter),
+      ]);
+      return { items: rows.map(toApp), total };
+    },
+    async applicationsPage({ jobIds, page = 1, limit = 25, status, search = '' } = {}) {
+      const filter = { jobId: { $in: jobIds || [] } };
       if (status) filter.status = status;
       const q = String(search).trim();
       if (q) filter.userName = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
