@@ -87,3 +87,36 @@ test('dashboard funnel reflects real applications; recruiter reviews applicants'
   // rec2 cannot change the status of an application to rec1's job
   assert.equal((await api(t.base, 'PATCH', `/api/recruiter/applications/${appId}`, { status: 'rejected' }, rec2.token)).status, 403);
 });
+
+test('all-applicants aggregates across my jobs, scoped, searchable and status-filterable', async () => {
+  const r = await registerUser(t.base, 'Aggregator Rec');
+  await t.store.setRole(r.user.id, 'recruiter');
+  const jobA = (await makeJob(r.token, { title: 'Agg Role A' })).body.job.id;
+  const jobB = (await makeJob(r.token, { title: 'Agg Role B' })).body.job.id;
+  const alice = await registerUser(t.base, 'Alice Aggcandidate');
+  const bob = await registerUser(t.base, 'Bob Aggcandidate');
+  await api(t.base, 'POST', `/api/jobs/${jobA}/apply`, { note: 'a' }, alice.token);
+  await api(t.base, 'POST', `/api/jobs/${jobB}/apply`, { note: 'b' }, bob.token);
+
+  // Both applicants, each enriched with the job they applied to.
+  const all = await api(t.base, 'GET', '/api/recruiter/applicants', null, r.token);
+  assert.equal(all.status, 200);
+  assert.equal(all.body.total, 2);
+  assert.ok(all.body.applicants.every((a) => a.job && a.job.title.startsWith('Agg Role')));
+
+  // Another recruiter sees none of these.
+  const other = await api(t.base, 'GET', '/api/recruiter/applicants', null, rec1.token);
+  assert.ok(!other.body.applicants.some((a) => a.userName.includes('Aggcandidate')));
+
+  // Search narrows by candidate name.
+  const search = await api(t.base, 'GET', '/api/recruiter/applicants?search=Alice', null, r.token);
+  assert.equal(search.body.total, 1);
+  assert.equal(search.body.applicants[0].userName, 'Alice Aggcandidate');
+
+  // Status filter: shortlist Bob, then filter.
+  const bobApp = all.body.applicants.find((a) => a.userName === 'Bob Aggcandidate');
+  await api(t.base, 'PATCH', `/api/recruiter/applications/${bobApp.id}`, { status: 'shortlisted' }, r.token);
+  const filtered = await api(t.base, 'GET', '/api/recruiter/applicants?status=shortlisted', null, r.token);
+  assert.equal(filtered.body.total, 1);
+  assert.equal(filtered.body.applicants[0].userName, 'Bob Aggcandidate');
+});

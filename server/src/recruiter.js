@@ -4,6 +4,7 @@
 // own pipeline. The super-admin platform console (/api/admin/*) covers all jobs.
 //
 //   GET    /api/recruiter/dashboard             → funnel + my jobs + recent applicants
+//   GET    /api/recruiter/applicants           → every applicant across my jobs (paged/searchable)
 //   GET    /api/recruiter/jobs                  → my jobs (+ applicant counts)
 //   POST   /api/recruiter/jobs                  → create a job I own
 //   PATCH  /api/recruiter/jobs/:id              → edit my job
@@ -16,6 +17,15 @@ import { publicApplication, publicJob, publicProfile } from './db/socialStore.js
 import { APPLICATION_STATUSES, jobPatchFrom } from './jobsValidate.js';
 import { isStaff, isSuperAdmin } from './auth/roles.js';
 import { recordAudit, actorOf } from './audit.js';
+
+function pageParams(req, def = 25, max = 100) {
+  const sp = new URL(req.url, 'http://x').searchParams;
+  const page = Math.max(1, parseInt(sp.get('page'), 10) || 1);
+  const limit = Math.min(Math.max(1, parseInt(sp.get('limit'), 10) || def), max);
+  const search = (sp.get('search') || '').trim();
+  const status = (sp.get('status') || '').trim();
+  return { page, limit, search, status };
+}
 
 export function createRecruiter(opts) {
   const { requireUser, social, log } = opts;
@@ -104,6 +114,27 @@ export function createRecruiter(opts) {
     sendJson(res, 200, { ok: true, id });
   }
 
+  // Every applicant across all of my jobs — one searchable, paginated pipeline.
+  async function allApplicants(req, res) {
+    const user = await requireStaff(req);
+    const { page, limit, search, status } = pageParams(req);
+    const okStatus = APPLICATION_STATUSES.includes(status) ? status : undefined;
+    const empty = { applicants: [], total: 0, page, limit };
+    if (!jobsStore()) return sendJson(res, 200, empty);
+    const list = await myJobs(user);
+    if (!list.length) return sendJson(res, 200, empty);
+    const jobById = new Map(list.map((j) => [j.id, j]));
+    const { items, total } = await jobsStore().applicationsPage({
+      jobIds: list.map((j) => j.id), page, limit, status: okStatus, search,
+    });
+    const enriched = await withProfiles(items);
+    const applicants = enriched.map((a) => {
+      const j = jobById.get(a.jobId);
+      return { ...a, job: j ? { id: j.id, title: j.title, company: j.company } : undefined };
+    });
+    sendJson(res, 200, { applicants, total, page, limit });
+  }
+
   async function jobApplicants(req, res, id) {
     const user = await requireStaff(req);
     const job = await jobsStore()?.byId(id);
@@ -131,6 +162,7 @@ export function createRecruiter(opts) {
     const m = req.method;
     let mm;
     if (pathname === '/api/recruiter/dashboard' && m === 'GET') return (await dashboard(req, res), true);
+    if (pathname === '/api/recruiter/applicants' && m === 'GET') return (await allApplicants(req, res), true);
     if (pathname === '/api/recruiter/jobs' && m === 'GET') return (await listMyJobs(req, res), true);
     if (pathname === '/api/recruiter/jobs' && m === 'POST') return (await createMyJob(req, res), true);
     if ((mm = pathname.match(/^\/api\/recruiter\/jobs\/([^/]+)\/applicants$/)) && m === 'GET') return (await jobApplicants(req, res, decodeURIComponent(mm[1])), true);

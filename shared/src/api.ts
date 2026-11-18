@@ -509,6 +509,7 @@ export interface ApiClient {
   recruiterUpdateJob(id: string, patch: Partial<JobInput>): Promise<{ job: Job }>;
   recruiterDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
   recruiterApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
+  recruiterAllApplicants(params?: { page?: number; limit?: number; search?: string; status?: ApplicationStatus | '' }): Promise<{ applicants: JobApplication[]; total: number; page: number; limit: number }>;
   recruiterSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
 
   // --- server logs (admin only) ---
@@ -703,6 +704,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     recruiterUpdateJob: (id, patch) => request('PATCH', `/api/recruiter/jobs/${encodeURIComponent(id)}`, patch),
     recruiterDeleteJob: (id) => request('DELETE', `/api/recruiter/jobs/${encodeURIComponent(id)}`),
     recruiterApplicants: (jobId) => request('GET', `/api/recruiter/jobs/${encodeURIComponent(jobId)}/applicants`),
+    recruiterAllApplicants: ({ page = 1, limit = 25, search = '', status = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      if (status) q.set('status', status);
+      return request('GET', `/api/recruiter/applicants?${q}`);
+    },
     recruiterSetApplicationStatus: (id, status) => request('PATCH', `/api/recruiter/applications/${encodeURIComponent(id)}`, { status }),
     logs: (opts = {}) => {
       const q = new URLSearchParams();
