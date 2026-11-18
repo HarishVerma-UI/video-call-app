@@ -120,3 +120,29 @@ test('all-applicants aggregates across my jobs, scoped, searchable and status-fi
   assert.equal(filtered.body.total, 1);
   assert.equal(filtered.body.applicants[0].userName, 'Bob Aggcandidate');
 });
+
+test('people directory lists all members for staff, read-only, searchable and role-filterable', async () => {
+  const seeker = await registerUser(t.base, 'Directory Candidate');
+  // A plain member cannot reach the directory.
+  const m = await registerUser(t.base, 'Nosy Member');
+  assert.equal((await api(t.base, 'GET', '/api/recruiter/users', null, m.token)).status, 403);
+
+  // A recruiter sees every member (not just their own applicants) with profile fields.
+  const list = await api(t.base, 'GET', '/api/recruiter/users', null, rec1.token);
+  assert.equal(list.status, 200);
+  assert.ok(list.body.total >= 1);
+  assert.ok(list.body.users.some((u) => u.name === 'Directory Candidate'));
+  assert.ok(list.body.users.every((u) => 'profile' in u));
+
+  // Search narrows by name.
+  const search = await api(t.base, 'GET', '/api/recruiter/users?search=Directory%20Candidate', null, rec1.token);
+  assert.ok(search.body.users.every((u) => u.name.includes('Directory')));
+
+  // Role filter returns only recruiters.
+  const recs = await api(t.base, 'GET', '/api/recruiter/users?role=recruiter', null, rec1.token);
+  assert.ok(recs.body.users.length >= 1);
+  assert.ok(recs.body.users.every((u) => u.role === 'recruiter'));
+
+  // View-only: there is no recruiter route to delete a user.
+  assert.equal((await api(t.base, 'DELETE', `/api/recruiter/users/${seeker.user.id}`, null, rec1.token)).status, 404);
+});

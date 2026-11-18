@@ -6,12 +6,14 @@
 // only ever sees jobs they posted and the people who applied to them.
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  type ApiClient, type ApplicationStatus, type Job, type JobApplication,
-  type JobCategory, type JobExperience, type JobInput, type JobType, type RecruiterDashboard,
+  ROLE_LABEL, normalizeRole,
+  type ApiClient, type ApplicationStatus, type DirectoryUser, type Job, type JobApplication,
+  type JobCategory, type JobExperience, type JobInput, type JobType, type RecruiterDashboard, type UserRole,
 } from '@vca/shared';
 import { useAuth } from '../../auth/AuthContext';
 import '../../admin.css';
 import { Funnel } from './charts';
+import { UserDetailDrawer } from './UserDetail';
 
 /* ---------- helpers ---------- */
 const AV = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#008300', '#e34948'];
@@ -110,6 +112,11 @@ const ICON = {
   check: 'M20 6 9 17l-5-5',
   x: 'M18 6 6 18M6 6l12 12',
   reset: 'M3 12a9 9 0 1 0 3-6.7M3 4v4h4',
+  eye: 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
+};
+const roleCls = (role?: UserRole | string) => {
+  const r = normalizeRole(role || 'member');
+  return r === 'super_admin' ? 'admin' : r === 'recruiter' ? 'recruiter' : 'member';
 };
 
 const STATUS_PILL: Record<string, string> = { shortlisted: 'recruiter', rejected: 'crit', applied: 'muted' };
@@ -288,6 +295,55 @@ function CandidatesPage() {
   );
 }
 
+/* ================= PEOPLE (read-only directory of all members) ================= */
+function PeoplePage() {
+  const { api } = useAuth();
+  const [search, setSearch] = useState('');
+  const debounced = useDebounced(search, 300);
+  const [role, setRole] = useState<UserRole | ''>('');
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [debounced, role]);
+  const { data, loading } = usePage(() => api.recruiterListUsers({ page, limit: 25, search: debounced, role }), [page, debounced, role]);
+  const users = data?.users ?? [];
+  const [detail, setDetail] = useState<DirectoryUser | null>(null);
+
+  return (
+    <>
+      <div className="aa-toolbar">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search people by name, email…" />
+        <FilterSelect value={role} onChange={(v) => setRole(v as UserRole | '')} label="Filter by role"
+          options={[['', 'All roles'], ['member', 'Members'], ['recruiter', 'Recruiters'], ['super_admin', 'Admins']]} />
+        <span className="aa-spacer" />
+        <span className="aa-note">View only</span>
+      </div>
+      <div className="aa-card">
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><th>Person</th><th>Role</th><th>Headline</th><th>Location</th><th>Expected salary</th><th>CV</th><th></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={7} className="aa-empty">Loading…</td></tr>}
+              {!loading && users.length === 0 && <tr><td colSpan={7} className="aa-empty">No people match.</td></tr>}
+              {users.map((u) => (
+                <tr key={u.id} onClick={() => setDetail(u)} style={{ cursor: 'pointer' }}>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
+                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 220 }}>{u.profile?.headline || '—'}</div></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.location || '—'}</td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '—'}</td>
+                  <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>—</span>}</td>
+                  <td onClick={(e) => e.stopPropagation()}><div className="aa-rowact"><button className="aa-iconbtn" title="View details" onClick={() => setDetail(u)}><Ic d={ICON.eye} size={15} /></button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? users.length} onPage={setPage} />
+      </div>
+      {detail && <UserDetailDrawer user={detail} onClose={() => setDetail(null)} />}
+    </>
+  );
+}
+
 /* ================= POST A JOB (form + JSON import) ================= */
 const CATS: [string, string][] = [['tech', 'Tech'], ['non-tech', 'Non-tech']];
 const JTYPES: [string, string][] = [['full-time', 'Full-time'], ['part-time', 'Part-time'], ['contract', 'Contract'], ['internship', 'Internship']];
@@ -441,18 +497,20 @@ function JobImport({ api }: { api: ApiClient }) {
 }
 
 /* ================= SHELL ================= */
-type Section = 'dashboard' | 'jobs' | 'create-job' | 'candidates';
+type Section = 'dashboard' | 'jobs' | 'create-job' | 'candidates' | 'people';
 const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: ICON.dash, group: 'Overview' },
   { id: 'jobs', label: 'My Jobs', icon: ICON.jobs, group: 'Hiring' },
   { id: 'create-job', label: 'Post a Job', icon: ICON.plus, group: 'Hiring' },
   { id: 'candidates', label: 'Candidates', icon: ICON.apps, group: 'Hiring' },
+  { id: 'people', label: 'People', icon: ICON.users, group: 'Talent' },
 ];
 const TITLES: Record<Section, [string, string]> = {
   dashboard: ['Dashboard', 'Your hiring pipeline at a glance'],
   jobs: ['My Jobs', 'Every role you’ve posted'],
   'create-job': ['Post a Job', 'Create a job or import several from JSON'],
   candidates: ['Candidates', 'Everyone who applied to your roles'],
+  people: ['People', 'Browse every member — view only'],
 };
 
 function sectionFromPath(): Section {
@@ -484,6 +542,7 @@ export function RecruiterApp({ exit }: { exit: () => void }) {
       case 'jobs': return <JobsPage goCreate={() => go('create-job')} />;
       case 'create-job': return <CreateJobPage goJobs={() => go('jobs')} />;
       case 'candidates': return <CandidatesPage />;
+      case 'people': return <PeoplePage />;
       default: return <DashboardPage goCandidates={() => go('candidates')} />;
     }
   })();

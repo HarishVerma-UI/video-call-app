@@ -8,7 +8,7 @@
 
 import { HttpError, readJson, sendJson } from '../http.js';
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
-import { publicApplication, publicJob, publicPost, publicProfile } from '../db/socialStore.js';
+import { directoryProfile, publicApplication, publicJob, publicPost, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
 import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
 import { APPLICATION_STATUSES, jobPatchFrom } from '../jobsValidate.js';
@@ -56,24 +56,10 @@ export function createAdmin(opts) {
     ]);
     const profiles = opts.social?.profiles ? await opts.social.profiles.getMany(paged.map((user) => user.id)) : [];
     const profileById = new Map(profiles.map((profile) => [profile.userId, profile]));
-    const users = await Promise.all(paged.map(async (user) => {
-      const profile = profileById.get(user.id);
-      return {
-        ...publicUser(user),
-        profile: profile ? {
-          headline: profile.headline ?? '',
-          location: profile.location ?? '',
-          expectedSalary: profile.expectedSalary ?? '',
-          skills: profile.skills ?? [],
-          experience: profile.experience ?? [],
-          education: profile.education ?? [],
-          cvName: profile.cvName ?? '',
-          cvUrl: profile.cvKey && opts.media
-            ? await opts.media.viewUrl(profile.cvKey, { download: profile.cvName || 'cv' })
-            : null,
-        } : null,
-      };
-    }));
+    const users = await Promise.all(paged.map(async (user) => ({
+      ...publicUser(user),
+      profile: await directoryProfile(profileById.get(user.id), opts.media),
+    })));
     sendJson(res, 200, { users, total, page, limit });
   }
 

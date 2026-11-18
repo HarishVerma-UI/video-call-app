@@ -39,6 +39,27 @@ export function publicProfile(p, { full = false } = {}) {
   };
 }
 
+// Full profile projection for the admin / recruiter people directory: every
+// profile field plus a resolved, time-limited CV download URL. Read-only — used
+// where staff review candidates. `media` is optional (no CV link without it).
+export async function directoryProfile(profile, media) {
+  if (!profile) return null;
+  return {
+    headline: profile.headline ?? '',
+    location: profile.location ?? '',
+    mobile: profile.mobile ?? '',
+    bio: profile.bio ?? '',
+    expectedSalary: profile.expectedSalary ?? '',
+    skills: profile.skills ?? [],
+    experience: profile.experience ?? [],
+    education: profile.education ?? [],
+    cvName: profile.cvName ?? '',
+    cvUrl: profile.cvKey && media
+      ? await media.viewUrl(profile.cvKey, { download: profile.cvName || 'cv' })
+      : null,
+  };
+}
+
 const PROFILE_FIELDS = ['name', 'headline', 'bio', 'location', 'mobile', 'expectedSalary', 'photoKey', 'cvKey', 'cvName', 'skills', 'experience', 'education', 'mentor', 'mentee', 'focusAreas'];
 function cleanPatch(patch) {
   const out = {};
