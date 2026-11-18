@@ -28,6 +28,11 @@
     "@playwright/test": "1.64.1",
     "concurrently": "^9.2.0"
   },
+  "comment:overrides": "Pin the web build toolchain. The Docker build runs `npm install` without the lockfile, so vite/rollup otherwise float; vite 7.3.8 pulled a rollup whose native parser fails with 'Code is nested too deeply' on react-dom. These are the versions the committed lockfile resolves and CI builds green on.",
+  "overrides": {
+    "rollup": "4.65.1",
+    "vite": "7.3.7"
+  },
   "engines": {
     "node": ">=20"
   }
