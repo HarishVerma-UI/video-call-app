@@ -799,10 +799,19 @@ export function AdminApp({ exit }: { exit: () => void }) {
     window.scrollTo(0, 0);
   }, []);
 
-  const Page = useMemo(() => ({
-    dashboard: DashboardPage, users: UsersPage, connections: ConnectionsPage, posts: PostsPage,
-    comments: CommentsPage, jobs: JobsPage, applications: ApplicationsPage, logs: LogsPage,
-  }[section] ?? null), [section]);
+  const body = (() => {
+    switch (section) {
+      case 'users': return <UsersPage />;
+      case 'connections': return <ConnectionsPage />;
+      case 'posts': return <PostsPage />;
+      case 'comments': return <CommentsPage />;
+      case 'jobs': return <JobsPage />;
+      case 'create-job': return <CreateJobPage goJobs={() => go('jobs')} />;
+      case 'applications': return <ApplicationsPage />;
+      case 'logs': return <LogsPage />;
+      default: return <DashboardPage />;
+    }
+  })();
 
   const grouped = useMemo(() => {
     const out: { group: string; items: typeof SECTIONS }[] = [];
@@ -849,9 +858,7 @@ export function AdminApp({ exit }: { exit: () => void }) {
             <span className="aa-spacer" />
             {section === 'dashboard' && <DashboardExport />}
           </header>
-          <div className="aa-content">
-            {section === 'create-job' ? <CreateJobPage goJobs={() => go('jobs')} /> : Page ? <Page /> : null}
-          </div>
+          <div className="aa-content">{body}</div>
         </div>
       </div>
     </div>
