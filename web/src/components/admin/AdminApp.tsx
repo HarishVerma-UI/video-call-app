@@ -2,11 +2,12 @@
 // from the member chrome) for super-admins. Dashboard of real platform metrics
 // plus Users / Connections / Posts / Comments / Jobs / Applications / Logs,
 // every management table with checkbox selection and CRUD / bulk actions.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ROLE_LABEL, normalizeRole,
   type AdminApplication, type AdminComment, type AdminConnection, type AdminPost,
-  type AdminStats, type AdminUser, type AuditEvent, type AuditCategory, type Job, type UserRole,
+  type AdminStats, type AdminUser, type ApiClient, type AuditEvent, type AuditCategory,
+  type Job, type JobCategory, type JobExperience, type JobInput, type JobType, type UserRole,
 } from '@vca/shared';
 import { useAuth } from '../../auth/AuthContext';
 import '../../admin.css';
@@ -142,6 +143,7 @@ const ICON = {
   back: 'M15 18l-6-6 6-6',
   menu: 'M4 6h16M4 12h16M4 18h16',
   dot3: 'M5 12h.01M12 12h.01M19 12h.01',
+  plus: 'M12 5v14M5 12h14',
 };
 
 function roleCls(role?: UserRole | string): string {
@@ -595,8 +597,161 @@ function LogsPage() {
   );
 }
 
+/* ================= CREATE JOB (form + JSON import) ================= */
+const CATS: [string, string][] = [['tech', 'Tech'], ['non-tech', 'Non-tech']];
+const JTYPES: [string, string][] = [['full-time', 'Full-time'], ['part-time', 'Part-time'], ['contract', 'Contract'], ['internship', 'Internship']];
+const EXPS: [string, string][] = [['entry', 'Entry'], ['mid', 'Mid'], ['senior', 'Senior'], ['lead', 'Lead']];
+
+const EMPTY_JOB = {
+  title: '', company: '', category: 'tech', type: 'full-time', experience: 'mid',
+  country: '', remote: false, salaryMin: '', salaryMax: '', salaryCurrency: '₹',
+  description: '', requirements: '', skills: '', applyUrl: '', source: '', active: true,
+};
+
+function buildJobInput(f: typeof EMPTY_JOB): JobInput {
+  return {
+    title: f.title.trim(),
+    company: f.company.trim(),
+    category: f.category as JobCategory,
+    type: f.type as JobType,
+    experience: f.experience as JobExperience,
+    country: f.country.trim() || undefined,
+    remote: f.remote,
+    salaryMin: f.salaryMin ? Number(f.salaryMin) : null,
+    salaryMax: f.salaryMax ? Number(f.salaryMax) : null,
+    salaryCurrency: f.salaryCurrency.trim() || undefined,
+    description: f.description.trim() || undefined,
+    requirements: f.requirements.split('\n').map((s) => s.trim()).filter(Boolean),
+    skills: f.skills.split(',').map((s) => s.trim()).filter(Boolean),
+    applyUrl: f.applyUrl.trim() || undefined,
+    source: f.source.trim() || undefined,
+    active: f.active,
+  };
+}
+
+function Field({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+  return <label className={`aa-field${wide ? ' aa-field--wide' : ''}`}><span>{label}</span>{children}</label>;
+}
+
+function CreateJobPage({ goJobs }: { goJobs: () => void }) {
+  const { api } = useAuth();
+  const [mode, setMode] = useState<'form' | 'import'>('form');
+  return (
+    <>
+      <div className="aa-toolbar">
+        <div className="aa-seg">
+          <button className={mode === 'form' ? 'is-on' : ''} onClick={() => setMode('form')}>Single job</button>
+          <button className={mode === 'import' ? 'is-on' : ''} onClick={() => setMode('import')}>Import JSON</button>
+        </div>
+      </div>
+      {mode === 'form' ? <JobForm onCreated={goJobs} api={api} /> : <JobImport api={api} />}
+    </>
+  );
+}
+
+function JobForm({ onCreated, api }: { onCreated: () => void; api: ApiClient }) {
+  const [f, setF] = useState({ ...EMPTY_JOB });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const set = (k: keyof typeof EMPTY_JOB, v: string | boolean) => setF((cur) => ({ ...cur, [k]: v }));
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!f.title.trim() || !f.company.trim()) { setMsg({ ok: false, text: 'Title and company are required.' }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const { job } = await api.adminCreateJob(buildJobInput(f));
+      setMsg({ ok: true, text: `Created “${job.title}” at ${job.company}.` });
+      setF({ ...EMPTY_JOB });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : 'Could not create the job.' });
+    } finally { setBusy(false); }
+  };
+  return (
+    <form className="aa-card aa-form" onSubmit={submit}>
+      <div className="aa-form__grid">
+        <Field label="Job title *"><input value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="Senior Angular Developer" required /></Field>
+        <Field label="Company *"><input value={f.company} onChange={(e) => set('company', e.target.value)} placeholder="Infosys" required /></Field>
+        <Field label="Category"><select value={f.category} onChange={(e) => set('category', e.target.value)}>{CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Type"><select value={f.type} onChange={(e) => set('type', e.target.value)}>{JTYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Experience"><select value={f.experience} onChange={(e) => set('experience', e.target.value)}>{EXPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Location"><input value={f.country} onChange={(e) => set('country', e.target.value)} placeholder="Bengaluru, IN" /></Field>
+        <Field label="Salary min"><input type="number" value={f.salaryMin} onChange={(e) => set('salaryMin', e.target.value)} placeholder="3000000" /></Field>
+        <Field label="Salary max"><input type="number" value={f.salaryMax} onChange={(e) => set('salaryMax', e.target.value)} placeholder="5000000" /></Field>
+        <Field label="Currency"><input value={f.salaryCurrency} onChange={(e) => set('salaryCurrency', e.target.value)} placeholder="₹" /></Field>
+      </div>
+      <Field label="Description" wide><textarea rows={4} value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="About the role…" /></Field>
+      <Field label="Requirements (one per line)" wide><textarea rows={3} value={f.requirements} onChange={(e) => set('requirements', e.target.value)} placeholder={'5+ years with Angular\nStrong TypeScript'} /></Field>
+      <Field label="Skills (comma separated)" wide><input value={f.skills} onChange={(e) => set('skills', e.target.value)} placeholder="Angular, TypeScript, RxJS" /></Field>
+      <div className="aa-form__grid">
+        <Field label="External apply URL"><input value={f.applyUrl} onChange={(e) => set('applyUrl', e.target.value)} placeholder="https://company.com/careers/123" /></Field>
+        <Field label="Source"><input value={f.source} onChange={(e) => set('source', e.target.value)} placeholder="Company site" /></Field>
+      </div>
+      <label className="aa-checkline"><input type="checkbox" className="aa-check" checked={f.remote} onChange={(e) => set('remote', e.target.checked)} /> Remote-friendly</label>
+      <label className="aa-checkline"><input type="checkbox" className="aa-check" checked={f.active} onChange={(e) => set('active', e.target.checked)} /> Publish immediately (live)</label>
+      {msg && <p className={`aa-msg${msg.ok ? ' aa-msg--ok' : ''}`}>{msg.text}</p>}
+      <div className="aa-form__actions">
+        {msg?.ok && <button type="button" className="aa-btn" onClick={onCreated}>View all jobs →</button>}
+        <button type="submit" className="aa-btn aa-btn--primary" disabled={busy}>{busy ? 'Creating…' : 'Create job'}</button>
+      </div>
+    </form>
+  );
+}
+
+function JobImport({ api }: { api: ApiClient }) {
+  const [raw, setRaw] = useState('');
+  const [parsed, setParsed] = useState<{ valid: JobInput[]; invalid: { i: number; why: string }[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [err, setErr] = useState('');
+
+  const verify = () => {
+    setErr(''); setResult(null); setParsed(null);
+    let data: unknown;
+    try { data = JSON.parse(raw); } catch { setErr('That isn’t valid JSON. Paste an array of job objects.'); return; }
+    const arr = Array.isArray(data) ? data : [data];
+    const valid: JobInput[] = [];
+    const invalid: { i: number; why: string }[] = [];
+    arr.forEach((item, i) => {
+      if (!item || typeof item !== 'object') { invalid.push({ i, why: 'not an object' }); return; }
+      const o = item as Record<string, unknown>;
+      if (!o.title || typeof o.title !== 'string') { invalid.push({ i, why: 'missing "title"' }); return; }
+      if (!o.company || typeof o.company !== 'string') { invalid.push({ i, why: 'missing "company"' }); return; }
+      valid.push(o as unknown as JobInput);
+    });
+    setParsed({ valid, invalid });
+  };
+  const doImport = async () => {
+    if (!parsed?.valid.length || busy) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await api.adminImportJobs(parsed.valid, { dedupe: true });
+      setResult(r); setParsed(null); setRaw('');
+    } catch (e) { setErr(e instanceof Error ? e.message : 'Import failed.'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="aa-card aa-form">
+      <p className="aa-form__hint">Paste a JSON array of jobs (each needs at least <code>title</code> and <code>company</code>). Verify first, then import — duplicates are skipped.</p>
+      <textarea className="aa-json" rows={12} value={raw} onChange={(e) => { setRaw(e.target.value); setParsed(null); setResult(null); }} spellCheck={false}
+        placeholder={'[\n  {\n    "title": "Senior Angular Developer",\n    "company": "Infosys",\n    "category": "tech",\n    "country": "Bengaluru, IN",\n    "skills": ["Angular", "TypeScript"],\n    "applyUrl": "https://..."\n  }\n]'} />
+      {err && <p className="aa-msg">{err}</p>}
+      {parsed && (
+        <div className="aa-import-preview">
+          <p><b className="aa-up">{parsed.valid.length}</b> valid{parsed.invalid.length > 0 ? <> · <b className="aa-down">{parsed.invalid.length} invalid</b></> : ' · all good'}</p>
+          {parsed.invalid.length > 0 && <ul className="aa-import-errs">{parsed.invalid.slice(0, 8).map((x) => <li key={x.i}>Item #{x.i + 1}: {x.why}</li>)}</ul>}
+          <ul className="aa-import-list">{parsed.valid.slice(0, 6).map((j, i) => <li key={i}><b>{j.title}</b> · {j.company}</li>)}{parsed.valid.length > 6 && <li>…and {parsed.valid.length - 6} more</li>}</ul>
+        </div>
+      )}
+      {result && <p className="aa-msg aa-msg--ok">Imported {result.created} job{result.created !== 1 ? 's' : ''}{result.skipped ? `, skipped ${result.skipped} duplicate${result.skipped !== 1 ? 's' : ''}` : ''}.</p>}
+      <div className="aa-form__actions">
+        <button className="aa-btn" onClick={verify} disabled={!raw.trim()}>Verify JSON</button>
+        <button className="aa-btn aa-btn--primary" onClick={doImport} disabled={!parsed?.valid.length || busy}>{busy ? 'Importing…' : `Import ${parsed?.valid.length ?? ''} jobs`}</button>
+      </div>
+    </div>
+  );
+}
+
 /* ================= SHELL ================= */
-type Section = 'dashboard' | 'users' | 'connections' | 'posts' | 'comments' | 'jobs' | 'applications' | 'logs';
+type Section = 'dashboard' | 'users' | 'connections' | 'posts' | 'comments' | 'jobs' | 'create-job' | 'applications' | 'logs';
 const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: ICON.dash, group: 'Overview' },
   { id: 'users', label: 'Users', icon: ICON.users, group: 'People & social' },
@@ -604,6 +759,7 @@ const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = 
   { id: 'posts', label: 'Posts', icon: ICON.posts, group: 'People & social' },
   { id: 'comments', label: 'Comments', icon: ICON.comments, group: 'People & social' },
   { id: 'jobs', label: 'Jobs', icon: ICON.jobs, group: 'Jobs & hiring' },
+  { id: 'create-job', label: 'Post a Job', icon: ICON.plus, group: 'Jobs & hiring' },
   { id: 'applications', label: 'Applications', icon: ICON.apps, group: 'Jobs & hiring' },
   { id: 'logs', label: 'Activity Logs', icon: ICON.logs, group: 'System' },
 ];
@@ -614,6 +770,7 @@ const TITLES: Record<Section, [string, string]> = {
   posts: ['Posts', 'Home-feed posts across the network'],
   comments: ['Comments', 'Comments on posts'],
   jobs: ['Jobs', 'Every job on the board'],
+  'create-job': ['Post a Job', 'Create a job or import several from JSON'],
   applications: ['Applications', 'Candidate applications across roles'],
   logs: ['Activity Logs', 'Full audit trail of platform events'],
 };
@@ -642,10 +799,19 @@ export function AdminApp({ exit }: { exit: () => void }) {
     window.scrollTo(0, 0);
   }, []);
 
-  const Page = useMemo(() => ({
-    dashboard: DashboardPage, users: UsersPage, connections: ConnectionsPage, posts: PostsPage,
-    comments: CommentsPage, jobs: JobsPage, applications: ApplicationsPage, logs: LogsPage,
-  }[section]), [section]);
+  const body = (() => {
+    switch (section) {
+      case 'users': return <UsersPage />;
+      case 'connections': return <ConnectionsPage />;
+      case 'posts': return <PostsPage />;
+      case 'comments': return <CommentsPage />;
+      case 'jobs': return <JobsPage />;
+      case 'create-job': return <CreateJobPage goJobs={() => go('jobs')} />;
+      case 'applications': return <ApplicationsPage />;
+      case 'logs': return <LogsPage />;
+      default: return <DashboardPage />;
+    }
+  })();
 
   const grouped = useMemo(() => {
     const out: { group: string; items: typeof SECTIONS }[] = [];
@@ -692,7 +858,7 @@ export function AdminApp({ exit }: { exit: () => void }) {
             <span className="aa-spacer" />
             {section === 'dashboard' && <DashboardExport />}
           </header>
-          <div className="aa-content"><Page /></div>
+          <div className="aa-content">{body}</div>
         </div>
       </div>
     </div>
