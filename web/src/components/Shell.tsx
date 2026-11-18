@@ -30,6 +30,7 @@ export type Route =
   | { view: 'jobs' }
   | { view: 'calls' }
   | { view: 'profile' }
+  | { view: 'career' }
   | { view: 'admin' }
   | { view: 'recruiter' }
   | { view: 'logs' }
@@ -43,6 +44,7 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'jobs') return { view: 'jobs' };
   if (seg[0] === 'calls') return { view: 'calls' };
   if (seg[0] === 'profile') return { view: 'profile' };
+  if (seg[0] === 'career') return { view: 'career' };
   if (seg[0] === 'admin') return { view: 'admin' };
   if (seg[0] === 'recruiter') return { view: 'recruiter' };
   if (seg[0] === 'logs') return { view: 'logs' };
@@ -69,10 +71,10 @@ function readRoute(): Route {
     history.replaceState(null, '', '/');
     return { view: 'feed' };
   }
-  if (/^\/(admin|recruiter)\//.test(path)) {
-    const root = path.startsWith('/admin/') ? '/admin' : '/recruiter';
+  if (/^\/(admin|recruiter|career)\//.test(path)) {
+    const root = path.startsWith('/admin/') ? '/admin' : path.startsWith('/career/') ? '/career' : '/recruiter';
     history.replaceState(null, '', root);
-    return root === '/admin' ? { view: 'admin' } : { view: 'recruiter' };
+    return root === '/admin' ? { view: 'admin' } : root === '/career' ? { view: 'career' } : { view: 'recruiter' };
   }
   return parseRoute();
 }
@@ -99,6 +101,9 @@ const RAIL: { view: Route['view']; label: string; icon: ReactNode; testId: strin
   { view: 'network', label: 'Network', icon: <UserIcon />, testId: 'rail-network' },
   { view: 'messages', label: 'Messages', icon: <ChatIcon />, testId: 'rail-messages' },
   { view: 'jobs', label: 'Jobs', icon: <BriefcaseIcon />, testId: 'rail-jobs' },
+  { view: 'career', label: 'Career', icon: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></svg>
+  ), testId: 'rail-career' },
   { view: 'meet', label: 'Meet', icon: <VideoIcon />, testId: 'rail-meet' },
 ];
 
