@@ -71,6 +71,58 @@ function usePage<T>(loader: () => Promise<T>, deps: unknown[] = []): { data: T |
   return { data, loading, reload: () => setTick((t) => t + 1) };
 }
 
+function useDebounced<T>(value: T, ms = 300): T {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return v;
+}
+
+/* ---------- list-controls hook: search + filters + paging, resets page on change ---------- */
+function useListControls(initial: Record<string, string> = {}) {
+  const [search, setSearch] = useState('');
+  const debounced = useDebounced(search, 300);
+  const [filters, setFiltersState] = useState<Record<string, string>>(initial);
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [debounced, filters]);
+  const setFilter = (k: string, v: string) => setFiltersState((f) => ({ ...f, [k]: v }));
+  return { search, setSearch, debounced, filters, setFilter, page, setPage };
+}
+
+/* ---------- toolbar + pager ---------- */
+function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="aa-search">
+      <Ic d={ICON.search} size={15} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} spellCheck={false} />
+      {value && <button className="aa-iconbtn" style={{ width: 24, height: 24, border: 0, background: 'none' }} onClick={() => onChange('')} aria-label="Clear search"><Ic d="M18 6 6 18M6 6l12 12" size={14} /></button>}
+    </div>
+  );
+}
+function FilterSelect({ value, onChange, options, label }: { value: string; onChange: (v: string) => void; options: [string, string][]; label: string }) {
+  return (
+    <label className="aa-filter" aria-label={label}>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  );
+}
+function Pager({ page, limit, total, onPage }: { page: number; limit: number; total: number; onPage: (p: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to = Math.min(total, page * limit);
+  return (
+    <div className="aa-tfoot">
+      <span>{total === 0 ? 'No results' : `${from}–${to} of ${total}`}</span>
+      <div className="aa-pager">
+        <button disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page"><Ic d="M15 18l-6-6 6-6" size={15} /></button>
+        <span className="aa-pager__n">Page {page} / {pages}</span>
+        <button disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Next page"><Ic d="M9 18l6-6-6-6" size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- small UI bits ---------- */
 function Ic({ d, size = 18 }: { d: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
@@ -199,7 +251,9 @@ function HeadCheck({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 /* ================= USERS ================= */
 function UsersPage() {
   const { api, user } = useAuth();
-  const { data, loading, reload } = usePage(() => api.adminListUsers({ limit: 50 }));
+  const { search, setSearch, debounced, filters, setFilter, page, setPage } = useListControls({ role: '' });
+  const role = filters.role as UserRole | '';
+  const { data, loading, reload } = usePage(() => api.adminListUsers({ page, limit: 25, search: debounced, role }), [page, debounced, role]);
   const users = data?.users ?? [];
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(users);
   const [busy, setBusy] = useState(false);
@@ -212,43 +266,53 @@ function UsersPage() {
   };
 
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr>
-            <HeadCheck on={allOn} onToggle={toggleAll} />
-            <th>User</th><th>Role</th><th>Joined</th><th>Last active</th><th></th>
-          </tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
-            {!loading && users.length === 0 && <tr><td colSpan={6} className="aa-empty">No users.</td></tr>}
-            {(users as AdminUser[]).map((u) => (
-              <tr key={u.id} className={sel.has(u.id) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(u.id)} onChange={() => toggle(u.id)} aria-label={`Select ${u.name}`} /></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
-                <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span></td>
-                <td>{fmtDate(u.createdAt)}</td>
-                <td style={{ color: 'var(--aa-muted)' }}>{u.lastLoginAt ? ago(new Date(u.lastLoginAt).getTime()) : '—'}</td>
-                <td><div className="aa-rowact">
-                  <button className="aa-iconbtn aa-iconbtn--danger" title="Delete user" disabled={u.id === user?.id} onClick={() => del([u.id])}><Ic d={ICON.trash} size={15} /></button>
-                </div></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search candidates by name, email…" />
+        <FilterSelect value={role} onChange={(v) => setFilter('role', v)} label="Filter by role"
+          options={[['', 'All roles'], ['member', 'Members'], ['recruiter', 'Recruiters'], ['super_admin', 'Super Admins']]} />
       </div>
-      <div className="aa-tfoot"><span>{data?.total ?? users.length} users total</span></div>
-    </div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr>
+              <HeadCheck on={allOn} onToggle={toggleAll} />
+              <th>User</th><th>Role</th><th>Headline</th><th>Joined</th><th>Last active</th><th></th>
+            </tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={7} className="aa-empty">Loading…</td></tr>}
+              {!loading && users.length === 0 && <tr><td colSpan={7} className="aa-empty">No users match.</td></tr>}
+              {(users as AdminUser[]).map((u) => (
+                <tr key={u.id} className={sel.has(u.id) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(u.id)} onChange={() => toggle(u.id)} aria-label={`Select ${u.name}`} /></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
+                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 220 }}>{u.profile?.headline || '—'}</div></td>
+                  <td>{fmtDate(u.createdAt)}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{u.lastLoginAt ? ago(new Date(u.lastLoginAt).getTime()) : '—'}</td>
+                  <td><div className="aa-rowact">
+                    <button className="aa-iconbtn aa-iconbtn--danger" title="Delete user" disabled={u.id === user?.id} onClick={() => del([u.id])}><Ic d={ICON.trash} size={15} /></button>
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? users.length} onPage={setPage} />
+      </div>
+    </>
   );
 }
 
 /* ================= CONNECTIONS ================= */
 function ConnectionsPage() {
   const { api } = useAuth();
-  const { data, loading } = usePage(() => api.adminListConnections({ limit: 100 }));
+  const { filters, setFilter, page, setPage } = useListControls({ status: '' });
+  const status = filters.status as 'pending' | 'accepted' | '';
+  const { data, loading } = usePage(() => api.adminListConnections({ page, limit: 25, status }), [page, status]);
   const conns = (data?.connections ?? []).map((c) => ({ ...c, id: c.pair }));
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(conns);
   const exportSel = () => {
@@ -257,38 +321,45 @@ function ConnectionsPage() {
     downloadCsv('huddle-connections.csv', rows);
   };
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm" onClick={exportSel}><Ic d={ICON.download} size={14} /> Export CSV</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>From</th><th>To</th><th>Status</th><th>Requested</th><th>Responded</th></tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
-            {!loading && conns.length === 0 && <tr><td colSpan={6} className="aa-empty">No connections.</td></tr>}
-            {(conns as (AdminConnection & { id: string })[]).map((c) => (
-              <tr key={c.pair} className={sel.has(c.pair) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(c.pair)} onChange={() => toggle(c.pair)} aria-label="Select connection" /></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.from.name) }}>{initials(c.from.name)}</span><span className="aa-u__name">{c.from.name}</span></div></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.to.name) }}>{initials(c.to.name)}</span><span className="aa-u__name">{c.to.name}</span></div></td>
-                <td><span className={`aa-pill aa-pill--${c.status === 'accepted' ? 'good' : 'warn'}`}>{c.status === 'accepted' ? 'Accepted' : 'Pending'}</span></td>
-                <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(c.createdAt)}</td>
-                <td style={{ color: 'var(--aa-muted)' }}>{c.status === 'accepted' ? fmtDate(c.updatedAt) : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar">
+        <FilterSelect value={status} onChange={(v) => setFilter('status', v)} label="Filter by status"
+          options={[['', 'All connections'], ['accepted', 'Accepted'], ['pending', 'Pending']]} />
       </div>
-      <div className="aa-tfoot"><span>{data?.total ?? conns.length} connections total</span></div>
-    </div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm" onClick={exportSel}><Ic d={ICON.download} size={14} /> Export CSV</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>From</th><th>To</th><th>Status</th><th>Requested</th><th>Responded</th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
+              {!loading && conns.length === 0 && <tr><td colSpan={6} className="aa-empty">No connections.</td></tr>}
+              {(conns as (AdminConnection & { id: string })[]).map((c) => (
+                <tr key={c.pair} className={sel.has(c.pair) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(c.pair)} onChange={() => toggle(c.pair)} aria-label="Select connection" /></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.from.name) }}>{initials(c.from.name)}</span><span className="aa-u__name">{c.from.name}</span></div></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.to.name) }}>{initials(c.to.name)}</span><span className="aa-u__name">{c.to.name}</span></div></td>
+                  <td><span className={`aa-pill aa-pill--${c.status === 'accepted' ? 'good' : 'warn'}`}>{c.status === 'accepted' ? 'Accepted' : 'Pending'}</span></td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(c.createdAt)}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{c.status === 'accepted' ? fmtDate(c.updatedAt) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? conns.length} onPage={setPage} />
+      </div>
+    </>
   );
 }
 
 /* ================= POSTS ================= */
 function PostsPage() {
   const { api } = useAuth();
-  const { data, loading, reload } = usePage(() => api.adminListPosts({ limit: 50 }));
+  const { search, setSearch, debounced, page, setPage } = useListControls();
+  const { data, loading, reload } = usePage(() => api.adminListPosts({ page, limit: 25, search: debounced }), [page, debounced]);
   const posts = data?.posts ?? [];
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(posts);
   const [busy, setBusy] = useState(false);
@@ -298,39 +369,43 @@ function PostsPage() {
     try { await api.adminBulkDeletePosts(ids); clear(); reload(); } finally { setBusy(false); }
   };
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Author</th><th>Content</th><th>Likes</th><th>Comments</th><th>Posted</th><th></th></tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={7} className="aa-empty">Loading…</td></tr>}
-            {!loading && posts.length === 0 && <tr><td colSpan={7} className="aa-empty">No posts.</td></tr>}
-            {(posts as AdminPost[]).map((p) => (
-              <tr key={p.id} className={sel.has(p.id) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(p.id)} onChange={() => toggle(p.id)} aria-label="Select post" /></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(p.authorName) }}>{initials(p.authorName)}</span><span className="aa-u__name">{p.authorName}</span></div></td>
-                <td><div className="aa-trunc">{p.text || <em style={{ color: 'var(--aa-muted)' }}>photo</em>}</div></td>
-                <td className="aa-tnum">{p.likeCount}</td>
-                <td className="aa-tnum">{p.commentCount}</td>
-                <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(p.createdAt)}</td>
-                <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete post" onClick={() => del([p.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar"><SearchBox value={search} onChange={setSearch} placeholder="Search posts by author or text…" /></div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Author</th><th>Content</th><th>Likes</th><th>Comments</th><th>Posted</th><th></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={7} className="aa-empty">Loading…</td></tr>}
+              {!loading && posts.length === 0 && <tr><td colSpan={7} className="aa-empty">No posts match.</td></tr>}
+              {(posts as AdminPost[]).map((p) => (
+                <tr key={p.id} className={sel.has(p.id) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(p.id)} onChange={() => toggle(p.id)} aria-label="Select post" /></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(p.authorName) }}>{initials(p.authorName)}</span><span className="aa-u__name">{p.authorName}</span></div></td>
+                  <td><div className="aa-trunc">{p.text || <em style={{ color: 'var(--aa-muted)' }}>photo</em>}</div></td>
+                  <td className="aa-tnum">{p.likeCount}</td>
+                  <td className="aa-tnum">{p.commentCount}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(p.createdAt)}</td>
+                  <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete post" onClick={() => del([p.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? posts.length} onPage={setPage} />
       </div>
-      <div className="aa-tfoot"><span>{data?.total ?? posts.length} posts total</span></div>
-    </div>
+    </>
   );
 }
 
 /* ================= COMMENTS ================= */
 function CommentsPage() {
   const { api } = useAuth();
-  const { data, loading, reload } = usePage(() => api.adminListComments({ limit: 80 }));
+  const { search, setSearch, debounced, page, setPage } = useListControls();
+  const { data, loading, reload } = usePage(() => api.adminListComments({ page, limit: 25, search: debounced }), [page, debounced]);
   const comments = data?.comments ?? [];
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(comments);
   const [busy, setBusy] = useState(false);
@@ -343,38 +418,42 @@ function CommentsPage() {
     } finally { setBusy(false); }
   };
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Author</th><th>Comment</th><th>On post</th><th>When</th><th></th></tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
-            {!loading && comments.length === 0 && <tr><td colSpan={6} className="aa-empty">No comments.</td></tr>}
-            {(comments as AdminComment[]).map((c) => (
-              <tr key={c.id} className={sel.has(c.id) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(c.id)} onChange={() => toggle(c.id)} aria-label="Select comment" /></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.name) }}>{initials(c.name)}</span><span className="aa-u__name">{c.name}</span></div></td>
-                <td><div className="aa-trunc" style={{ maxWidth: 240 }}>{c.text}</div></td>
-                <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{c.postAuthor}: {c.postExcerpt}</div></td>
-                <td style={{ color: 'var(--aa-muted)' }}>{c.ts ? ago(c.ts) : '—'}</td>
-                <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete comment" onClick={() => del([c.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar"><SearchBox value={search} onChange={setSearch} placeholder="Search comments by author or text…" /></div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Author</th><th>Comment</th><th>On post</th><th>When</th><th></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
+              {!loading && comments.length === 0 && <tr><td colSpan={6} className="aa-empty">No comments match.</td></tr>}
+              {(comments as AdminComment[]).map((c) => (
+                <tr key={c.id} className={sel.has(c.id) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(c.id)} onChange={() => toggle(c.id)} aria-label="Select comment" /></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.name) }}>{initials(c.name)}</span><span className="aa-u__name">{c.name}</span></div></td>
+                  <td><div className="aa-trunc" style={{ maxWidth: 240 }}>{c.text}</div></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{c.postAuthor}: {c.postExcerpt}</div></td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{c.ts ? ago(c.ts) : '—'}</td>
+                  <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete comment" onClick={() => del([c.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? comments.length} onPage={setPage} />
       </div>
-      <div className="aa-tfoot"><span>{data?.total ?? comments.length} comments total</span></div>
-    </div>
+    </>
   );
 }
 
 /* ================= JOBS ================= */
 function JobsPage() {
   const { api } = useAuth();
-  const { data, loading, reload } = usePage(() => api.adminListJobs());
+  const { search, setSearch, debounced, filters, setFilter, page, setPage } = useListControls({ status: '', category: '' });
+  const { data, loading, reload } = usePage(() => api.adminListJobs({ page, limit: 25, search: debounced, status: filters.status, category: filters.category }), [page, debounced, filters.status, filters.category]);
   const jobs = data?.jobs ?? [];
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(jobs);
   const [busy, setBusy] = useState(false);
@@ -385,40 +464,50 @@ function JobsPage() {
   };
   const catPill = (c: string) => (c === 'non-tech' ? 'muted' : c === 'tech' ? 'recruiter' : 'muted');
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Role</th><th>Category</th><th>Type</th><th>Recruiter</th><th>Applicants</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={8} className="aa-empty">Loading…</td></tr>}
-            {!loading && jobs.length === 0 && <tr><td colSpan={8} className="aa-empty">No jobs.</td></tr>}
-            {(jobs as Job[]).map((j) => (
-              <tr key={j.id} className={sel.has(j.id) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(j.id)} onChange={() => toggle(j.id)} aria-label="Select job" /></td>
-                <td><div className="aa-u__name">{j.title}</div><div className="aa-u__mail">{j.company}</div></td>
-                <td><span className={`aa-pill aa-pill--${catPill(j.category)}`}>{j.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span></td>
-                <td style={{ color: 'var(--aa-text-2)' }}>{j.type}</td>
-                <td>{j.postedByName || '—'}</td>
-                <td className="aa-tnum"><b>{j.applicantCount ?? 0}</b></td>
-                <td><span className={`aa-pill aa-pill--${j.active === false ? 'muted' : 'good'}`}><span className="aa-pdot" />{j.active === false ? 'Closed' : 'Live'}</span></td>
-                <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete job" onClick={() => del([j.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search jobs by title or company…" />
+        <FilterSelect value={filters.status} onChange={(v) => setFilter('status', v)} label="Filter by status"
+          options={[['', 'All jobs'], ['live', 'Live'], ['closed', 'Closed']]} />
+        <FilterSelect value={filters.category} onChange={(v) => setFilter('category', v)} label="Filter by category"
+          options={[['', 'All domains'], ['tech', 'Tech'], ['non-tech', 'Non-tech']]} />
       </div>
-      <div className="aa-tfoot"><span>{jobs.length} jobs</span></div>
-    </div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm aa-btn--danger" disabled={busy} onClick={() => del([...sel])}><Ic d={ICON.trash} size={14} /> Delete</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Role</th><th>Category</th><th>Type</th><th>Recruiter</th><th>Applicants</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={8} className="aa-empty">Loading…</td></tr>}
+              {!loading && jobs.length === 0 && <tr><td colSpan={8} className="aa-empty">No jobs match.</td></tr>}
+              {(jobs as Job[]).map((j) => (
+                <tr key={j.id} className={sel.has(j.id) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(j.id)} onChange={() => toggle(j.id)} aria-label="Select job" /></td>
+                  <td><div className="aa-u__name">{j.title}</div><div className="aa-u__mail">{j.company}</div></td>
+                  <td><span className={`aa-pill aa-pill--${catPill(j.category)}`}>{j.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{j.type}</td>
+                  <td>{j.postedByName || '—'}</td>
+                  <td className="aa-tnum"><b>{j.applicantCount ?? 0}</b></td>
+                  <td><span className={`aa-pill aa-pill--${j.active === false ? 'muted' : 'good'}`}><span className="aa-pdot" />{j.active === false ? 'Closed' : 'Live'}</span></td>
+                  <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete job" onClick={() => del([j.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? jobs.length} onPage={setPage} />
+      </div>
+    </>
   );
 }
 
 /* ================= APPLICATIONS ================= */
 function ApplicationsPage() {
   const { api } = useAuth();
-  const { data, loading } = usePage(() => api.adminListApplications({ limit: 80 }));
+  const { search, setSearch, debounced, filters, setFilter, page, setPage } = useListControls({ status: '' });
+  const { data, loading } = usePage(() => api.adminListApplications({ page, limit: 25, search: debounced, status: filters.status }), [page, debounced, filters.status]);
   const apps = data?.applications ?? [];
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(apps);
   const exportSel = () => {
@@ -429,31 +518,38 @@ function ApplicationsPage() {
   const statusPill = (s: string) => (s === 'shortlisted' ? 'recruiter' : s === 'rejected' ? 'crit' : 'muted');
   const statusLabel = (s: string) => (s === 'shortlisted' ? 'Shortlisted' : s === 'rejected' ? 'Not selected' : 'Applied');
   return (
-    <div className="aa-card">
-      <BulkBar n={sel.size} onClear={clear}>
-        <button className="aa-btn aa-btn--sm" onClick={exportSel}><Ic d={ICON.download} size={14} /> Export CSV</button>
-      </BulkBar>
-      <div className="aa-table-wrap">
-        <table>
-          <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Candidate</th><th>Role</th><th>Company</th><th>Status</th><th>Applied</th></tr></thead>
-          <tbody>
-            {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
-            {!loading && apps.length === 0 && <tr><td colSpan={6} className="aa-empty">No applications.</td></tr>}
-            {(apps as AdminApplication[]).map((a) => (
-              <tr key={a.id} className={sel.has(a.id) ? 'is-sel' : ''}>
-                <td><input type="checkbox" className="aa-check" checked={sel.has(a.id)} onChange={() => toggle(a.id)} aria-label="Select application" /></td>
-                <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(a.userName) }}>{initials(a.userName)}</span><span className="aa-u__name">{a.userName}</span></div></td>
-                <td>{a.jobTitle}</td>
-                <td style={{ color: 'var(--aa-text-2)' }}>{a.company}</td>
-                <td><span className={`aa-pill aa-pill--${statusPill(a.status)}`}>{statusLabel(a.status)}</span></td>
-                <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(a.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="aa-toolbar">
+        <SearchBox value={search} onChange={setSearch} placeholder="Search applications by candidate…" />
+        <FilterSelect value={filters.status} onChange={(v) => setFilter('status', v)} label="Filter by status"
+          options={[['', 'All statuses'], ['applied', 'Applied'], ['shortlisted', 'Shortlisted'], ['rejected', 'Not selected']]} />
       </div>
-      <div className="aa-tfoot"><span>{data?.total ?? apps.length} applications total</span></div>
-    </div>
+      <div className="aa-card">
+        <BulkBar n={sel.size} onClear={clear}>
+          <button className="aa-btn aa-btn--sm" onClick={exportSel}><Ic d={ICON.download} size={14} /> Export CSV</button>
+        </BulkBar>
+        <div className="aa-table-wrap">
+          <table>
+            <thead><tr><HeadCheck on={allOn} onToggle={toggleAll} /><th>Candidate</th><th>Role</th><th>Company</th><th>Status</th><th>Applied</th></tr></thead>
+            <tbody>
+              {loading && <tr><td colSpan={6} className="aa-empty">Loading…</td></tr>}
+              {!loading && apps.length === 0 && <tr><td colSpan={6} className="aa-empty">No applications match.</td></tr>}
+              {(apps as AdminApplication[]).map((a) => (
+                <tr key={a.id} className={sel.has(a.id) ? 'is-sel' : ''}>
+                  <td><input type="checkbox" className="aa-check" checked={sel.has(a.id)} onChange={() => toggle(a.id)} aria-label="Select application" /></td>
+                  <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(a.userName) }}>{initials(a.userName)}</span><span className="aa-u__name">{a.userName}</span></div></td>
+                  <td>{a.jobTitle}</td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{a.company}</td>
+                  <td><span className={`aa-pill aa-pill--${statusPill(a.status)}`}>{statusLabel(a.status)}</span></td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(a.createdAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? apps.length} onPage={setPage} />
+      </div>
+    </>
   );
 }
 
@@ -465,7 +561,9 @@ const CAT_COLOR: Record<string, string> = { auth: '--aa-s1', content: '--aa-s3',
 function LogsPage() {
   const { api } = useAuth();
   const [cat, setCat] = useState<AuditCategory | 'all'>('all');
-  const { data, loading } = usePage(() => api.adminAudit({ limit: 100, category: cat === 'all' ? undefined : cat }), [cat]);
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [cat]);
+  const { data, loading } = usePage(() => api.adminAudit({ page, limit: 30, category: cat === 'all' ? undefined : cat }), [cat, page]);
   const events = data?.events ?? [];
   const exportLog = () => downloadCsv('huddle-audit.csv', [['Time', 'Actor', 'Action', 'Target', 'Category'], ...events.map((e) => [fmtTs(e.ts), e.actorName, e.action, e.target, e.category])]);
   return (
@@ -491,6 +589,7 @@ function LogsPage() {
             );
           })}
         </div>
+        <Pager page={page} limit={data?.limit ?? 30} total={data?.total ?? events.length} onPage={setPage} />
       </div>
     </>
   );

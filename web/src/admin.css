@@ -173,6 +173,12 @@
 .aa-seg { display: flex; gap: 2px; background: var(--aa-surface-2); padding: 3px; border-radius: var(--aa-r-sm); }
 .aa-seg button { border: 0; background: none; color: var(--aa-text-2); padding: 6px 11px; border-radius: 6px; font-size: 12.5px; font-weight: 500; }
 .aa-seg button.is-on { background: var(--aa-surface); color: var(--aa-text); box-shadow: var(--aa-shadow); }
+.aa-filter select { font: inherit; font-size: 13px; color: var(--aa-text); background: var(--aa-surface); border: 1px solid var(--aa-border); border-radius: var(--aa-r-sm); padding: 8px 11px; cursor: pointer; }
+.aa-pager { display: flex; align-items: center; gap: 4px; }
+.aa-pager button { min-width: 32px; height: 32px; border-radius: 7px; border: 1px solid var(--aa-border); background: var(--aa-surface); color: var(--aa-text-2); display: inline-grid; place-items: center; }
+.aa-pager button:hover:not(:disabled) { background: var(--aa-surface-2); color: var(--aa-text); }
+.aa-pager button:disabled { opacity: .4; cursor: not-allowed; }
+.aa-pager__n { padding: 0 8px; font-size: 12.5px; color: var(--aa-text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .aa-bulkbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--aa-accent-soft); border: 1px solid var(--aa-accent); border-radius: var(--aa-r); font-size: 13px; color: var(--aa-accent); font-weight: 500; }
 .aa-bulkbar .aa-spacer { flex: 1; }
 .aa-table-wrap { overflow-x: auto; }
