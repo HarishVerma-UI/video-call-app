@@ -121,17 +121,25 @@ export interface Profile {
   cvUrl?: string | null;
 }
 
+/** Full candidate profile shown to staff in the people directory (read-only). */
+export interface DirectoryProfile {
+  headline: string;
+  location: string;
+  mobile: string;
+  bio: string;
+  expectedSalary: string;
+  skills: string[];
+  experience: Experience[];
+  education: Education[];
+  cvName: string;
+  cvUrl: string | null;
+}
 export interface AdminUser extends AuthUser {
-  profile?: {
-    headline: string;
-    location: string;
-    expectedSalary: string;
-    skills: string[];
-    experience: Experience[];
-    education: Education[];
-    cvName: string;
-    cvUrl: string | null;
-  } | null;
+  profile?: DirectoryProfile | null;
+}
+/** A member as seen in the recruiter's read-only people directory. */
+export interface DirectoryUser extends AuthUser {
+  profile?: DirectoryProfile | null;
 }
 
 /** Best-effort fields parsed from an uploaded CV, for the member to review. */
@@ -510,6 +518,7 @@ export interface ApiClient {
   recruiterDeleteJob(id: string): Promise<{ ok: boolean; id: string }>;
   recruiterApplicants(jobId: string): Promise<{ job: Job; applicants: JobApplication[] }>;
   recruiterAllApplicants(params?: { page?: number; limit?: number; search?: string; status?: ApplicationStatus | '' }): Promise<{ applicants: JobApplication[]; total: number; page: number; limit: number }>;
+  recruiterListUsers(params?: { page?: number; limit?: number; search?: string; role?: UserRole | '' }): Promise<{ users: DirectoryUser[]; total: number; page: number; limit: number }>;
   recruiterSetApplicationStatus(id: string, status: ApplicationStatus): Promise<{ application: JobApplication }>;
 
   // --- server logs (admin only) ---
@@ -709,6 +718,12 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       if (search.trim()) q.set('search', search.trim());
       if (status) q.set('status', status);
       return request('GET', `/api/recruiter/applicants?${q}`);
+    },
+    recruiterListUsers: ({ page = 1, limit = 25, search = '', role = '' } = {}) => {
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) q.set('search', search.trim());
+      if (role) q.set('role', role);
+      return request('GET', `/api/recruiter/users?${q}`);
     },
     recruiterSetApplicationStatus: (id, status) => request('PATCH', `/api/recruiter/applications/${encodeURIComponent(id)}`, { status }),
     logs: (opts = {}) => {

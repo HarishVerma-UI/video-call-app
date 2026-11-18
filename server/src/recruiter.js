@@ -5,6 +5,7 @@
 //
 //   GET    /api/recruiter/dashboard             → funnel + my jobs + recent applicants
 //   GET    /api/recruiter/applicants           → every applicant across my jobs (paged/searchable)
+//   GET    /api/recruiter/users                 → read-only directory of all members (paged/searchable)
 //   GET    /api/recruiter/jobs                  → my jobs (+ applicant counts)
 //   POST   /api/recruiter/jobs                  → create a job I own
 //   PATCH  /api/recruiter/jobs/:id              → edit my job
@@ -13,7 +14,8 @@
 //   PATCH  /api/recruiter/applications/:id      → set status on an applicant to my job
 
 import { HttpError, readJson, sendJson } from './http.js';
-import { publicApplication, publicJob, publicProfile } from './db/socialStore.js';
+import { directoryProfile, publicApplication, publicJob, publicProfile } from './db/socialStore.js';
+import { publicUser } from './db/userStore.js';
 import { APPLICATION_STATUSES, jobPatchFrom } from './jobsValidate.js';
 import { isStaff, isSuperAdmin } from './auth/roles.js';
 import { recordAudit, actorOf } from './audit.js';
@@ -28,7 +30,7 @@ function pageParams(req, def = 25, max = 100) {
 }
 
 export function createRecruiter(opts) {
-  const { requireUser, social, log } = opts;
+  const { requireUser, social, log, store, media } = opts;
   const jobsStore = () => social?.jobs;
 
   async function requireStaff(req) {
@@ -135,6 +137,29 @@ export function createRecruiter(opts) {
     sendJson(res, 200, { applicants, total, page, limit });
   }
 
+  // Read-only people directory — staff browse every registered member to source
+  // talent. View only: no create / edit / delete of users from here.
+  async function listPeople(req, res) {
+    await requireStaff(req);
+    const { page, limit, search } = pageParams(req, 25, 100);
+    const roleRaw = new URL(req.url, 'http://x').searchParams.get('role') ?? '';
+    const role = ['member', 'recruiter', 'super_admin'].includes(roleRaw) ? roleRaw : '';
+    const empty = { users: [], total: 0, page, limit };
+    if (!store) return sendJson(res, 200, empty);
+    const skip = (page - 1) * limit;
+    const [paged, total] = await Promise.all([
+      store.list({ limit, skip, search, role }),
+      store.count({ search, role }),
+    ]);
+    const profs = social?.profiles ? await social.profiles.getMany(paged.map((u) => u.id)) : [];
+    const byId = new Map(profs.map((p) => [p.userId, p]));
+    const users = await Promise.all(paged.map(async (u) => ({
+      ...publicUser(u),
+      profile: await directoryProfile(byId.get(u.id), media),
+    })));
+    sendJson(res, 200, { users, total, page, limit });
+  }
+
   async function jobApplicants(req, res, id) {
     const user = await requireStaff(req);
     const job = await jobsStore()?.byId(id);
@@ -163,6 +188,7 @@ export function createRecruiter(opts) {
     let mm;
     if (pathname === '/api/recruiter/dashboard' && m === 'GET') return (await dashboard(req, res), true);
     if (pathname === '/api/recruiter/applicants' && m === 'GET') return (await allApplicants(req, res), true);
+    if (pathname === '/api/recruiter/users' && m === 'GET') return (await listPeople(req, res), true);
     if (pathname === '/api/recruiter/jobs' && m === 'GET') return (await listMyJobs(req, res), true);
     if (pathname === '/api/recruiter/jobs' && m === 'POST') return (await createMyJob(req, res), true);
     if ((mm = pathname.match(/^\/api\/recruiter\/jobs\/([^/]+)\/applicants$/)) && m === 'GET') return (await jobApplicants(req, res, decodeURIComponent(mm[1])), true);

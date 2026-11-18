@@ -106,7 +106,7 @@ export function createApp(
   // Late-bound: signaling is created below, but social only calls notify at request time.
   const notify = (userId, payload) => signaling?.notifyUser(userId, payload) ?? 0;
   const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, notify, log });
-  const recruiterApi = createRecruiter({ requireUser: auth.requireUser, social, log });
+  const recruiterApi = createRecruiter({ requireUser: auth.requireUser, social, log, store, media });
 
   const cors = (req) => {
     const origin = req.headers.origin;
