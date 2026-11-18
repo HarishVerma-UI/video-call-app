@@ -4,6 +4,7 @@ import { useAuth } from './auth/AuthContext';
 import { CallingContext, IncomingCallModal } from './calling';
 import { AdminApp } from './components/admin/AdminApp';
 import { RecruiterApp } from './components/admin/RecruiterApp';
+import { CareerApp } from './components/career/CareerApp';
 import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
 import { Shell, useRoute } from './components/Shell';
@@ -164,6 +165,8 @@ function SignedInApp() {
     <AdminApp exit={() => go({ view: 'feed' })} />
   ) : route.view === 'recruiter' && isRecruiter(user.role) ? (
     <RecruiterApp exit={() => go({ view: 'feed' })} />
+  ) : route.view === 'career' ? (
+    <CareerApp exit={() => go({ view: 'feed' })} />
   ) : (
     <Shell user={user} media={media} route={route} go={go} notice={notice} onJoin={join} />
   );
