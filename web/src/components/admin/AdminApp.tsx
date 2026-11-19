@@ -13,6 +13,7 @@ import { useAuth } from '../../auth/AuthContext';
 import '../../admin.css';
 import { AreaChart, BarChart, Donut, Funnel } from './charts';
 import { UserDetailDrawer } from './UserDetail';
+import { UserEditDrawer } from './UserEditDrawer';
 
 /* ---------- helpers ---------- */
 const AV = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#008300', '#e34948'];
@@ -146,6 +147,7 @@ const ICON = {
   dot3: 'M5 12h.01M12 12h.01M19 12h.01',
   plus: 'M12 5v14M5 12h14',
   eye: 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
+  edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
 };
 
 function roleCls(role?: UserRole | string): string {
@@ -262,6 +264,7 @@ function UsersPage() {
   const { sel, toggle, toggleAll, allOn, clear } = useSelection(users);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<AdminUser | null>(null);
+  const [edit, setEdit] = useState<AdminUser | null>(null);
 
   const del = async (ids: string[]) => {
     if (!ids.length || busy) return;
@@ -294,7 +297,7 @@ function UsersPage() {
                 <tr key={u.id} className={sel.has(u.id) ? 'is-sel' : ''} onClick={() => setDetail(u)} style={{ cursor: 'pointer' }}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="aa-check" checked={sel.has(u.id)} onChange={() => toggle(u.id)} aria-label={`Select ${u.name}`} /></td>
                   <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
-                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span></td>
+                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span>{u.recruiterApplication?.status === 'pending' && <span className="aa-pill aa-pill--warn" title="Applied as recruiter — awaiting approval" style={{ marginLeft: 6 }}>Recruiter · pending</span>}</td>
                   <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{u.profile?.headline || '—'}</div></td>
                   <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '—'}</td>
                   <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>—</span>}</td>
@@ -302,6 +305,7 @@ function UsersPage() {
                   <td style={{ color: 'var(--aa-muted)' }}>{u.lastLoginAt ? ago(new Date(u.lastLoginAt).getTime()) : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}><div className="aa-rowact">
                     <button className="aa-iconbtn" title="View details" onClick={() => setDetail(u)}><Ic d={ICON.eye} size={15} /></button>
+                    <button className="aa-iconbtn" title="Edit user" onClick={() => setEdit(u)}><Ic d={ICON.edit} size={15} /></button>
                     <button className="aa-iconbtn aa-iconbtn--danger" title="Delete user" disabled={u.id === user?.id} onClick={() => del([u.id])}><Ic d={ICON.trash} size={15} /></button>
                   </div></td>
                 </tr>
@@ -312,6 +316,7 @@ function UsersPage() {
         <Pager page={page} limit={data?.limit ?? 25} total={data?.total ?? users.length} onPage={setPage} />
       </div>
       {detail && <UserDetailDrawer user={detail} onClose={() => setDetail(null)} />}
+      {edit && <UserEditDrawer user={edit} onClose={() => setEdit(null)} onSaved={(u) => { setEdit(u); reload(); }} />}
     </>
   );
 }
