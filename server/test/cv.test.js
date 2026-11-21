@@ -111,13 +111,23 @@ test('POST /api/profile/cv/parse returns parsed fields', async () => {
   const u = await registerUser(t.base, 'CV User');
   const res = await fetch(`http://${t.base}/api/profile/cv/parse`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain', Authorization: `Bearer ${u.token}` },
-    body: RESUME,
+    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', Authorization: `Bearer ${u.token}` },
+    body: docx(RESUME, true),
   });
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.parsed.email, 'asha.verma@example.com');
   assert.ok(body.parsed.skills.includes('Angular'));
+});
+
+test('cv parse rejects file types other than PDF and Word', async () => {
+  const u = await registerUser(t.base, 'CV Text User');
+  const res = await fetch(`http://${t.base}/api/profile/cv/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain', Authorization: `Bearer ${u.token}` },
+    body: RESUME,
+  });
+  assert.equal(res.status, 400);
 });
 
 test('cv parse requires auth', async () => {

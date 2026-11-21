@@ -2,7 +2,7 @@
 // applications, and applicant review.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { api, registerUser, startTestApp } from './helpers.js';
+import { api, completeProfile, registerUser, startTestApp } from './helpers.js';
 
 let t;
 let admin;
@@ -85,6 +85,7 @@ test('a member applies, sees it in My Applications, and re-applying is idempoten
   const created = await makeJob({ title: 'Apply Here' });
   const jobId = created.body.job.id;
   const u = await registerUser(t.base, 'Applicant One');
+  await completeProfile(t.base, u.token);
 
   const applied = await api(t.base, 'POST', `/api/jobs/${jobId}/apply`, { note: 'Keen to join!' }, u.token);
   assert.equal(applied.status, 201);
@@ -105,11 +106,21 @@ test('a member applies, sees it in My Applications, and re-applying is idempoten
   assert.equal(one.body.job.appliedByMe, true);
 });
 
+test('a member below 70% profile completion cannot apply and is told what is missing', async () => {
+  const created = await makeJob({ title: 'Gated Role' });
+  const u = await registerUser(t.base, 'Incomplete Applicant');
+  const res = await api(t.base, 'POST', `/api/jobs/${created.body.job.id}/apply`, {}, u.token);
+  assert.equal(res.status, 403);
+  assert.equal(res.body.requiredCompletion, 70);
+  assert.ok(res.body.completion < 70);
+  assert.ok(res.body.missingItems.includes('Headline'));
+});
+
 test('admin reviews applicants and updates status; counts reflect applications', async () => {
   const created = await makeJob({ title: 'Reviewed Role' });
   const jobId = created.body.job.id;
   const u = await registerUser(t.base, 'Candidate X');
-  await api(t.base, 'PUT', '/api/profile', { headline: 'Angular lead' }, u.token);
+  await completeProfile(t.base, u.token, { headline: 'Angular lead' });
   await api(t.base, 'POST', `/api/jobs/${jobId}/apply`, { note: 'hi' }, u.token);
 
   const adminJobs = await api(t.base, 'GET', '/api/admin/jobs', null, admin.token);

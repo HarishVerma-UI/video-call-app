@@ -16,6 +16,16 @@ after(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
+/** A minimal PNG that passes the server's signature check (header + IHDR with a 1x1 size). */
+function png(...extra) {
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write('IHDR', 4, 'ascii');
+  ihdr.writeUInt32BE(1, 8);
+  ihdr.writeUInt32BE(1, 12);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ihdr, Buffer.from(extra)]);
+}
+
 function request(method, contentType, body = []) {
   const req = Readable.from(body);
   req.method = method;
@@ -39,7 +49,7 @@ function response() {
 }
 
 test('local upload is saved and returned as a readable photo URL', async () => {
-  const image = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const image = png(1, 2, 3);
   const upload = await media.presignUpload({ userId: '0123456789abcdef01234567', kind: 'photo', contentType: 'image/png' });
   const uploadRes = response();
   await media.handleLocal(
@@ -58,7 +68,7 @@ test('local upload is saved and returned as a readable photo URL', async () => {
 });
 
 test('static /media view serves without a signature and has a stable URL', async () => {
-  const image = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9]);
+  const image = png(9, 9, 9);
   const upload = await media.presignUpload({ userId: '0123456789abcdef01234567', kind: 'post', contentType: 'image/png' });
   await media.handleLocal(request('PUT', 'image/png', [image]), response(), new URL(upload.uploadUrl, 'http://localhost'));
 
@@ -97,6 +107,14 @@ test('local upload rejects a tampered signed URL', async () => {
   );
 });
 
+test('local upload rejects a file whose contents do not match its type', async () => {
+  const upload = await media.presignUpload({ userId: '0123456789abcdef01234567', kind: 'photo', contentType: 'image/png' });
+  await assert.rejects(
+    media.handleLocal(request('PUT', 'image/png', [Buffer.from('not really a png')]), response(), new URL(upload.uploadUrl, 'http://localhost')),
+    (err) => err.status === 400,
+  );
+});
+
 test('local upload rejects a mismatched content type', async () => {
   const upload = await media.presignUpload({ userId: '0123456789abcdef01234567', kind: 'photo', contentType: 'image/png' });
   const url = new URL(upload.uploadUrl, 'http://localhost');
@@ -106,11 +124,11 @@ test('local upload rejects a mismatched content type', async () => {
   );
 });
 
-test('local upload rejects files larger than 10 MB', async () => {
+test('local upload rejects files larger than 5 MB', async () => {
   const upload = await media.presignUpload({ userId: '0123456789abcdef01234567', kind: 'post', contentType: 'image/png' });
   const responseValue = response();
   await assert.rejects(
-    media.handleLocal(request('PUT', 'image/png', [Buffer.alloc(10 * 1024 * 1024 + 1)]), responseValue, new URL(upload.uploadUrl, 'http://localhost')),
+    media.handleLocal(request('PUT', 'image/png', [Buffer.alloc(5 * 1024 * 1024 + 1)]), responseValue, new URL(upload.uploadUrl, 'http://localhost')),
     (err) => err.status === 413,
   );
 });

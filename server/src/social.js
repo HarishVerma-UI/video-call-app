@@ -6,7 +6,7 @@ import { HttpError, readJson, readRaw, sendJson } from './http.js';
 import { isSuperAdmin } from './auth/roles.js';
 import { recordAudit, actorOf } from './audit.js';
 import { parseCv } from './cv.js';
-import { MediaError } from './media.js';
+import { MediaError, isOwnedMediaKey, validateUploadBuffer } from './media.js';
 import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');

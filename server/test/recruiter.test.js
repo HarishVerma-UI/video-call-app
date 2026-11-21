@@ -2,7 +2,7 @@
 // recruiter only ever sees their own pipeline.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { api, registerUser, startTestApp } from './helpers.js';
+import { api, completeProfile, registerUser, startTestApp } from './helpers.js';
 
 let t;
 let rec1;
@@ -66,6 +66,7 @@ test('dashboard funnel reflects real applications; recruiter reviews applicants'
   const created = await makeJob(rec1.token, { title: 'Funnel Role', skills: ['React'] });
   const jobId = created.body.job.id;
   const seeker = await registerUser(t.base, 'Job Seeker');
+  await completeProfile(t.base, seeker.token);
   await api(t.base, 'POST', `/api/jobs/${jobId}/apply`, { note: 'keen' }, seeker.token);
 
   const applicants = await api(t.base, 'GET', `/api/recruiter/jobs/${jobId}/applicants`, null, rec1.token);
@@ -95,6 +96,8 @@ test('all-applicants aggregates across my jobs, scoped, searchable and status-fi
   const jobB = (await makeJob(r.token, { title: 'Agg Role B' })).body.job.id;
   const alice = await registerUser(t.base, 'Alice Aggcandidate');
   const bob = await registerUser(t.base, 'Bob Aggcandidate');
+  await completeProfile(t.base, alice.token);
+  await completeProfile(t.base, bob.token);
   await api(t.base, 'POST', `/api/jobs/${jobA}/apply`, { note: 'a' }, alice.token);
   await api(t.base, 'POST', `/api/jobs/${jobB}/apply`, { note: 'b' }, bob.token);
 

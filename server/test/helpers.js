@@ -54,6 +54,21 @@ export async function registerUser(base, name = 'Test User') {
   return res.body;
 }
 
+/** Fill in enough of a member's profile (90%) to pass the 70% apply requirement. */
+export async function completeProfile(base, token, overrides = {}) {
+  const res = await api(base, 'PUT', '/api/profile', {
+    headline: 'Frontend Engineer',
+    bio: 'Builds web apps.',
+    location: 'Bengaluru',
+    skills: ['Angular', 'TypeScript', 'RxJS'],
+    experience: [{ title: 'Engineer', company: 'Acme' }],
+    education: [{ school: 'IIT Delhi', degree: 'B.Tech' }],
+    ...overrides,
+  }, token);
+  if (res.status !== 200) throw new Error(`profile save failed: ${JSON.stringify(res.body)}`);
+  return res.body;
+}
+
 /** A WebSocket test client that records messages and lets tests await specific ones. */
 export function wsClient(base) {
   const ws = new WebSocket(`ws://${base}/ws`);

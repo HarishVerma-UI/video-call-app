@@ -348,7 +348,7 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
 /* ── Feed page ── */
 
 export function FeedView({ openUser, openMeet, openJobs, openCareer, openProfile, openNetwork, composeRoleSignal, savedPostIds, onToggleSavedPost, query, onQueryChange }: { openUser: (id: string) => void; openMeet: () => void; openJobs: () => void; openCareer: () => void; openProfile: () => void; openNetwork: () => void; composeRoleSignal: number; savedPostIds: Set<string>; onToggleSavedPost: (id: string) => void; query: string; onQueryChange: (v: string) => void }) {
-  const { api, user, photoUrl } = useAuth();
+  const { api, user } = useAuth();
   const searchQuery = query;
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);

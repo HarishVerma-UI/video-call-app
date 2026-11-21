@@ -90,7 +90,7 @@ export function createMedia(s3 = {}, log = () => {}) {
   /** A short-lived URL the browser PUTs the file to. */
   async function presignUpload({ userId, kind, contentType }) {
     const key = keyFor(kind, userId, contentType);
-    if (!s3Configured) throw new MediaError('File uploads are not set up on this server yet.', 503);
+    if (!configured) throw new MediaError('File uploads are not set up on this server yet.', 503);
     const expires = Math.floor(Date.now() / 1000) + 300;
     const signature = localSignature('PUT', key, expires, contentType);
     const params = new URLSearchParams({ key, expires: String(expires), contentType, signature });
