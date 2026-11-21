@@ -110,12 +110,16 @@ export interface Profile {
   photoUrl: string | null;
   connection: ConnectionState;
   updatedAt: string | null;
-  // private fields, present only when the viewer may see them (self or accepted connection)
+  // Public profile details are returned by getProfile; contact, salary, and CV fields
+  // are present only when the viewer may see them (self or accepted connection).
   bio?: string;
-  mobile?: string;
-  expectedSalary?: string;
+  email?: string;
   experience?: Experience[];
   education?: Education[];
+  mobile?: string;
+  expectedSalary?: string;
+  mutualConnections?: number;
+  openToReferrals?: boolean;
   hasCv?: boolean;
   cvName?: string;
   cvUrl?: string | null;
@@ -750,12 +754,25 @@ export function profileCompletion(p: Partial<Profile> | null | undefined): numbe
   if ((p.headline ?? '').trim()) score += 15;
   if ((p.bio ?? '').trim()) score += 15;
   if ((p.location ?? '').trim()) score += 10;
-  const skills = p.skills?.length ?? 0;
+  const skills = new Set((p.skills ?? []).map((skill) => skill.trim().toLowerCase()).filter(Boolean)).size;
   score += Math.min(20, skills * 7); // 3+ skills → full 20
-  if ((p.experience?.length ?? 0) > 0) score += 20;
-  if ((p.education?.length ?? 0) > 0) score += 10;
-  if (p.hasPhoto) score += 10;
+  if (p.experience?.some((item) => item.title.trim() || item.company.trim())) score += 20;
+  if (p.education?.some((item) => item.school.trim() || item.degree.trim())) score += 10;
+  if (p.hasCv) score += 10;
   return Math.min(100, score);
+}
+
+export function profileMissingItems(p: Partial<Profile> | null | undefined): string[] {
+  if (!p) return ['Headline', 'Bio', 'Location', 'Skills', 'Experience', 'Education', 'CV / Resume'];
+  return [
+    ...(p.headline?.trim() ? [] : ['Headline']),
+    ...(p.bio?.trim() ? [] : ['Bio']),
+    ...(p.location?.trim() ? [] : ['Location']),
+    ...(new Set((p.skills ?? []).map((skill) => skill.trim().toLowerCase()).filter(Boolean)).size >= 3 ? [] : ['Skills (add 3 or more)']),
+    ...(p.experience?.some((item) => item.title.trim() || item.company.trim()) ? [] : ['Experience']),
+    ...(p.education?.some((item) => item.school.trim() || item.degree.trim()) ? [] : ['Education']),
+    ...(p.hasCv ? [] : ['CV / Resume']),
+  ];
 }
 
 /** 0–4 score with a label, for the sign-up strength meter. */

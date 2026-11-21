@@ -4,7 +4,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { HttpError } from './http.js';
+import { HttpError, readRaw } from './http.js';
+import { readZipEntry } from './cv.js';
 
 const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
 const DOC_EXT = { 'application/pdf': '.pdf', 'application/msword': '.doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx' };
@@ -15,8 +16,35 @@ const ALLOWED = {
   post: IMAGE_EXT,
   cv: DOC_EXT,
 };
-const MAX_LOCAL_UPLOAD_BYTES = 10 * 1024 * 1024;
-const LOCAL_KEY = /^(photo|post|cv)\/[a-f0-9]{24}\/\d+-[a-f0-9]{12}\.(jpg|png|webp|gif|pdf|doc|docx)$/;
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MEDIA_KEY = /^(photo|post|cv)\/[a-f0-9]{24}\/\d+-[a-f0-9]{12}\.(jpg|png|webp|gif|pdf|doc|docx)$/;
+
+export function validateUploadBuffer(kind, contentType, data) {
+  const map = ALLOWED[kind];
+  if (!map || !Object.hasOwn(map, contentType)) throw new MediaError('That file type isn’t allowed here.');
+  if (!Buffer.isBuffer(data) || data.length === 0) throw new MediaError('The selected file is empty or malformed.');
+  if (data.length > MAX_UPLOAD_BYTES) throw new MediaError('Files must be 5 MB or smaller.', 413);
+
+  const valid = contentType === 'image/png'
+    ? data.length >= 24 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && data.toString('ascii', 12, 16) === 'IHDR' && data.readUInt32BE(16) > 0 && data.readUInt32BE(20) > 0
+    : contentType === 'image/jpeg'
+      ? data.length >= 4 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff && data[data.length - 2] === 0xff && data[data.length - 1] === 0xd9
+      : contentType === 'image/webp'
+        ? data.length >= 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP'
+        : contentType === 'image/gif'
+          ? data.length >= 14 && ['GIF87a', 'GIF89a'].includes(data.toString('ascii', 0, 6)) && data[data.length - 1] === 0x3b
+          : contentType === 'application/pdf'
+            ? data.length >= 12 && data.subarray(0, 5).toString('ascii') === '%PDF-' && data.subarray(-2048).includes(Buffer.from('%%EOF'))
+            : contentType === 'application/msword'
+              ? data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))
+              : data.length >= 4 && data.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) && !!readZipEntry(data, 'word/document.xml');
+  if (!valid) throw new MediaError('This file appears to be invalid or malformed.');
+  return data;
+}
+
+export function isOwnedMediaKey(kind, userId, key) {
+  return typeof key === 'string' && MEDIA_KEY.test(key) && key.startsWith(`${kind}/${userId}/`);
+}
 
 let clientPromise = null;
 async function getClient(s3) {
@@ -35,11 +63,11 @@ async function getClient(s3) {
 export function createMedia(s3 = {}, log = () => {}) {
   const s3Configured = !!(s3.bucket && s3.region);
   const localDirectory = !s3Configured && typeof s3.localDirectory === 'string' && s3.localDirectory ? path.resolve(s3.localDirectory) : null;
-  const localSecret = localDirectory ? randomBytes(32) : null;
+  const uploadSecret = randomBytes(32);
   const configured = s3Configured || !!localDirectory;
 
   function localSignature(method, key, expires, contentType = '', download = '') {
-    return createHmac('sha256', localSecret)
+    return createHmac('sha256', uploadSecret)
       .update(`${method}\n${key}\n${expires}\n${contentType}\n${download}`)
       .digest('hex');
   }
@@ -55,24 +83,18 @@ export function createMedia(s3 = {}, log = () => {}) {
     if (!map) throw new MediaError('Unknown upload type.');
     const ext = map[contentType];
     if (!ext) throw new MediaError('That file type isn’t allowed here.');
+    if (!/^[a-f0-9]{24}$/.test(userId)) throw new MediaError('Invalid account for upload.');
     return `${kind}/${userId}/${Date.now()}-${randomBytes(6).toString('hex')}${ext}`;
   }
 
   /** A short-lived URL the browser PUTs the file to. */
   async function presignUpload({ userId, kind, contentType }) {
     const key = keyFor(kind, userId, contentType);
-    if (localDirectory) {
-      const expires = Math.floor(Date.now() / 1000) + 300;
-      const signature = localSignature('PUT', key, expires, contentType);
-      const params = new URLSearchParams({ key, expires: String(expires), contentType, signature });
-      return { uploadUrl: `/api/media/local/upload?${params}`, key };
-    }
     if (!s3Configured) throw new MediaError('File uploads are not set up on this server yet.', 503);
-    const client = await getClient(s3);
-    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
-    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-    const uploadUrl = await getSignedUrl(client, new PutObjectCommand({ Bucket: s3.bucket, Key: key, ContentType: contentType }), { expiresIn: 300 });
-    return { uploadUrl, key };
+    const expires = Math.floor(Date.now() / 1000) + 300;
+    const signature = localSignature('PUT', key, expires, contentType);
+    const params = new URLSearchParams({ key, expires: String(expires), contentType, signature });
+    return { uploadUrl: `/api/media/upload?${params}`, key };
   }
 
   /** A URL for viewing/downloading an object. null when unset.
@@ -84,27 +106,48 @@ export function createMedia(s3 = {}, log = () => {}) {
       const base = `/media/${key}`;
       return download ? `${base}?download=${encodeURIComponent(download)}` : base;
     }
+
     if (!s3Configured) return null;
     const client = await getClient(s3);
     const { GetObjectCommand } = await import('@aws-sdk/client-s3');
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
     return getSignedUrl(
       client,
-      new GetObjectCommand({ Bucket: s3.bucket, Key: key, ...(download ? { ResponseContentDisposition: `attachment; filename="${download}"` } : {}) }),
+      new GetObjectCommand({ Bucket: s3.bucket, Key: key, ...(download ? { ResponseContentDisposition: `attachment; filename="${path.basename(download).replace(/["\\\r\n]/g, '_')}"` } : {}) }),
       { expiresIn },
     );
   }
 
-  async function handleLocal(req, res, url) {
-    if (!localDirectory) return false;
+  async function hasFile(key) {
+    if (!MEDIA_KEY.test(key)) return false;
+    if (localDirectory) {
+      try {
+        return (await fs.stat(path.resolve(localDirectory, key))).isFile();
+      } catch (err) {
+        if (err?.code === 'ENOENT') return false;
+        throw err;
+      }
+    }
+    if (!s3Configured) return false;
+    const client = await getClient(s3);
+    const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
+    try {
+      await client.send(new HeadObjectCommand({ Bucket: s3.bucket, Key: key }));
+      return true;
+    } catch (err) {
+      if (err?.$metadata?.httpStatusCode === 404 || err?.name === 'NotFound' || err?.name === 'NoSuchKey') return false;
+      throw err;
+    }
+  }
 
-    // --- Upload: signed PUT to /api/media/local/upload (protects writes) ---
-    if (url.pathname === '/api/media/local/upload') {
+  async function handleLocal(req, res, url) {
+    if (url.pathname === '/api/media/upload') {
+      if (!configured) throw new HttpError(503, 'File uploads are not set up on this server yet.');
       const key = url.searchParams.get('key') ?? '';
       const expires = Number(url.searchParams.get('expires'));
       const signature = url.searchParams.get('signature') ?? '';
       const contentType = url.searchParams.get('contentType') ?? '';
-      if (!LOCAL_KEY.test(key) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)) {
+      if (!MEDIA_KEY.test(key) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)) {
         throw new HttpError(403, 'This upload link has expired. Please try again.');
       }
       if (req.method !== 'PUT' || !Object.hasOwn(ALLOWED[key.split('/')[0]], contentType) || req.headers['content-type'] !== contentType) {
@@ -114,29 +157,28 @@ export function createMedia(s3 = {}, log = () => {}) {
         throw new HttpError(403, 'This upload link is invalid or expired. Please try again.');
       }
 
-      const chunks = [];
-      let size = 0;
-      let tooLarge = false;
-      for await (const chunk of req) {
-        size += chunk.length;
-        if (size > MAX_LOCAL_UPLOAD_BYTES) tooLarge = true;
-        else if (!tooLarge) chunks.push(chunk);
+      const data = validateUploadBuffer(key.split('/')[0], contentType, await readRaw(req, MAX_UPLOAD_BYTES));
+      if (localDirectory) {
+        const filePath = path.resolve(localDirectory, key);
+        if (!filePath.startsWith(`${localDirectory}${path.sep}`)) throw new HttpError(400, 'Invalid upload path.');
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, data, { flag: 'wx' });
+      } else {
+        const client = await getClient(s3);
+        const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+        await client.send(new PutObjectCommand({ Bucket: s3.bucket, Key: key, Body: data, ContentType: contentType }));
       }
-      if (tooLarge) throw new HttpError(413, 'Files must be 10 MB or smaller.');
-      const filePath = path.resolve(localDirectory, key);
-      if (!filePath.startsWith(`${localDirectory}${path.sep}`)) throw new HttpError(400, 'Invalid upload path.');
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, Buffer.concat(chunks), { flag: 'wx' });
       res.writeHead(204, { 'Cache-Control': 'no-store' });
       res.end();
       return true;
     }
 
     // --- View: stable static serving at /media/<key> (no signature, no expiry) ---
+    if (!localDirectory) return false;
     if (url.pathname.startsWith('/media/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
       const key = decodeURIComponent(url.pathname.slice('/media/'.length));
-      if (!LOCAL_KEY.test(key)) throw new HttpError(404, 'Media not found.');
+      if (!MEDIA_KEY.test(key)) throw new HttpError(404, 'Media not found.');
       const extension = path.extname(key).toLowerCase();
       const contentTypeForFile = Object.entries(ALLOWED)
         .flatMap(([, extensions]) => Object.entries(extensions))
@@ -192,7 +234,7 @@ export function createMedia(s3 = {}, log = () => {}) {
     }
   }
 
-  return { configured, presignUpload, viewUrl, deleteFile, handleLocal };
+  return { configured, presignUpload, viewUrl, deleteFile, hasFile, handleLocal };
 }
 
 export class MediaError extends Error {

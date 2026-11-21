@@ -8,7 +8,20 @@ import { ConnectButton, EmojiPicker, ProfileAvatar, roleBadges } from './common'
 type FeedNav = {
   openUser: (id: string) => void;
   openMeet: () => void;
+  openJobs: () => void;
+  openCareer: () => void;
+  openProfile: () => void;
+  openNetwork: () => void;
 };
+
+type FeedCategory = 'Hiring & Referrals';
+type FeedTab = 'For You' | FeedCategory | 'Saved';
+const FEED_TABS: FeedTab[] = ['For You', 'Hiring & Referrals', 'Saved'];
+
+function postCategory(post: Post): FeedCategory | null {
+  if (post.text.startsWith('Role: ')) return 'Hiring & Referrals';
+  return null;
+}
 
 /* ── People result row (shown in search + "people you may know") ── */
 
@@ -30,12 +43,14 @@ function PersonRow({ profile, api, nav, onConn }: { profile: Profile; api: ApiCl
 
 /* ── Post card ── */
 
-function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: Post; api: ApiClient; me: string; isAdmin: boolean; onChange: (p: Post) => void; onDelete: (id: string) => void; nav: FeedNav }) {
+function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav, saved, onToggleSave }: { post: Post; api: ApiClient; me: string; isAdmin: boolean; onChange: (p: Post) => void; onDelete: (id: string) => void; nav: FeedNav; saved: boolean; onToggleSave: (id: string) => void }) {
   const [comment, setComment] = useState('');
   const [showComments, setShowComments] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(post.text);
   const [editBusy, setEditBusy] = useState(false);
+  const category = postCategory(post);
+  const [roleHeading, roleMeta, ...roleDescription] = category === 'Hiring & Referrals' ? post.text.split('\n') : [];
   const like = async () => {
     try {
       onChange((await api.likePost(post.id)).post);
@@ -109,6 +124,7 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
           </span>
         )}
       </header>
+      {category && <span className="post__category">{category}</span>}
       {editing ? (
         <form className="post__edit-form" onSubmit={saveEdit}>
           <textarea className="pp-textarea" value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
@@ -119,7 +135,13 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
         </form>
       ) : (
         <>
-          {post.text && <p className="post__text">{post.text}</p>}
+          {category === 'Hiring & Referrals' ? (
+            <div className="post__role">
+              <h3>{roleHeading?.replace(/^Role:\s*/, '')}</h3>
+              {roleMeta && <span>{roleMeta}</span>}
+              {roleDescription.join('\n').trim() && <p className="post__text">{roleDescription.join('\n').trim()}</p>}
+            </div>
+          ) : post.text ? <p className="post__text">{post.text}</p> : null}
           {post.imageUrl && <img className="post__img" src={post.imageUrl} alt="" loading="lazy" />}
         </>
       )}
@@ -131,6 +153,10 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
         <button className="post__action-btn" onClick={() => setShowComments((s) => !s)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
           {post.comments.length} Comment{post.comments.length !== 1 ? 's' : ''}
+        </button>
+        <button className={`post__action-btn${saved ? ' is-on' : ''}`} onClick={() => onToggleSave(post.id)} aria-pressed={saved} aria-label={saved ? 'Remove saved post' : 'Save post'}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4z" /></svg>
+          {saved ? 'Saved' : 'Save'}
         </button>
       </div>
       {(showComments || post.comments.length > 0) && (
@@ -172,7 +198,7 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav }: { post: P
 
 /* ── Left profile rail ── */
 
-function FeedLeft({ nav }: { nav: FeedNav }) {
+function FeedLeft({ nav, savedCount, onSaved }: { nav: FeedNav; savedCount: number; onSaved: () => void }) {
   const { api, user, photoUrl } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [connCount, setConnCount] = useState<number | null>(null);
@@ -183,46 +209,55 @@ function FeedLeft({ nav }: { nav: FeedNav }) {
   if (!user) return null;
   const headline = profile?.headline?.trim();
   const location = profile?.location?.trim();
-  const skillCount = profile?.skills?.length ?? 0;
+  const profileFields = [profile?.headline, profile?.bio, profile?.location, profile?.skills?.length, profile?.experience?.length, profile?.education?.length, photoUrl];
+  const profileStrength = Math.round((profileFields.filter(Boolean).length / profileFields.length) * 100);
   return (
     <aside className="feed-left" aria-label="Your summary">
       <div className="sidebar-card feed-me">
         <div className="feed-me__cover" aria-hidden="true" />
-        <a className="feed-me__id" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
-          <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={72} />
-          <strong className="feed-me__name">{user.name}</strong>
+        <a className="feed-me__id" href="/profile" onClick={(e) => { e.preventDefault(); nav.openProfile(); }}>
+          <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={52} />
+          <strong className="feed-me__name">{user.name}<span className="feed-me__member">Member</span></strong>
           {headline ? <span className="feed-me__headline">{headline}</span> : <span className="feed-me__headline feed-me__headline--muted">Add a headline to your profile</span>}
-          {location && <span className="feed-me__loc">{location}</span>}
+          {location && <span className="feed-me__loc"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>{location}</span>}
         </a>
+        <div className="feed-me__strength">
+          <div className="feed-me__strength-head"><strong>Profile strength</strong><span>{profileStrength}%</span></div>
+          <div className="feed-me__progress"><span style={{ width: `${profileStrength}%` }} /></div>
+          <small>{profileStrength < 100 ? 'Add profile details to improve your visibility.' : 'Your profile is looking great.'}</small>
+        </div>
         <div className="feed-me__stats">
-          <a className="feed-me__stat" href="/network">
+          <a className="feed-me__stat" href="/network" onClick={(e) => { e.preventDefault(); nav.openNetwork(); }}>
             <b>{connCount ?? '—'}</b>
             <span>Connections</span>
           </a>
-          <a className="feed-me__stat" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
-            <b>{skillCount}</b>
-            <span>Skills</span>
-          </a>
+          <button className="feed-me__stat" type="button" onClick={onSaved}>
+            <b>{savedCount}</b>
+            <span>Saved items</span>
+          </button>
         </div>
       </div>
 
       <nav className="sidebar-card feed-left__nav" aria-label="Shortcuts">
-        <a className="feed-left__link" href="/profile" onClick={(e) => { e.preventDefault(); nav.openUser(user.id); }}>
+        <a className="feed-left__link" href="/profile" onClick={(e) => { e.preventDefault(); nav.openProfile(); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
           <span>Your profile</span>
         </a>
-        <a className="feed-left__link" href="/network">
+        <a className="feed-left__link" href="/network" onClick={(e) => { e.preventDefault(); nav.openNetwork(); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
           <span>My network</span>
+          {connCount !== null && <span className="feed-left__badge">{connCount}</span>}
         </a>
-        <a className="feed-left__link" href="/jobs">
+        <a className="feed-left__link" href="/jobs" onClick={(e) => { e.preventDefault(); nav.openJobs(); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
-          <span>Jobs</span>
+          <span>Open roles &amp; referrals</span>
+          <span className="feed-left__badge">New</span>
         </a>
-        <a className="feed-left__link" href="/messages">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-          <span>Messages</span>
-        </a>
+        <button className="feed-left__link" type="button" onClick={nav.openCareer}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>
+          <span>Expert CV review (30m)</span>
+          <span className="feed-left__badge">1:1</span>
+        </button>
       </nav>
     </aside>
   );
@@ -235,8 +270,8 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
     <aside className="feed-sidebar" aria-label="Feed sidebar">
       <div className="sidebar-card">
         <h3 className="sidebar-card__title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#43a047" strokeWidth="2" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" /></svg>
-          People you may know
+          <span>People &amp; Mentors</span>
+          <span className="feed-sidebar__context">On Huddle</span>
         </h3>
         {suggestions.length === 0 ? (
           <p className="sidebar-card__empty">No suggestions right now.</p>
@@ -256,6 +291,29 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="sidebar-card feed-expert-card">
+        <div className="feed-expert-card__top">
+          <span>1:1 Career Studio</span>
+          <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>30 mins</span>
+        </div>
+        <div>
+          <h3>Generate or review your CV with domain experts</h3>
+          <p>Book a focused session with experienced professionals across industries.</p>
+        </div>
+        <button type="button" className="feed-expert-card__button" onClick={nav.openCareer}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+          Open Career Studio
+        </button>
+      </div>
+
+      <div className="sidebar-card feed-team-card">
+        <div>
+          <span>Huddle for teams</span>
+          <p>Explore open roles and referrals from your network.</p>
+        </div>
+        <button type="button" className="feed-team-card__button" onClick={nav.openJobs}>Explore jobs</button>
       </div>
 
       {ads.length > 0 && (
@@ -289,13 +347,19 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
 
 /* ── Feed page ── */
 
-export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUser: (id: string) => void; openMeet: () => void; query: string; onQueryChange: (v: string) => void }) {
+export function FeedView({ openUser, openMeet, openJobs, openCareer, openProfile, openNetwork, composeRoleSignal, savedPostIds, onToggleSavedPost, query, onQueryChange }: { openUser: (id: string) => void; openMeet: () => void; openJobs: () => void; openCareer: () => void; openProfile: () => void; openNetwork: () => void; composeRoleSignal: number; savedPostIds: Set<string>; onToggleSavedPost: (id: string) => void; query: string; onQueryChange: (v: string) => void }) {
   const { api, user, photoUrl } = useAuth();
   const searchQuery = query;
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [suggestions, setSuggestions] = useState<Profile[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
+  const [composerMode, setComposerMode] = useState<'update' | 'job'>('update');
+  const [activeFeedTab, setActiveFeedTab] = useState<FeedTab>('For You');
   const [text, setText] = useState('');
+  const [roleTitle, setRoleTitle] = useState('');
+  const [roleCompany, setRoleCompany] = useState('');
+  const [roleLocation, setRoleLocation] = useState('Work from home');
+  const [roleSalary, setRoleSalary] = useState('');
   const [imageKey, setImageKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -304,11 +368,18 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
   const [searchResults, setSearchResults] = useState<Post[] | null>(null);
   const [peopleResults, setPeopleResults] = useState<Profile[] | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const composerRef = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingMore = useRef(false);
 
-  const nav: FeedNav = { openUser, openMeet };
+  const nav: FeedNav = { openUser, openMeet, openJobs, openCareer, openProfile, openNetwork };
+
+  useEffect(() => {
+    if (composeRoleSignal === 0) return;
+    setComposerMode('job');
+    composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [composeRoleSignal]);
 
   useEffect(() => {
     api.getFeed().then(({ posts: p }) => {
@@ -391,15 +462,24 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!text.trim() && !imageKey) return;
+    if ((composerMode === 'job' && !roleTitle.trim()) || (!text.trim() && !imageKey && composerMode === 'update')) return;
     setBusy(true);
     setErr(null);
     try {
-      const { post } = await api.createPost({ text: text.trim(), imageKey });
+      const postText = composerMode === 'job'
+        ? `Role: ${roleTitle.trim()}${roleCompany.trim() ? ` at ${roleCompany.trim()}` : ''}\n${[roleLocation.trim(), roleSalary.trim()].filter(Boolean).join(' · ')}${text.trim() ? `\n\n${text.trim()}` : ''}`
+        : text.trim();
+      const { post } = await api.createPost({ text: postText, imageKey });
       setPosts((xs) => [post, ...(xs ?? [])]);
       setText('');
+      setRoleTitle('');
+      setRoleCompany('');
+      setRoleLocation('Work from home');
+      setRoleSalary('');
+      setComposerMode('update');
       setImageKey(null);
       setPreview(null);
+      setActiveFeedTab('For You');
     } catch (ex) {
       setErr(ex instanceof ApiError ? ex.message : "Couldn't post. Try again.");
     } finally {
@@ -415,13 +495,17 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
   const remove = (id: string) => {
     setPosts((xs) => (xs ?? []).filter((x) => x.id !== id));
     setSearchResults((xs) => xs && xs.filter((x) => x.id !== id));
+    if (savedPostIds.has(id)) onToggleSavedPost(id);
   };
 
   const displayPosts = searchResults ?? posts;
-
+  const filteredPosts = displayPosts?.filter((post) => (
+    activeFeedTab === 'For You' ||
+    (activeFeedTab === 'Saved' ? savedPostIds.has(post.id) : postCategory(post) === activeFeedTab)
+  ));
   return (
     <section className="feed-layout" aria-label="Feed" data-testid="feed">
-      <FeedLeft nav={nav} />
+      <FeedLeft nav={nav} savedCount={savedPostIds.size} onSaved={() => setActiveFeedTab('Saved')} />
       <div className="feed-main">
         {searchQuery.trim() && (
           <div className="feed-results-head">
@@ -439,10 +523,37 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
           </div>
         )}
 
-        <form className="card post-composer" onSubmit={submit}>
+        <form ref={composerRef} className={`card post-composer post-composer--${composerMode}`} onSubmit={submit}>
+          <div className="post-composer__switcher">
+            <div className="post-composer__modes" role="group" aria-label="Post type">
+              {([
+                ['update', 'Share Update'],
+                ['job', 'Post a Role'],
+              ] as const).map(([mode, label]) => (
+                <button key={mode} type="button" className={`post-composer__mode${composerMode === mode ? ' is-on' : ''}`} onClick={() => setComposerMode(mode)} aria-pressed={composerMode === mode}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="post-composer__hint">Clear, structured posts</span>
+          </div>
+          {composerMode === 'job' && (
+            <div className="post-composer__role-fields">
+              <input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Role title" aria-label="Role title" required />
+              <input value={roleCompany} onChange={(e) => setRoleCompany(e.target.value)} placeholder="Company or team" aria-label="Company or team" />
+              <input value={roleLocation} onChange={(e) => setRoleLocation(e.target.value)} placeholder="Location or work mode" aria-label="Location or work mode" />
+              <input value={roleSalary} onChange={(e) => setRoleSalary(e.target.value)} placeholder="Pay or bonus (optional)" aria-label="Pay or bonus" />
+            </div>
+          )}
           <div className="post-composer__top">
-            <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={40} />
-            <textarea className="pp-textarea post-composer__input" value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Share an update, a question, or a win..." />
+            <textarea
+              className="pp-textarea post-composer__input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={2}
+              placeholder={composerMode === 'job' ? 'Describe the role and ideal candidate...' : 'Share a project win, career milestone, or insight...'}
+              aria-label={composerMode === 'job' ? 'Role description' : 'Share an update'}
+            />
           </div>
           {uploading && <p className="form-msg">Uploading image...</p>}
           {preview && <img className="post-composer__preview" src={preview} alt="" />}
@@ -456,25 +567,40 @@ export function FeedView({ openUser, openMeet, query, onQueryChange }: { openUse
               <EmojiPicker className="post-composer__action post-composer__action--emoji" onPick={(em) => setText((t) => t + em)} />
             </div>
             <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => void onImage(e)} />
-            <button className="btn btn--primary btn--small" type="submit" disabled={busy || uploading || (!text.trim() && !imageKey)} data-testid="submit-post">
-              {busy ? 'Posting...' : 'Post'}
+            <button className="btn btn--primary btn--small" type="submit" disabled={busy || uploading || (composerMode === 'job' ? !roleTitle.trim() : !text.trim() && !imageKey)} data-testid="submit-post">
+              {busy ? 'Posting...' : composerMode === 'job' ? 'Publish Role' : 'Post'}
             </button>
           </div>
         </form>
 
+        <div className="feed-tabs" role="tablist" aria-label="Feed categories">
+          <div className="feed-tabs__buttons">
+            {FEED_TABS.map((tab) => (
+              <button key={tab} type="button" role="tab" className={`feed-tab${activeFeedTab === tab ? ' is-on' : ''}`} aria-selected={activeFeedTab === tab} onClick={() => setActiveFeedTab(tab)}>
+                {tab}
+              </button>
+            ))}
+          </div>
+          <span className="feed-tabs__count">{filteredPosts?.length ?? 0} items</span>
+        </div>
+
         {displayPosts === null ? (
           <div className="skeleton-list" aria-hidden="true"><i /><i /></div>
-        ) : displayPosts.length === 0 ? (
+        ) : !filteredPosts?.length ? (
           <p className="card card__empty">
-            {searchQuery
-              ? (peopleResults && peopleResults.length > 0 ? 'No posts match — see people above.' : 'Nothing matches your search.')
-              : 'No posts yet. Share something, or connect with people to see theirs.'}
+            {activeFeedTab === 'Saved'
+              ? 'No saved posts yet. Save a post to keep it here during this session.'
+              : activeFeedTab !== 'For You'
+                ? `No ${activeFeedTab.toLowerCase()} posts yet. Share one to start the conversation.`
+                : searchQuery
+                  ? (peopleResults && peopleResults.length > 0 ? 'No posts match — see people above.' : 'Nothing matches your search.')
+                  : 'No posts yet. Share something, or connect with people to see theirs.'}
           </p>
         ) : (
           <>
             {searchQuery.trim() && <h3 className="feed-people__title feed-people__title--posts">Posts</h3>}
-            {displayPosts.map((p) => <PostCard key={p.id} post={p} api={api} me={user.id} isAdmin={isSuperAdmin(user.role)} onChange={update} onDelete={remove} nav={nav} />)}
-            {!searchQuery && hasMore && <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />}
+            {filteredPosts.map((p) => <PostCard key={p.id} post={p} api={api} me={user.id} isAdmin={isSuperAdmin(user.role)} onChange={update} onDelete={remove} nav={nav} saved={savedPostIds.has(p.id)} onToggleSave={onToggleSavedPost} />)}
+            {!searchQuery && activeFeedTab === 'For You' && hasMore && <div ref={sentinelRef} className="feed-sentinel" aria-hidden="true" />}
           </>
         )}
       </div>

@@ -39,8 +39,10 @@ export function EmojiPicker({ onPick, className = 'post__comment-emoji' }: { onP
 
 /** A photo if the profile has one, otherwise initials. */
 export function ProfileAvatar({ profile, size = 48 }: { profile: { userId: string; name: string; photoUrl?: string | null }; size?: number }) {
-  if (profile.photoUrl)
-    return <img className="pf-avatar" src={profile.photoUrl} alt="" style={{ width: size, height: size }} />;
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const photoUrl = profile.photoUrl;
+  if (photoUrl && failedUrl !== photoUrl)
+    return <img className="pf-avatar" src={photoUrl} alt="" onError={() => setFailedUrl(photoUrl)} style={{ width: size, height: size }} />;
   return <Avatar id={profile.userId} name={profile.name || '?'} size={size} />;
 }
 
@@ -78,9 +80,10 @@ export function ConnectButton({ profile, api, onChange }: { profile: Profile; ap
   );
 }
 
-export function roleBadges(p: { mentor: boolean; mentee: boolean }) {
+export function roleBadges(p: { mentor: boolean; mentee: boolean; openToReferrals?: boolean }) {
   const out: string[] = [];
   if (p.mentor) out.push('Mentor');
   if (p.mentee) out.push('Looking for mentorship');
+  if (p.openToReferrals) out.push('Open to referrals');
   return out;
 }
