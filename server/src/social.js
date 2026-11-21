@@ -6,11 +6,58 @@ import { HttpError, readJson, readRaw, sendJson } from './http.js';
 import { isSuperAdmin } from './auth/roles.js';
 import { recordAudit, actorOf } from './audit.js';
 import { parseCv } from './cv.js';
-import { MediaError } from './media.js';
+import { MediaError, isOwnedMediaKey, validateUploadBuffer } from './media.js';
 import { publicAd, publicApplication, publicJob, publicNotification, publicPost, publicProfile } from './db/socialStore.js';
 
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const arr = (v, maxItems, maxLen) => (Array.isArray(v) ? v.slice(0, maxItems).map((x) => str(x, maxLen)).filter(Boolean) : []);
+const safeFilename = (value) => str(value, 200).replace(/[\\/\0-\x1f\x7f"]/g, '_');
+
+export function profileCompletionScore(profile) {
+  if (!profile) return 0;
+  let score = 0;
+  if (str(profile.headline, 200)) score += 15;
+  if (str(profile.bio, 2000)) score += 15;
+  if (str(profile.location, 120)) score += 10;
+  const skills = new Set((profile.skills ?? []).map((skill) => str(skill, 40).toLowerCase()).filter(Boolean)).size;
+  score += Math.min(20, skills * 7);
+  if (profile.experience?.some((item) => str(item?.title, 120) || str(item?.company, 120))) score += 20;
+  if (profile.education?.some((item) => str(item?.school, 120) || str(item?.degree, 120))) score += 10;
+  if (profile.cvKey) score += 10;
+  return Math.min(100, score);
+}
+
+function missingProfileItems(profile) {
+  return [
+    ...(str(profile?.headline, 200) ? [] : ['Headline']),
+    ...(str(profile?.bio, 2000) ? [] : ['Bio']),
+    ...(str(profile?.location, 120) ? [] : ['Location']),
+    ...(new Set((profile?.skills ?? []).map((skill) => str(skill, 40).toLowerCase()).filter(Boolean)).size >= 3 ? [] : ['Skills (add 3 or more)']),
+    ...(profile?.experience?.some((item) => str(item?.title, 120) || str(item?.company, 120)) ? [] : ['Experience']),
+    ...(profile?.education?.some((item) => str(item?.school, 120) || str(item?.degree, 120)) ? [] : ['Education']),
+    ...(profile?.cvKey ? [] : ['CV / Resume']),
+  ];
+}
+
+function auditProfileSnapshot(profile) {
+  return {
+    headline: profile?.headline ?? '',
+    bio: profile?.bio ?? '',
+    location: profile?.location ?? '',
+    skills: profile?.skills ?? [],
+    focusAreas: profile?.focusAreas ?? [],
+    experience: profile?.experience ?? [],
+    education: profile?.education ?? [],
+    mentor: !!profile?.mentor,
+    mentee: !!profile?.mentee,
+    openToReferrals: !!profile?.openToReferrals,
+    mobile: profile?.mobile ? '[set]' : '',
+    expectedSalary: profile?.expectedSalary ? '[set]' : '',
+    hasPhoto: !!profile?.photoKey,
+    hasCv: !!profile?.cvKey,
+    cvName: profile?.cvName ?? '',
+  };
+}
 
 /** Normalise the experience / education arrays from the client. */
 function entries(v, keys, maxItems = 20) {
@@ -62,11 +109,15 @@ export function createSocial(deps) {
   }
   const canSeeFull = (state) => state === 'self' || state === 'connected';
 
-  async function profileOut(p, { full, state }) {
-    const out = publicProfile(p, { full });
+  async function profileOut(p, { full, publicDetails = false, state }) {
+    const out = publicProfile(p, { full, details: publicDetails });
     out.connection = state;
     out.photoUrl = p?.photoKey ? await media.viewUrl(p.photoKey) : null;
-    if (full && p?.cvKey) out.cvUrl = await media.viewUrl(p.cvKey, { download: p.cvName || 'cv' });
+    if (full && p?.userId && users) {
+      const account = await users.findById(p.userId);
+      out.email = account?.email ?? '';
+    }
+    if (full && p?.cvKey) out.cvUrl = await media.viewUrl(p.cvKey, { download: safeFilename(p.cvName || 'cv') });
     return out;
   }
   async function postOut(p, me) {
@@ -135,6 +186,15 @@ export function createSocial(deps) {
     if (!jobs) throw new HttpError(503, 'Jobs are not available.');
     const job = await jobs.byId(id);
     if (!job || job.active === false) throw new HttpError(404, 'Job not found.');
+    const profile = await profiles.get(me.id);
+    const completion = profileCompletionScore(profile);
+    if (completion < 70) {
+      throw new HttpError(403, `Your profile is ${completion}% complete. Reach 70% to apply.`, {
+        completion,
+        requiredCompletion: 70,
+        missingItems: missingProfileItems(profile),
+      });
+    }
     const note = str((await readJson(req)).note, 2000);
     const application = await jobs.apply({ jobId: id, userId: me.id, userName: me.name, note });
     log(`job application ${me.id} -> ${id}`);
@@ -166,10 +226,16 @@ export function createSocial(deps) {
   async function parseCvHandler(req, res) {
     await requireUser(req);
     const buf = await readRaw(req);
-    if (!buf.length) throw new HttpError(400, 'No file received.');
+    const contentType = req.headers['content-type'] ?? '';
+    try {
+      validateUploadBuffer('cv', contentType, buf);
+    } catch (err) {
+      if (err instanceof MediaError) throw new HttpError(err.status, err.message);
+      throw err;
+    }
     let parsed;
     try {
-      parsed = parseCv(buf, req.headers['content-type'] ?? '');
+      parsed = parseCv(buf, contentType);
     } catch (err) {
       log('cv parse failed', err);
       parsed = { name: '', email: '', phone: '', location: '', headline: '', skills: [], experience: [], education: [], lowConfidence: true };
@@ -180,6 +246,7 @@ export function createSocial(deps) {
   async function saveProfile(req, res) {
     const user = await requireUser(req);
     const b = await readJson(req);
+    const before = await profiles.get(user.id);
     const patch = {
       name: user.name, // keep display name in sync with the account
       headline: str(b.headline, 200),
@@ -191,12 +258,27 @@ export function createSocial(deps) {
       focusAreas: arr(b.focusAreas, 20, 40),
       mentor: !!b.mentor,
       mentee: !!b.mentee,
+      openToReferrals: !!b.openToReferrals,
       experience: entries(b.experience, { title: 120, company: 120, start: 20, end: 20, description: 1000 }),
       education: entries(b.education, { school: 120, degree: 120, year: 20 }),
     };
-    if (typeof b.photoKey === 'string') patch.photoKey = b.photoKey.slice(0, 300);
-    if (typeof b.cvKey === 'string') { patch.cvKey = b.cvKey.slice(0, 300); patch.cvName = str(b.cvName, 200); }
+    for (const [field, kind] of [['photoKey', 'photo'], ['cvKey', 'cv']]) {
+      if (typeof b[field] !== 'string') continue;
+      const key = b[field].slice(0, 300);
+      if (key && (!isOwnedMediaKey(kind, user.id, key) || !(await media.hasFile(key)))) {
+        throw new HttpError(400, `The ${kind === 'cv' ? 'CV' : 'photo'} upload is invalid or unavailable. Upload it again.`);
+      }
+      patch[field] = key;
+      if (field === 'cvKey') patch.cvName = safeFilename(b.cvName);
+    }
     const saved = await profiles.upsert(user.id, patch);
+    recordAudit({
+      ...actorOf(user),
+      action: 'updated profile',
+      category: 'content',
+      target: user.name,
+      meta: JSON.stringify({ before: auditProfileSnapshot(before), after: auditProfileSnapshot(saved) }),
+    });
     log(`social profile saved ${user.id}`);
     sendJson(res, 200, { profile: await profileOut(saved, { full: true, state: 'self' }) });
   }
@@ -207,9 +289,18 @@ export function createSocial(deps) {
     if (!p) throw new HttpError(404, 'No profile yet.');
     const state = await connState(me.id, userId);
     const [profile, userPosts] = await Promise.all([
-      profileOut(p, { full: canSeeFull(state), state }),
+      profileOut(p, { full: canSeeFull(state), publicDetails: true, state }),
       posts.feed([userId], { limit: 10 }),
     ]);
+    const [mine, theirs] = await Promise.all([
+      connections.listFor(me.id, 'accepted'),
+      connections.listFor(userId, 'accepted'),
+    ]);
+    const myPeerIds = new Set(mine.map((c) => c.users.find((id) => id !== me.id)).filter(Boolean));
+    profile.mutualConnections = theirs.reduce(
+      (count, c) => count + (c.users.some((id) => id !== userId && myPeerIds.has(id)) ? 1 : 0),
+      0,
+    );
     sendJson(res, 200, { profile, posts: await Promise.all(userPosts.map((x) => postOut(x, me.id))) });
   }
 
@@ -259,10 +350,24 @@ export function createSocial(deps) {
     if (existing?.status === 'pending' && existing.requester !== me.id) {
       // They already asked you — accept instead of a second request.
       await connections.accept(me.id, target);
+      recordAudit({
+        ...actorOf(me),
+        action: 'accepted a connection request',
+        category: 'content',
+        target,
+        meta: JSON.stringify({ before: 'pending', after: 'accepted' }),
+      });
       sendJson(res, 200, { status: 'connected' });
       return;
     }
     await connections.request(me.id, target);
+    recordAudit({
+      ...actorOf(me),
+      action: 'requested a connection',
+      category: 'content',
+      target,
+      meta: JSON.stringify({ before: 'none', after: 'pending_outgoing' }),
+    });
     log(`social connect request ${me.id} -> ${target}`);
     sendJson(res, 200, { status: 'pending_outgoing' });
   }
@@ -273,17 +378,40 @@ export function createSocial(deps) {
     if (!c || c.status !== 'pending' || c.requester === me.id) throw new HttpError(404, 'No pending request from this person.');
     if (accept) {
       await connections.accept(me.id, target);
-      recordAudit({ ...actorOf(me), action: 'accepted a connection', category: 'content', target: '' });
+      recordAudit({
+        ...actorOf(me),
+        action: 'accepted a connection',
+        category: 'content',
+        target,
+        meta: JSON.stringify({ before: 'pending_incoming', after: 'connected' }),
+      });
       sendJson(res, 200, { status: 'connected' });
     } else {
       await connections.remove(me.id, target);
+      recordAudit({
+        ...actorOf(me),
+        action: 'declined a connection',
+        category: 'content',
+        target,
+        meta: JSON.stringify({ before: 'pending_incoming', after: 'none' }),
+      });
       sendJson(res, 200, { status: 'none' });
     }
   }
 
   async function removeConn(req, res, target) {
     const me = await requireUser(req);
+    const existing = await connections.between(me.id, target);
     await connections.remove(me.id, target);
+    if (existing) {
+      recordAudit({
+        ...actorOf(me),
+        action: 'removed a connection',
+        category: 'content',
+        target,
+        meta: JSON.stringify({ before: existing.status, after: 'none' }),
+      });
+    }
     sendJson(res, 200, { status: 'none' });
   }
 

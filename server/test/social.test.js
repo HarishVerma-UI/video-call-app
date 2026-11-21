@@ -11,7 +11,18 @@ after(() => t.app.close());
 
 test('profiles: save, self sees full, stranger sees partial', async () => {
   const a = await registerUser(t.base, 'Asha Verma');
-  await api(t.base, 'PUT', '/api/profile', { headline: 'Frontend dev', mobile: '99999', skills: ['Angular'], mentor: true }, a.token);
+  const experience = [{ title: 'Engineer', company: 'Huddle', start: '2022', end: 'Present', description: 'Build products' }];
+  const education = [{ school: 'State University', degree: 'BS Computer Science', year: '2021' }];
+  await api(t.base, 'PUT', '/api/profile', {
+    headline: 'Frontend dev',
+    bio: 'Building accessible products.',
+    mobile: '99999',
+    expectedSalary: 'Private salary',
+    skills: ['Angular'],
+    mentor: true,
+    experience,
+    education,
+  }, a.token);
 
   const mine = await api(t.base, 'GET', '/api/profile/me', null, a.token);
   assert.equal(mine.status, 200);
@@ -23,14 +34,18 @@ test('profiles: save, self sees full, stranger sees partial', async () => {
   assert.equal(seen.status, 200);
   assert.equal(seen.body.profile.connection, 'none');
   assert.equal(seen.body.profile.headline, 'Frontend dev');
+  assert.equal(seen.body.profile.bio, 'Building accessible products.');
+  assert.deepEqual(seen.body.profile.experience, experience);
+  assert.deepEqual(seen.body.profile.education, education);
   assert.equal(seen.body.profile.mobile, undefined); // stranger does NOT see private field
+  assert.equal(seen.body.profile.expectedSalary, undefined);
 });
 
 test('connections: request, accept, and private fields unlock', async () => {
   const a = await registerUser(t.base, 'Conn A');
   const b = await registerUser(t.base, 'Conn B');
   await api(t.base, 'PUT', '/api/profile', { mobile: '12345' }, a.token);
-  await api(t.base, 'PUT', '/api/profile', { mobile: '67890' }, b.token);
+  await api(t.base, 'PUT', '/api/profile', { mobile: '67890', expectedSalary: 'Connections only' }, b.token);
 
   let r = await api(t.base, 'POST', `/api/connections/${b.user.id}/request`, {}, a.token);
   assert.equal(r.body.status, 'pending_outgoing');
@@ -48,6 +63,7 @@ test('connections: request, accept, and private fields unlock', async () => {
   const seen = await api(t.base, 'GET', `/api/profile/${b.user.id}`, null, a.token);
   assert.equal(seen.body.profile.connection, 'connected');
   assert.equal(seen.body.profile.mobile, '67890');
+  assert.equal(seen.body.profile.expectedSalary, 'Connections only');
 });
 
 test('posts & feed: create, like, comment; connections see each other', async () => {

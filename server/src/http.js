@@ -52,7 +52,7 @@ export function readJson(req, limitBytes = 16 * 1024) {
 }
 
 /** Read a raw request body (e.g. an uploaded file) into a Buffer, with a size cap. */
-export function readRaw(req, limitBytes = 6 * 1024 * 1024) {
+export function readRaw(req, limitBytes = 5 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
     let tooBig = false;
@@ -63,7 +63,7 @@ export function readRaw(req, limitBytes = 6 * 1024 * 1024) {
       if (size > limitBytes) {
         tooBig = true;
         chunks.length = 0;
-        reject(new HttpError(413, 'File too large (max 6 MB).', { closeConnection: true }));
+        reject(new HttpError(413, 'Files must be 5 MB or smaller.', { closeConnection: true }));
         return;
       }
       chunks.push(c);

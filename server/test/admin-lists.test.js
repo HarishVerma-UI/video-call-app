@@ -1,7 +1,7 @@
 // Admin global content lists: posts, comments, connections, applications.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { api, registerUser, startTestApp } from './helpers.js';
+import { api, completeProfile, registerUser, startTestApp } from './helpers.js';
 
 let t, admin, alice, bob;
 before(async () => {
@@ -52,6 +52,7 @@ test('admin can list all connections with resolved names', async () => {
 test('admin can list all applications with job titles', async () => {
   const job = await api(t.base, 'POST', '/api/admin/jobs', { title: 'Test Role', company: 'Acme' }, admin.token);
   assert.equal(job.status, 201);
+  await completeProfile(t.base, alice.token);
   await api(t.base, 'POST', `/api/jobs/${job.body.job.id}/apply`, {}, alice.token);
 
   const res = await api(t.base, 'GET', '/api/admin/applications', null, admin.token);

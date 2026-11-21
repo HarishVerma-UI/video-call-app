@@ -12,7 +12,7 @@ const pairKey = (a, b) => [String(a), String(b)].sort().join(':');
 
 // --- shaping -------------------------------------------------------------
 /** Profile for clients. `full` = viewer may see private fields (self or accepted connection). */
-export function publicProfile(p, { full = false } = {}) {
+export function publicProfile(p, { full = false, details = false } = {}) {
   if (!p) return null;
   const base = {
     userId: p.userId,
@@ -22,20 +22,24 @@ export function publicProfile(p, { full = false } = {}) {
     skills: p.skills ?? [],
     mentor: !!p.mentor,
     mentee: !!p.mentee,
+    openToReferrals: !!p.openToReferrals,
     focusAreas: p.focusAreas ?? [],
     hasPhoto: !!p.photoKey,
     updatedAt: iso(p.updatedAt),
   };
-  if (!full) return base;
+  if (!details && !full) return base;
   return {
     ...base,
     bio: p.bio ?? '',
-    mobile: p.mobile ?? '',
-    expectedSalary: p.expectedSalary ?? '',
     experience: p.experience ?? [],
     education: p.education ?? [],
-    hasCv: !!p.cvKey,
-    cvName: p.cvName ?? '',
+    ...(full ? {
+      email: p.email ?? '',
+      mobile: p.mobile ?? '',
+      expectedSalary: p.expectedSalary ?? '',
+      hasCv: !!p.cvKey,
+      cvName: p.cvName ?? '',
+    } : {}),
   };
 }
 
@@ -60,7 +64,7 @@ export async function directoryProfile(profile, media) {
   };
 }
 
-const PROFILE_FIELDS = ['name', 'headline', 'bio', 'location', 'mobile', 'expectedSalary', 'photoKey', 'cvKey', 'cvName', 'skills', 'experience', 'education', 'mentor', 'mentee', 'focusAreas'];
+const PROFILE_FIELDS = ['name', 'headline', 'bio', 'location', 'mobile', 'expectedSalary', 'photoKey', 'cvKey', 'cvName', 'skills', 'experience', 'education', 'mentor', 'mentee', 'openToReferrals', 'focusAreas'];
 function cleanPatch(patch) {
   const out = {};
   for (const k of PROFILE_FIELDS) if (patch[k] !== undefined) out[k] = patch[k];

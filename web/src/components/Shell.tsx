@@ -1,5 +1,5 @@
 import { isStaff, isSuperAdmin, normalizeRoomId, type AuthUser } from '@vca/shared';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { AdminView } from './AdminView';
@@ -7,7 +7,7 @@ import { RecruiterDashboard } from './RecruiterDashboard';
 import { Aperture } from './Aperture';
 import { CallsView } from './CallsView';
 import { ChatView } from './ChatView';
-import { BriefcaseIcon, ChatIcon, LogsIcon, SearchIcon, ShieldIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
+import { BriefcaseIcon, ChatIcon, LogsIcon, SearchIcon, ShieldIcon, SignOutIcon, SparkIcon, UserIcon, VideoIcon } from './Icons';
 import { JobsView } from './JobsView';
 import { LogsView } from './LogsView';
 import { MeetView } from './MeetView';
@@ -117,9 +117,29 @@ interface Props {
 }
 
 export function Shell({ user, media, route, go, notice, onJoin }: Props) {
-  const { api, photoUrl } = useAuth();
+  const { api, photoUrl, logout } = useAuth();
   const [search, setSearch] = useState('');
   const [pendingReqs, setPendingReqs] = useState(0);
+  const [composeRoleSignal, setComposeRoleSignal] = useState(0);
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => new Set());
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   useEffect(() => {
     if (route.view === 'admin' && !isSuperAdmin(user.role)) {
@@ -158,6 +178,20 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
     else go({ view });
   };
 
+  const startRolePost = () => {
+    if (route.view !== 'feed') go({ view: 'feed' });
+    setComposeRoleSignal((signal) => signal + 1);
+  };
+
+  const toggleSavedPost = useCallback((id: string) => {
+    setSavedPostIds((saved) => {
+      const next = new Set(saved);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   return (
     <div className="app" data-view={route.view}>
       <header className="titlebar">
@@ -171,6 +205,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         >
           <Aperture open={0.42} className="mark" />
           <span>Huddle</span>
+          {route.view === 'feed' && <span className="titlebar__home-tag">Home</span>}
         </a>
         <form className="titlebar__search" onSubmit={(e) => e.preventDefault()} role="search">
           <SearchIcon width={16} height={16} />
@@ -189,6 +224,18 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           )}
         </form>
         <div className="titlebar__end">
+          {route.view === 'feed' && (
+            <>
+              <button className="titlebar__action titlebar__action--quiet" onClick={() => go({ view: 'career' })}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                <span>30-Min CV Help</span>
+              </button>
+              <button className="titlebar__action titlebar__action--primary" onClick={startRolePost}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                <span>Post Role</span>
+              </button>
+            </>
+          )}
           <NotificationBell onOpenPost={() => go({ view: 'feed' })} onJoinCall={onJoin} />
           <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
             <ChatIcon width={20} height={20} />
@@ -198,10 +245,28 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             {pendingReqs > 0 && <span className="titlebar__badge">{pendingReqs > 9 ? '9+' : pendingReqs}</span>}
           </button>
           <ModeToggle />
-          <button className="titlebar__me" onClick={() => go({ view: 'profile' })} data-testid="open-profile" aria-label="Your profile" title={user.name}>
-            <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={32} />
-            <i className="presence" />
-          </button>
+          <div className="titlebar__account" ref={accountMenuRef}>
+            <button className="titlebar__me" type="button" onClick={() => setAccountMenuOpen((open) => !open)} data-testid="open-profile" aria-label="Account menu" aria-haspopup="menu" aria-expanded={accountMenuOpen} title={user.name}>
+              <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={32} />
+              <i className="presence" />
+            </button>
+            {accountMenuOpen && (
+              <div className="titlebar__account-menu" role="menu" aria-label="Account options">
+                <div className="titlebar__account-identity">
+                  <strong>{user.name}</strong>
+                  <span>{user.email}</span>
+                </div>
+                <button type="button" role="menuitem" onClick={() => { setAccountMenuOpen(false); go({ view: 'profile' }); }}>
+                  <UserIcon width={17} height={17} />
+                  Profile &amp; Settings
+                </button>
+                <button type="button" role="menuitem" onClick={() => logout()} data-testid="account-sign-out">
+                  <SignOutIcon width={17} height={17} />
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -265,12 +330,12 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         )}
         {route.view === 'chat' && <ChatView user={user} room={route.room} openRoom={(room) => go({ view: 'chat', room })} onJoin={onJoin} />}
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
-        {route.view === 'profile' && <ProfileView />}
+        {route.view === 'profile' && <ProfileView onPreviewPublicProfile={() => go({ view: 'person', id: user.id })} onOpenCareerStudio={() => go({ view: 'career' })} />}
         {route.view === 'admin' && isSuperAdmin(user.role) && <AdminView />}
         {route.view === 'recruiter' && isStaff(user.role) && !isSuperAdmin(user.role) && <RecruiterDashboard />}
         {route.view === 'logs' && <LogsView />}
         {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
-        {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} query={search} onQueryChange={setSearch} />}
+        {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} openJobs={() => go({ view: 'jobs' })} openCareer={() => go({ view: 'career' })} openProfile={() => go({ view: 'profile' })} openNetwork={() => go({ view: 'network' })} composeRoleSignal={composeRoleSignal} savedPostIds={savedPostIds} onToggleSavedPost={toggleSavedPost} query={search} onQueryChange={setSearch} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
         {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} />}
         {route.view === 'person' && (

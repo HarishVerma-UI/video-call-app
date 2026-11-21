@@ -351,7 +351,14 @@ test.describe('Profile', () => {
     // Update target's profile
     await request.put('/api/profile', {
       headers: authHeaders(target.token),
-      data: { headline: 'Designer', location: 'Delhi' },
+      data: {
+        headline: 'Designer',
+        location: 'Delhi',
+        bio: 'Designing accessible products.',
+        mobile: '555-0100',
+        experience: [{ title: 'Designer', company: 'Studio', start: '2021', end: 'Present' }],
+        education: [{ school: 'Design College', degree: 'BDes', year: '2020' }],
+      },
     });
 
     // Viewer sees limited profile (not connected)
@@ -363,7 +370,10 @@ test.describe('Profile', () => {
     expect(profile.name).toBe(target.user.name);
     expect(profile.headline).toBe('Designer');
     expect(profile.connection).toBe('none');
-    // Full fields should not be present for non-connected user
-    expect(profile.bio).toBeUndefined();
+    // Public career details are visible, but contact information remains private.
+    expect(profile.bio).toBe('Designing accessible products.');
+    expect(profile.experience[0].company).toBe('Studio');
+    expect(profile.education[0].school).toBe('Design College');
+    expect(profile.mobile).toBeUndefined();
   });
 });

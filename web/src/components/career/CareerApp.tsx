@@ -1,12 +1,11 @@
 // Career Portal — a full-screen member app built the same way as the admin and
 // recruiter consoles (the isolated .admin-app / aa- shell), bundling every career
 // tool: a multi-template CV generator with live preview, an AI role builder, a
-// JD-to-CV matcher, a cover-letter writer, multilingual CV labels and a mock
-// interview simulator. Real data is pulled from the member's Huddle profile; the
-// AI assists run client-side so the whole portal works offline inside the app.
+// JD-to-CV matcher, and expert CV session requests. Real profile data comes from
+// Huddle; the writing assists run client-side.
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
-  type CSSProperties, type ReactNode,
+  type CSSProperties, type FormEvent, type ReactNode,
 } from 'react';
 import type { Education, Experience } from '@vca/shared';
 import { useAuth } from '../../auth/AuthContext';
@@ -18,8 +17,17 @@ interface CvData {
   name: string; title: string; email: string; phone: string; location: string;
   summary: string; skills: string[]; experience: Experience[]; education: Education[];
 }
-type TemplateId = 'modern' | 'exec' | 'minimal' | 'compact';
-type Lang = 'en' | 'es' | 'fr' | 'de' | 'hi';
+type TemplateId =
+  | 'modern-tech'
+  | 'executive-classic'
+  | 'minimalist-creative'
+  | 'startup-compact'
+  | 'ats-pro'
+  | 'split-banner'
+  | 'timeline-eng'
+  | 'nordic-right'
+  | 'bold-editorial'
+  | 'modern-geometric';
 
 const SAMPLE: CvData = {
   name: 'Harish Kumar Verma',
@@ -39,30 +47,25 @@ const SAMPLE: CvData = {
 };
 const EMPTY: CvData = { name: '', title: '', email: '', phone: '', location: '', summary: '', skills: [], experience: [], education: [] };
 
-const LANGS: { id: Lang; label: string }[] = [
-  { id: 'en', label: 'English' }, { id: 'es', label: 'Español' }, { id: 'fr', label: 'Français' },
-  { id: 'de', label: 'Deutsch' }, { id: 'hi', label: 'हिन्दी' },
-];
-const L10N: Record<Lang, { summary: string; experience: string; education: string; skills: string; contact: string }> = {
-  en: { summary: 'Summary', experience: 'Experience', education: 'Education', skills: 'Skills', contact: 'Contact' },
-  es: { summary: 'Resumen', experience: 'Experiencia', education: 'Educación', skills: 'Habilidades', contact: 'Contacto' },
-  fr: { summary: 'Profil', experience: 'Expérience', education: 'Formation', skills: 'Compétences', contact: 'Contact' },
-  de: { summary: 'Profil', experience: 'Berufserfahrung', education: 'Ausbildung', skills: 'Kenntnisse', contact: 'Kontakt' },
-  hi: { summary: 'सारांश', experience: 'अनुभव', education: 'शिक्षा', skills: 'कौशल', contact: 'संपर्क' },
-};
+const CV_LABELS = { summary: 'Summary', experience: 'Experience', education: 'Education', skills: 'Skills', contact: 'Contact' };
 
 const TEMPLATES: { id: TemplateId; name: string; desc: string; colors: string[] }[] = [
-  { id: 'modern', name: 'Modern Tech Clean', desc: 'Two-column, dark rail, pill skills', colors: ['#1e293b', '#4f46e5', '#fff'] },
-  { id: 'exec', name: 'Executive Classic', desc: 'Serif, centered header, formal', colors: ['#f8fafc', '#1e293b', '#cbd5e1'] },
-  { id: 'minimal', name: 'Minimalist Creative', desc: 'Whitespace, bold oversized name', colors: ['#fff', '#6366f1', '#e2e8f0'] },
-  { id: 'compact', name: 'Startup & Compact', desc: 'Dense one-page, two columns', colors: ['#eef2ff', '#6366f1', '#fff'] },
+  { id: 'modern-tech', name: 'Modern Tech Clean', desc: 'Two columns, dark rail, pill skills', colors: ['#0b132b', '#4f46e5', '#fff'] },
+  { id: 'executive-classic', name: 'Executive Classic', desc: 'Serif, centered header, formal', colors: ['#f8fafc', '#1e293b', '#cbd5e1'] },
+  { id: 'minimalist-creative', name: 'Minimalist Creative', desc: 'Whitespace, oversized name', colors: ['#fff', '#6366f1', '#e2e8f0'] },
+  { id: 'startup-compact', name: 'Startup & Compact', desc: 'Dense one-page, two columns', colors: ['#eff6ff', '#2563eb', '#fff'] },
+  { id: 'ats-pro', name: 'ATS & Ivy League', desc: 'ATS-safe, clean hierarchy', colors: ['#fff', '#111827', '#d1d5db'] },
+  { id: 'split-banner', name: 'Split Banner Pro', desc: 'Full-width header, two-column body', colors: ['#1e1b4b', '#4f46e5', '#fff'] },
+  { id: 'timeline-eng', name: 'Timeline Engineer', desc: 'Career timeline, monospace accents', colors: ['#fff', '#0f766e', '#ccfbf1'] },
+  { id: 'nordic-right', name: 'Nordic Right Rail', desc: 'Soft sidebar, crisp grid', colors: ['#fff', '#0284c7', '#f1f5f9'] },
+  { id: 'bold-editorial', name: 'Bold Editorial', desc: 'Left accent bar, split header', colors: ['#fff', '#e11d48', '#ffe4e6'] },
+  { id: 'modern-geometric', name: 'Modern Geometric', desc: 'Tinted header and initials badge', colors: ['#eef2ff', '#4f46e5', '#fff'] },
 ];
 
 /* ================= context ================= */
-interface Stats { atsScores: number[]; jdRuns: number; mockSessions: number; coverLetters: number; }
+interface Stats { atsScores: number[]; jdRuns: number; expertSessions: number; }
 interface CareerCtx {
   cv: CvData; setCv: (fn: (c: CvData) => CvData) => void;
-  lang: Lang; setLang: (l: Lang) => void;
   stats: Stats; bump: (fn: (s: Stats) => Stats) => void;
 }
 const Ctx = createContext<CareerCtx | null>(null);
@@ -81,9 +84,12 @@ const ICON = {
   cv: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6M9 13h6M9 17h4',
   wand: 'M15 4V2M15 10V8M12.5 6.5h-2M19.5 6.5h-2|M5 19l9-9|M17 13l4 4-2 2-4-4z',
   target: 'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0|M12 12m-5 0a5 5 0 1 0 10 0 5 5 0 1 0-10 0|M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
-  letter: 'M4 4h16v16H4z|M4 7l8 6 8-6',
-  globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20|M2 12h20|M12 2a15 15 0 0 1 0 20|M12 2a15 15 0 0 0 0 20',
-  mic: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z|M5 11a7 7 0 0 0 14 0M12 18v4',
+  expert: 'M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8|M20 8v6M23 11h-6',
+  clock: 'M12 8v4l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
+  calendar: 'M8 2v4M16 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z',
+  shield: 'M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z|M9 12l2 2 4-4',
+  search: 'm21 21-4.3-4.3|M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z',
+  next: 'M5 12h14|M13 6l6 6-6 6',
   copy: 'M9 9h10v10H9z|M5 15V5h10',
   print: 'M6 9V3h12v6|M6 18H4v-6h16v6h-2|M8 14h8v6H8z',
   plus: 'M12 5v14M5 12h14',
@@ -99,7 +105,7 @@ async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; }
   catch { return false; }
 }
-function cvToText(cv: CvData, t: typeof L10N['en']): string {
+function cvToText(cv: CvData, t: typeof CV_LABELS): string {
   const lines = [cv.name, cv.title, [cv.email, cv.phone, cv.location].filter(Boolean).join(' · '), '', t.summary.toUpperCase(), cv.summary, ''];
   lines.push(t.experience.toUpperCase());
   cv.experience.forEach((e) => { lines.push(`${e.title} — ${e.company} (${[e.start, e.end].filter(Boolean).join('–')})`); if (e.description) lines.push(e.description); lines.push(''); });
@@ -111,7 +117,7 @@ function cvToText(cv: CvData, t: typeof L10N['en']): string {
 
 /* ================= CV preview templates ================= */
 function Contact({ cv }: { cv: CvData }) {
-  return <>{[cv.email, cv.phone, cv.location].filter(Boolean).map((x, i) => <div className="cv-contact" key={i}>{x}</div>)}</>;
+  return <>{[cv.email, cv.phone, cv.location].filter(Boolean).map((x, i) => <span className="cv-contact__item" key={i}>{x}</span>)}</>;
 }
 function ExpList({ cv }: { cv: CvData }) {
   return <>{cv.experience.map((e, i) => (
@@ -128,52 +134,81 @@ function EduList({ cv }: { cv: CvData }) {
   ))}</>;
 }
 
-function CvPaper({ cv, tpl, t }: { cv: CvData; tpl: TemplateId; t: typeof L10N['en'] }) {
-  if (tpl === 'modern') return (
-    <div className="cv-paper cv-modern">
-      <div className="cv-rail">
-        <h1>{cv.name}</h1><div className="cv-title">{cv.title}</div>
-        <div className="cv-sec-title">{t.contact}</div><Contact cv={cv} />
-        <div className="cv-sec-title">{t.skills}</div><div>{cv.skills.map((s, i) => <span className="cv-pill" key={i}>{s}</span>)}</div>
-      </div>
-      <div className="cv-body">
-        <div className="cv-sec"><div className="cv-sec-title">{t.summary}</div><div className="cv-desc">{cv.summary}</div></div>
-        <div className="cv-sec"><div className="cv-sec-title">{t.experience}</div><ExpList cv={cv} /></div>
-        <div className="cv-sec"><div className="cv-sec-title">{t.education}</div><EduList cv={cv} /></div>
-      </div>
-    </div>
+function CvPaper({ cv, tpl, t }: { cv: CvData; tpl: TemplateId; t: typeof CV_LABELS }) {
+  const skills = <div className="cv-skills">{cv.skills.map((s, i) => <span className="cv-pill" key={i}>{s}</span>)}</div>;
+  const section = (label: string, content: ReactNode, className = '') => (
+    <section className={`cv-sec ${className}`}><div className="cv-sec-title">{label}</div>{content}</section>
   );
-  if (tpl === 'exec') return (
-    <div className="cv-paper cv-exec">
-      <div className="cv-head"><h1>{cv.name}</h1><div className="cv-title">{cv.title}</div><div className="cv-contact">{[cv.email, cv.phone, cv.location].filter(Boolean).join('   |   ')}</div></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.summary}</div><div className="cv-desc">{cv.summary}</div></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.experience}</div><ExpList cv={cv} /></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.education}</div><EduList cv={cv} /></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.skills}</div><div>{cv.skills.map((s, i) => <span className="cv-pill" key={i}>{s}</span>)}</div></div>
-    </div>
+  const header = (className = '') => (
+    <header className={`cv-head ${className}`}>
+      <div><h1>{cv.name || 'Your name'}</h1><div className="cv-title">{cv.title}</div></div>
+      <div className="cv-contact"><Contact cv={cv} /></div>
+    </header>
   );
-  if (tpl === 'minimal') return (
-    <div className="cv-paper cv-min">
-      <div className="cv-head"><h1>{cv.name}</h1><div className="cv-title">{cv.title}</div><div className="cv-contact">{[cv.email, cv.phone, cv.location].filter(Boolean).join('  ·  ')}</div></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.summary}</div><div className="cv-desc">{cv.summary}</div></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.experience}</div><ExpList cv={cv} /></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.education}</div><EduList cv={cv} /></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.skills}</div><div>{cv.skills.map((s, i) => <span className="cv-pill" key={i}>{s}</span>)}</div></div>
-    </div>
-  );
-  return (
-    <div className="cv-paper cv-compact">
-      <div className="cv-head"><div><h1>{cv.name}</h1><div className="cv-title">{cv.title}</div></div><div className="cv-contact">{[cv.email, cv.phone, cv.location].filter(Boolean).map((x, i) => <div key={i}>{x}</div>)}</div></div>
-      <div className="cv-sec"><div className="cv-sec-title">{t.summary}</div><div className="cv-desc">{cv.summary}</div></div>
-      <div className="cv-cols">
-        <div><div className="cv-sec"><div className="cv-sec-title">{t.experience}</div><ExpList cv={cv} /></div></div>
-        <div>
-          <div className="cv-sec"><div className="cv-sec-title">{t.education}</div><EduList cv={cv} /></div>
-          <div className="cv-sec"><div className="cv-sec-title">{t.skills}</div><div>{cv.skills.map((s, i) => <span className="cv-pill" key={i}>{s}</span>)}</div></div>
-        </div>
-      </div>
-    </div>
-  );
+  const summary = section(t.summary, <div className="cv-desc">{cv.summary}</div>);
+  const experience = section(t.experience, <ExpList cv={cv} />);
+  const education = section(t.education, <EduList cv={cv} />);
+  const skillSection = section(t.skills, skills);
+
+  switch (tpl) {
+    case 'modern-tech':
+      return <div className="cv-paper cv-modern-tech">
+        <aside className="cv-rail">
+          <h1>{cv.name || 'Your name'}</h1><div className="cv-title">{cv.title}</div>
+          <div className="cv-sec-title">{t.contact}</div><div className="cv-contact"><Contact cv={cv} /></div>
+          <div className="cv-sec-title">{t.skills}</div>{skills}
+        </aside>
+        <div className="cv-body">{summary}{experience}{education}</div>
+      </div>;
+    case 'executive-classic':
+      return <div className="cv-paper cv-executive">
+        {header('cv-head--centered')}{summary}{experience}
+        <div className="cv-bottom-grid">{education}{skillSection}</div>
+      </div>;
+    case 'minimalist-creative':
+      return <div className="cv-paper cv-minimalist">
+        {header('cv-head--minimal')}{summary}{experience}{education}{skillSection}
+      </div>;
+    case 'startup-compact':
+      return <div className="cv-paper cv-startup">
+        {header('cv-head--compact')}{summary}
+        <div className="cv-cols"><div>{experience}</div><div>{education}{skillSection}</div></div>
+      </div>;
+    case 'ats-pro':
+      return <div className="cv-paper cv-ats">
+        <header className="cv-head cv-head--ats">
+          <div><h1>{cv.name || 'Your name'}</h1><div className="cv-title">{cv.title}</div></div>
+          <div className="cv-contact"><Contact cv={cv} /></div>
+        </header>
+        {summary}{skillSection}{experience}{education}
+      </div>;
+    case 'split-banner':
+      return <div className="cv-paper cv-split">
+        <header className="cv-split__banner"><div><h1>{cv.name || 'Your name'}</h1><div className="cv-title">{cv.title}</div></div><div className="cv-contact"><Contact cv={cv} /></div></header>
+        <div className="cv-split__body"><div>{summary}{experience}</div><aside>{skillSection}{education}</aside></div>
+      </div>;
+    case 'timeline-eng':
+      return <div className="cv-paper cv-timeline">
+        {header('cv-head--timeline')}{summary}
+        <section className="cv-sec cv-timeline__experience"><div className="cv-sec-title">{t.experience}</div><ExpList cv={cv} /></section>
+        <div className="cv-bottom-grid">{skillSection}{education}</div>
+      </div>;
+    case 'nordic-right':
+      return <div className="cv-paper cv-nordic">
+        <main>{header('cv-head--nordic')}{summary}{experience}</main>
+        <aside><section className="cv-sec"><div className="cv-sec-title">{t.contact}</div><div className="cv-contact"><Contact cv={cv} /></div></section>{skillSection}{education}</aside>
+      </div>;
+    case 'bold-editorial':
+      return <div className="cv-paper cv-editorial">
+        <div className="cv-editorial__bar" />
+        <div className="cv-editorial__body">{header('cv-head--editorial')}{summary}{experience}<div className="cv-bottom-grid">{skillSection}{education}</div></div>
+      </div>;
+    case 'modern-geometric':
+      return <div className="cv-paper cv-geometric">
+        <header className="cv-geometric__banner"><span>{initials(cv.name || 'Y')}</span><div><h1>{cv.name || 'Your name'}</h1><div className="cv-title">{cv.title}</div><div className="cv-contact"><Contact cv={cv} /></div></div></header>
+        {summary}{experience}<div className="cv-bottom-grid">{skillSection}{education}</div>
+      </div>;
+  }
 }
 
 /* ================= DASHBOARD ================= */
@@ -192,17 +227,14 @@ function DashboardPage({ go }: { go: (s: Section) => void }) {
     { id: 'cv', icon: ICON.cv, title: 'CV Generator', desc: 'Pick a template, edit live, export' },
     { id: 'role', icon: ICON.wand, title: 'AI Role Builder', desc: 'Role-optimized bullet points' },
     { id: 'jd', icon: ICON.target, title: 'JD Match & Gaps', desc: 'Score your CV against a job' },
-    { id: 'cover', icon: ICON.letter, title: 'Cover Letter', desc: 'Draft a tailored letter' },
-    { id: 'lang', icon: ICON.globe, title: 'Translate CV', desc: '5 languages, native phrasing' },
-    { id: 'interview', icon: ICON.mic, title: 'Mock Interview', desc: 'Practise with instant feedback' },
+    { id: 'expert', icon: ICON.expert, title: 'Expert CV Review', desc: 'Book a CV build or review session' },
   ];
   return (
     <>
       <div className="aa-kpis">
         <StatCard icon={ICON.target} val={atsAvg ? `${atsAvg}%` : '—'} label="Avg ATS match score" tone="--aa-s1" />
         <StatCard icon={ICON.check} val={String(stats.jdRuns)} label="JD matches run" tone="--aa-s7" />
-        <StatCard icon={ICON.mic} val={String(stats.mockSessions)} label="Mock interviews done" tone="--aa-s4" />
-        <StatCard icon={ICON.letter} val={String(stats.coverLetters)} label="Cover letters created" tone="--aa-s6" />
+        <StatCard icon={ICON.expert} val={String(stats.expertSessions)} label="Expert sessions requested" tone="--aa-s4" />
       </div>
       <div className="aa-card">
         <div className="aa-card__head"><h3>Your career toolkit</h3><span className="aa-sub">everything to land the next role</span></div>
@@ -224,13 +256,25 @@ function Field({ label, children, wide }: { label: string; children: ReactNode; 
   return <label className={`aa-field${wide ? ' aa-field--wide' : ''}`}><span>{label}</span>{children}</label>;
 }
 function CvGeneratorPage() {
-  const { cv, setCv, lang } = useCareer();
+  const { cv, setCv } = useCareer();
   const { api } = useAuth();
-  const [tpl, setTpl] = useState<TemplateId>('modern');
+  const [tpl, setTpl] = useState<TemplateId>('modern-tech');
   const [msg, setMsg] = useState('');
   const [syncing, setSyncing] = useState(false);
-  const t = L10N[lang];
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const t = CV_LABELS;
   const set = <K extends keyof CvData>(k: K, v: CvData[K]) => setCv((c) => ({ ...c, [k]: v }));
+
+  useEffect(() => {
+    const updateScale = () => {
+      const width = previewRef.current?.clientWidth;
+      if (width) setPreviewScale(Math.min(1, Math.max(0.42, (width - 36) / 794)));
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
 
   const syncFromProfile = async () => {
     setSyncing(true); setMsg('');
@@ -256,61 +300,101 @@ function CvGeneratorPage() {
   const setExp = (i: number, k: keyof Experience, v: string) => setCv((c) => ({ ...c, experience: c.experience.map((e, j) => j === i ? { ...e, [k]: v } : e) }));
   const addExp = () => setCv((c) => ({ ...c, experience: [...c.experience, { title: '', company: '', start: '', end: '', description: '' }] }));
   const delExp = (i: number) => setCv((c) => ({ ...c, experience: c.experience.filter((_, j) => j !== i) }));
+  const setEdu = (i: number, k: keyof Education, v: string) => setCv((c) => ({ ...c, education: c.education.map((e, j) => j === i ? { ...e, [k]: v } : e) }));
+  const addEdu = () => setCv((c) => ({ ...c, education: [...c.education, { degree: '', school: '', year: '' }] }));
+  const delEdu = (i: number) => setCv((c) => ({ ...c, education: c.education.filter((_, j) => j !== i) }));
+  const activeTemplate = TEMPLATES.find((x) => x.id === tpl) ?? TEMPLATES[0];
 
   return (
-    <div className="cp-grid">
-      <div className="cp-stack cp-noprint">
-        <div className="aa-card">
-          <div className="aa-card__head"><h3>Template</h3></div>
-          <div className="cp-templates">
-            {TEMPLATES.map((x) => (
-              <button key={x.id} className={`cp-tpl${tpl === x.id ? ' is-on' : ''}`} onClick={() => setTpl(x.id)}>
-                <div className="cp-swatch">{x.colors.map((c, i) => <i key={i} style={{ background: c, width: `${100 / x.colors.length}%` }} />)}</div>
-                <div className="cp-tpl__name">{x.name}</div><div className="cp-tpl__desc">{x.desc}</div>
-              </button>
+    <div className="cp-workspace">
+      <div className="cp-toolbar aa-toolbar cp-noprint">
+        <button className="aa-btn" onClick={syncFromProfile} disabled={syncing}><Ic d={ICON.sync} size={15} /> {syncing ? 'Syncing…' : 'Sync from my profile'}</button>
+        <button className="aa-btn" onClick={() => { setCv(() => ({ ...SAMPLE })); setMsg('Sample CV loaded.'); }}><Ic d={ICON.spark} size={15} /> Load sample</button>
+        <span className="aa-spacer" />
+        <button className="aa-btn" onClick={copy}><Ic d={ICON.copy} size={15} /> Copy text</button>
+        <button className="aa-btn aa-btn--primary" onClick={() => window.print()}><Ic d={ICON.print} size={15} /> Print / PDF</button>
+      </div>
+      {msg && <p className="aa-msg aa-msg--ok cp-noprint" role="status">{msg}</p>}
+      <div className="cp-grid">
+        <div className="cp-stack cp-noprint">
+          <div className="aa-card cp-card">
+            <div className="cp-card__head">
+              <div><h3>Top 10 Templates</h3><span className="cp-card__eyebrow">Choose a layout</span></div>
+              <span className="cp-active-template">{activeTemplate.name}</span>
+            </div>
+            <div className="cp-templates">
+              {TEMPLATES.map((x, i) => (
+                <button key={x.id} className={`cp-tpl${tpl === x.id ? ' is-on' : ''}`} onClick={() => setTpl(x.id)} aria-pressed={tpl === x.id}>
+                  <span className={`cp-thumb cp-thumb--${x.id}`} aria-hidden="true">
+                    <i /><i /><i /><i /><i />
+                    <b>#{i + 1}</b>
+                  </span>
+                  <span className="cp-tpl__name">{x.name}</span>
+                  <span className="cp-tpl__desc">{x.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="aa-card aa-form cp-card">
+            <div className="aa-card__head"><h3>Details</h3></div>
+            <div className="aa-form__grid cp-details-grid">
+              <Field label="Full name"><input value={cv.name} onChange={(e) => set('name', e.target.value)} /></Field>
+              <Field label="Professional title"><input value={cv.title} onChange={(e) => set('title', e.target.value)} /></Field>
+              <Field label="Email"><input type="email" value={cv.email} onChange={(e) => set('email', e.target.value)} /></Field>
+              <Field label="Phone"><input value={cv.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
+              <Field label="Location"><input value={cv.location} onChange={(e) => set('location', e.target.value)} /></Field>
+            </div>
+            <Field label="Summary" wide><textarea rows={3} value={cv.summary} onChange={(e) => set('summary', e.target.value)} /></Field>
+            <Field label="Skills (comma separated)" wide><input value={cv.skills.join(', ')} onChange={(e) => set('skills', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} /></Field>
+          </div>
+
+          <div className="aa-card aa-form cp-card">
+            <div className="aa-card__head"><h3>Experience</h3><button className="aa-btn aa-btn--sm" onClick={addExp}><Ic d={ICON.plus} size={14} /> Add</button></div>
+            {cv.experience.length === 0 && <p className="cp-empty-note">No experience yet — add a role or sync from your profile.</p>}
+            {cv.experience.map((e, i) => (
+              <div key={i} className="cp-entry">
+                <div className="cp-entry__head"><span>Role {i + 1}</span><button className="aa-btn aa-btn--sm aa-btn--danger" onClick={() => delExp(i)}><Ic d={ICON.trash} size={13} /> Remove</button></div>
+                <div className="aa-form__grid cp-details-grid">
+                  <Field label="Role"><input value={e.title} onChange={(ev) => setExp(i, 'title', ev.target.value)} /></Field>
+                  <Field label="Company"><input value={e.company} onChange={(ev) => setExp(i, 'company', ev.target.value)} /></Field>
+                  <Field label="Start"><input value={e.start ?? ''} onChange={(ev) => setExp(i, 'start', ev.target.value)} /></Field>
+                  <Field label="End"><input value={e.end ?? ''} onChange={(ev) => setExp(i, 'end', ev.target.value)} /></Field>
+                </div>
+                <Field label="Highlights (one per line)" wide><textarea rows={3} value={e.description ?? ''} onChange={(ev) => setExp(i, 'description', ev.target.value)} /></Field>
+              </div>
+            ))}
+          </div>
+
+          <div className="aa-card aa-form cp-card">
+            <div className="aa-card__head"><h3>Education</h3><button className="aa-btn aa-btn--sm" onClick={addEdu}><Ic d={ICON.plus} size={14} /> Add</button></div>
+            {cv.education.length === 0 && <p className="cp-empty-note">Add a qualification or sync it from your profile.</p>}
+            {cv.education.map((e, i) => (
+              <div key={i} className="cp-entry">
+                <div className="cp-entry__head"><span>Education {i + 1}</span><button className="aa-btn aa-btn--sm aa-btn--danger" onClick={() => delEdu(i)}><Ic d={ICON.trash} size={13} /> Remove</button></div>
+                <div className="aa-form__grid cp-details-grid">
+                  <Field label="Degree"><input value={e.degree} onChange={(ev) => setEdu(i, 'degree', ev.target.value)} /></Field>
+                  <Field label="Year"><input value={e.year} onChange={(ev) => setEdu(i, 'year', ev.target.value)} /></Field>
+                  <Field label="University / Institution" wide><input value={e.school} onChange={(ev) => setEdu(i, 'school', ev.target.value)} /></Field>
+                </div>
+              </div>
             ))}
           </div>
         </div>
-        <div className="aa-card aa-form">
-          <div className="aa-card__head"><h3>Details</h3></div>
-          <div className="aa-form__grid">
-            <Field label="Full name"><input value={cv.name} onChange={(e) => set('name', e.target.value)} /></Field>
-            <Field label="Professional title"><input value={cv.title} onChange={(e) => set('title', e.target.value)} /></Field>
-            <Field label="Email"><input value={cv.email} onChange={(e) => set('email', e.target.value)} /></Field>
-            <Field label="Phone"><input value={cv.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
-            <Field label="Location"><input value={cv.location} onChange={(e) => set('location', e.target.value)} /></Field>
-          </div>
-          <Field label="Summary" wide><textarea rows={3} value={cv.summary} onChange={(e) => set('summary', e.target.value)} /></Field>
-          <Field label="Skills (comma separated)" wide><input value={cv.skills.join(', ')} onChange={(e) => set('skills', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} /></Field>
-        </div>
-        <div className="aa-card aa-form">
-          <div className="aa-card__head"><h3>Experience</h3><button className="aa-btn aa-btn--sm" onClick={addExp}><Ic d={ICON.plus} size={14} /> Add</button></div>
-          {cv.experience.length === 0 && <p className="cp-empty-note">No experience yet — add a role or sync from your profile.</p>}
-          {cv.experience.map((e, i) => (
-            <div key={i} className="aa-form" style={{ borderTop: i ? '1px solid var(--aa-border)' : 0, paddingTop: i ? 12 : 0 }}>
-              <div className="aa-form__grid">
-                <Field label="Role"><input value={e.title} onChange={(ev) => setExp(i, 'title', ev.target.value)} /></Field>
-                <Field label="Company"><input value={e.company} onChange={(ev) => setExp(i, 'company', ev.target.value)} /></Field>
-                <Field label="Start"><input value={e.start ?? ''} onChange={(ev) => setExp(i, 'start', ev.target.value)} /></Field>
-                <Field label="End"><input value={e.end ?? ''} onChange={(ev) => setExp(i, 'end', ev.target.value)} /></Field>
-              </div>
-              <Field label="Highlights (one per line)" wide><textarea rows={3} value={e.description ?? ''} onChange={(ev) => setExp(i, 'description', ev.target.value)} /></Field>
-              <div className="aa-form__actions"><button className="aa-btn aa-btn--sm aa-btn--danger" onClick={() => delExp(i)}><Ic d={ICON.trash} size={14} /> Remove</button></div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="cp-stack">
-        <div className="aa-toolbar cp-noprint">
-          <button className="aa-btn" onClick={syncFromProfile} disabled={syncing}><Ic d={ICON.sync} size={15} /> {syncing ? 'Syncing…' : 'Sync from my profile'}</button>
-          <button className="aa-btn" onClick={() => setCv(() => ({ ...SAMPLE }))}><Ic d={ICON.spark} size={15} /> Load sample</button>
-          <span className="aa-spacer" />
-          <button className="aa-btn" onClick={copy}><Ic d={ICON.copy} size={15} /> Copy text</button>
-          <button className="aa-btn aa-btn--primary" onClick={() => window.print()}><Ic d={ICON.print} size={15} /> Print / PDF</button>
+        <div className="cp-stack cp-preview-column">
+          <div className="cp-preview-heading cp-noprint">
+            <div><h3>Live preview</h3><p>Your changes update the CV instantly.</p></div>
+            <span>{activeTemplate.name}</span>
+          </div>
+          <div className="cp-preview-wrap" ref={previewRef}>
+            <div className="cp-preview-sized" style={{ width: 794 * previewScale, height: 1123 * previewScale }}>
+              <div className="cp-preview-scale" style={{ transform: `scale(${previewScale})` }}>
+                <CvPaper cv={cv} tpl={tpl} t={t} />
+              </div>
+            </div>
+          </div>
         </div>
-        {msg && <p className="aa-msg aa-msg--ok cp-noprint">{msg}</p>}
-        <div className="cp-preview-wrap"><CvPaper cv={cv} tpl={tpl} t={t} /></div>
       </div>
     </div>
   );
@@ -425,177 +509,292 @@ function JdTailorPage() {
   );
 }
 
-/* ================= COVER LETTER ================= */
-function CoverLetterPage() {
-  const { cv, bump } = useCareer();
-  const [company, setCompany] = useState('');
-  const [role, setRole] = useState(cv.title || '');
-  const [why, setWhy] = useState('');
-  const [letter, setLetter] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const generate = () => {
-    const skills = cv.skills.slice(0, 3).join(', ') || 'my core skills';
-    const text = `Dear Hiring Team at ${company || '[Company]'},
-
-I'm excited to apply for the ${role || '[Role]'} position. As a ${cv.title || 'professional'} with a strong foundation in ${skills}, I bring both the technical depth and the collaborative mindset your team is looking for.
-
-${cv.summary || 'Over my career I have consistently delivered reliable, well-tested work and helped teams move faster.'}
-
-What draws me to ${company || 'your company'} specifically is ${why || 'the chance to work on products that reach real users and to grow alongside a strong engineering culture'}. I would welcome the opportunity to contribute from day one and to keep raising the bar for quality.
-
-Thank you for your time and consideration. I'd love to discuss how I can help ${company || 'your team'} succeed.
-
-Warm regards,
-${cv.name || 'Your Name'}
-${cv.email || ''}${cv.phone ? ' · ' + cv.phone : ''}`;
-    setLetter(text);
-    bump((s) => ({ ...s, coverLetters: s.coverLetters + 1 }));
-  };
-  return (
-    <div className="cp-grid">
-      <div className="aa-card aa-form cp-stack">
-        <div className="aa-card__head"><h3>Cover letter details</h3></div>
-        <Field label="Company name" wide><input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="e.g. Infosys" /></Field>
-        <Field label="Target role" wide><input value={role} onChange={(e) => setRole(e.target.value)} /></Field>
-        <Field label="Key motivations" wide><textarea rows={4} value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Why this company / role excites you" /></Field>
-        <div className="aa-form__actions"><button className="aa-btn aa-btn--primary" onClick={generate}><Ic d={ICON.letter} size={15} /> Generate letter</button></div>
-      </div>
-      <div className="cp-stack">
-        {!letter && <div className="aa-card"><p className="cp-help">We'll weave your name, title and skills into a polished, professional letter you can copy and send.</p></div>}
-        {letter && (
-          <>
-            <div className="aa-toolbar"><span className="aa-spacer" /><button className="aa-btn aa-btn--primary" onClick={async () => { if (await copyText(letter)) { setCopied(true); setTimeout(() => setCopied(false), 1400); } }}><Ic d={copied ? ICON.check : ICON.copy} size={15} /> {copied ? 'Copied' : 'Copy letter'}</button></div>
-            <div className="cp-letter">{letter}</div>
-          </>
-        )}
-      </div>
-    </div>
-  );
+/* ================= EXPERT CV REVIEW ================= */
+type ExpertSessionMode = 'generate' | 'review';
+interface CvExpert {
+  id: string; name: string; role: string; specialty: string; industry: string;
+  rating: string; reviews: number; price: number; initials: string; color: string;
+}
+interface BookingDate { id: string; label: string; date: string; }
+interface ExpertBooking {
+  id: string; expertId: string; expertName: string; expertRole: string;
+  modeTitle: string; dateId: string; date: string; slot: string; time: string; targetRole: string; cvIncluded: boolean;
+}
+interface ExpertBookingDraft {
+  expertId: string; dateId: string; date: string; slot: string; time: string; targetRole: string; cvIncluded: boolean;
 }
 
-/* ================= LANGUAGE ================= */
-function LanguagePage() {
-  const { cv, lang, setLang } = useCareer();
+const CV_EXPERTS: CvExpert[] = [
+  { id: 'rohan', name: 'Rohan Kulkarni', role: 'Staff Frontend Architect', specialty: 'Frontend & platform CVs', industry: 'Engineering & Tech', rating: '4.98', reviews: 184, price: 799, initials: 'RK', color: 'indigo' },
+  { id: 'meera', name: 'Dr. Meera Nair', role: 'Senior Dietitian Physician', specialty: 'Clinical & healthcare careers', industry: 'Doctor & Healthcare', rating: '4.99', reviews: 142, price: 899, initials: 'MN', color: 'emerald' },
+  { id: 'ananya', name: 'Ananya Sharma', role: 'Director of Talent Acquisition', specialty: 'Leadership & hiring strategy', industry: 'HR & Talent Acquisition', rating: '4.97', reviews: 226, price: 599, initials: 'AS', color: 'amber' },
+  { id: 'vikram', name: 'Vikramaditya Rao', role: 'Principal Architect & Hiring Lead', specialty: 'System design & senior roles', industry: 'Engineering & Tech', rating: '4.95', reviews: 98, price: 799, initials: 'VR', color: 'indigo' },
+  { id: 'priya', name: 'Priya Menon', role: 'Engineering Manager', specialty: 'Product engineering & leadership', industry: 'Engineering & Tech', rating: '4.96', reviews: 117, price: 699, initials: 'PM', color: 'emerald' },
+  { id: 'arjun', name: 'Dr. Arjun Rao', role: 'Consultant Cardiologist', specialty: 'Clinical CVs & fellowships', industry: 'Doctor & Healthcare', rating: '4.93', reviews: 86, price: 999, initials: 'AR', color: 'amber' },
+  { id: 'asha', name: 'Dr. Asha Iyer', role: 'Senior Medical Researcher', specialty: 'Research & academic CVs', industry: 'Doctor & Healthcare', rating: '4.97', reviews: 103, price: 899, initials: 'AI', color: 'indigo' },
+  { id: 'kavita', name: 'Kavita Desai', role: 'People & Culture Director', specialty: 'HR, people ops & leadership', industry: 'HR & Talent Acquisition', rating: '4.94', reviews: 91, price: 649, initials: 'KD', color: 'emerald' },
+  { id: 'rahul', name: 'Rahul Khanna', role: 'Executive Recruiter', specialty: 'Executive search & interviews', industry: 'HR & Talent Acquisition', rating: '4.96', reviews: 135, price: 699, initials: 'RK', color: 'amber' },
+  { id: 'nikhil', name: 'Chef Nikhil Batra', role: 'Executive Chef & Restaurateur', specialty: 'Culinary leadership & hospitality', industry: 'Culinary & Hospitality', rating: '4.92', reviews: 74, price: 599, initials: 'NB', color: 'indigo' },
+  { id: 'tara', name: 'Chef Tara Joseph', role: 'Hospitality Operations Lead', specialty: 'Hotels, service & culinary roles', industry: 'Culinary & Hospitality', rating: '4.95', reviews: 82, price: 549, initials: 'TJ', color: 'emerald' },
+  { id: 'neha', name: 'Neha Kapoor', role: 'Investment Banking Vice President', specialty: 'Finance & business CVs', industry: 'Finance & Business', rating: '4.97', reviews: 122, price: 899, initials: 'NK', color: 'amber' },
+  { id: 'suresh', name: 'Suresh Menon', role: 'Strategy & Operations Partner', specialty: 'Consulting & business leadership', industry: 'Finance & Business', rating: '4.94', reviews: 96, price: 799, initials: 'SM', color: 'indigo' },
+];
+const EXPERT_INDUSTRIES = ['All specialties', ...new Set(CV_EXPERTS.map((expert) => expert.industry))];
+const BOOKING_DATES: BookingDate[] = Array.from({ length: 5 }, (_, i) => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + i);
+  const id = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return {
+    id,
+    label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : date.toLocaleDateString('en', { weekday: 'short' }),
+    date: date.toLocaleDateString('en', { day: '2-digit', month: 'short' }),
+  };
+});
+const BOOKING_SLOTS = [
+  { time: '10:00 AM', available: true },
+  { time: '10:30 AM', available: true },
+  { time: '11:30 AM', available: false },
+  { time: '02:00 PM', available: true },
+  { time: '04:30 PM', available: true },
+  { time: '07:00 PM', available: true },
+  { time: '08:30 PM', available: true },
+];
+const SESSION_AGENDA: Record<ExpertSessionMode, { time: string; title: string; description: string }[]> = {
+  generate: [
+    { time: '00–05 min', title: 'Role alignment & experience discovery', description: 'Map your career story, key projects, and target roles.' },
+    { time: '05–20 min', title: 'Live CV building & bullet crafting', description: 'Turn your experience into clear, measurable achievements.' },
+    { time: '20–27 min', title: 'ATS keywords & structure polish', description: 'Improve skill coverage and make the layout easy to scan.' },
+    { time: '27–30 min', title: 'Export & application plan', description: 'Review the draft and agree on practical next steps.' },
+  ],
+  review: [
+    { time: '00–05 min', title: 'Target role & first impression', description: 'Review the CV layout and positioning for your target role.' },
+    { time: '05–20 min', title: 'Line-by-line feedback', description: 'Strengthen bullets with clearer outcomes and impact.' },
+    { time: '20–27 min', title: 'ATS and content improvements', description: 'Identify formatting issues, skill gaps, and weak sections.' },
+    { time: '27–30 min', title: 'Feedback summary & action plan', description: 'Leave with a focused checklist for your next CV revision.' },
+  ],
+};
+
+function getSessionEndTime(start: string): string {
+  const [clock, period] = start.split(' ');
+  const [rawHour, rawMinute] = clock.split(':').map(Number);
+  const totalMinutes = (rawHour % 12) * 60 + rawMinute + (period === 'PM' ? 720 : 0) + 30;
+  const clockMinutes = totalMinutes % 1440;
+  const hour = Math.floor(clockMinutes / 60) % 12 || 12;
+  const minute = clockMinutes % 60;
+  const nextPeriod = clockMinutes >= 720 ? 'PM' : 'AM';
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${nextPeriod}`;
+}
+
+interface ExpertReviewPageProps {
+  mode: ExpertSessionMode; setMode: (mode: ExpertSessionMode) => void;
+  expertId: string; setExpertId: (id: string) => void;
+  bookings: ExpertBooking[]; notice: string;
+  onOpenBooking: (expertId?: string) => void; onBrowseExperts: () => void; onCancelBooking: (id: string) => void;
+}
+function ExpertReviewPage({ mode, setMode, expertId, setExpertId, bookings, notice, onOpenBooking, onBrowseExperts, onCancelBooking }: ExpertReviewPageProps) {
+  const agenda = SESSION_AGENDA[mode];
+  const topExperts = CV_EXPERTS.slice(0, 3);
+
   return (
-    <div className="cp-grid">
-      <div className="aa-card cp-stack">
-        <div className="aa-card__head"><h3>CV language</h3></div>
-        <p className="cp-help">Switch the section labels of your CV between languages with native professional phrasing. Your content stays as written — headings and structure adapt.</p>
-        <div className="cp-langbtns">
-          {LANGS.map((l) => <button key={l.id} className={`aa-btn${lang === l.id ? ' aa-btn--primary' : ''}`} onClick={() => setLang(l.id)}>{l.label}</button>)}
+    <div className="cp-expert-page cp-expert-page--full">
+      <header className="cp-expert-page-toolbar">
+        <div className="cp-mode-tabs" role="group" aria-label="Expert session type">
+          <button type="button" className={mode === 'generate' ? 'is-selected' : ''} onClick={() => setMode('generate')}>Generate CV with Expert</button>
+          <button type="button" className={mode === 'review' ? 'is-selected' : ''} onClick={() => setMode('review')}>1:1 Expert CV Review</button>
         </div>
-        <div className="aa-dlgrid" style={{ marginTop: 8 }}>
-          {(['summary', 'experience', 'education', 'skills'] as const).map((k) => (
-            <div className="aa-dl" key={k}><dt>{k}</dt><dd>{L10N[lang][k]}</dd></div>
+        <button className="aa-btn aa-btn--primary" onClick={() => onOpenBooking(expertId)}><Ic d={ICON.calendar} size={14} /> Book 30-Min Session</button>
+      </header>
+
+      {notice && <div className="cp-booking-notice" role="status">{notice}</div>}
+
+      <section className="aa-card cp-flow-card">
+        <div className="cp-flow-card__heading">
+          <div><span>30-minute session flow</span><strong>{mode === 'generate' ? 'Generate CV with Expert' : '1:1 Expert CV Review'}</strong></div>
+          <small><Ic d={ICON.clock} size={13} /> Structured 4-stage agenda</small>
+        </div>
+        <div className="cp-flow-grid">
+          {agenda.map((step, index) => (
+            <article className="cp-flow-step" key={step.time}>
+              <div className="cp-flow-step__top"><span className="cp-flow-step__number">0{index + 1}</span><span className="cp-flow-step__time">{step.time}</span></div>
+              <h3>{step.title}</h3>
+              <p>{step.description}</p>
+            </article>
           ))}
         </div>
+      </section>
+
+      <section className="cp-available-experts">
+        <div className="cp-available-experts__heading">
+          <div><h2>Available experts <span>13 specialists</span></h2><p>Engineering, healthcare, HR, culinary &amp; more</p></div>
+          <button className="aa-btn cp-browse-button" onClick={onBrowseExperts}>Browse all experts <Ic d={ICON.next} size={14} /></button>
+        </div>
+        <div className="cp-featured-experts">
+          {topExperts.map((expert) => (
+            <article className={`cp-featured-expert${expert.id === expertId ? ' is-selected' : ''}`} key={expert.id}>
+              <span className={`cp-expert-avatar cp-expert-avatar--${expert.color}`}>{expert.initials}</span>
+              <div className="cp-featured-expert__main">
+                <div className="cp-featured-expert__name"><strong>{expert.name}</strong><span>★ {expert.rating} <small>({expert.reviews})</small></span></div>
+                <p>{expert.role}</p>
+                <div className="cp-featured-expert__meta"><strong>₹{expert.price} <small>/ 30m</small></strong><span>{expert.industry}</span></div>
+              </div>
+              <button type="button" className="aa-btn aa-btn--sm" onClick={() => { setExpertId(expert.id); onOpenBooking(expert.id); }}>Book slot</button>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <div className="cp-session-columns">
+        <section className="aa-card cp-sessions-card">
+          <div className="cp-section-heading">
+            <div><h3>Upcoming 30-Min Sessions <span className="cp-session-count">{bookings.length}</span></h3><p>Demo requests are stored only for this page session.</p></div>
+            <button className="cp-add-slot" onClick={() => onOpenBooking(expertId)}>+ Add slot</button>
+          </div>
+          {bookings.length === 0 ? (
+            <div className="cp-sessions-empty"><Ic d={ICON.calendar} size={22} /><strong>No session requests yet</strong><span>Choose an expert and time to add a demo request here.</span></div>
+          ) : (
+            <div className="cp-session-list">
+              {bookings.map((booking) => (
+                <article className="cp-session-item" key={booking.id}>
+                  <span className="cp-session-calendar"><Ic d={ICON.calendar} size={16} /><small>30m</small></span>
+                  <div className="cp-session-info">
+                    <strong>{booking.modeTitle} <small>Demo request</small></strong>
+                    <span>with {booking.expertName} · {booking.expertRole}</span>
+                    <span>{booking.date} · {booking.time} · Focus: {booking.targetRole}{booking.cvIncluded ? ' · Portal CV included' : ''}</span>
+                  </div>
+                  <button className="aa-btn aa-btn--sm" type="button" onClick={() => onCancelBooking(booking.id)}>Remove</button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="aa-card cp-sessions-card">
+          <div className="cp-section-heading">
+            <div><h3>Completed expert sessions &amp; feedback <span className="cp-session-count">0</span></h3></div>
+          </div>
+          <div className="cp-sessions-empty cp-completed-empty"><Ic d={ICON.check} size={22} /><strong>No completed sessions yet</strong><span>Expert feedback and updated CVs will appear here after a session.</span></div>
+        </section>
       </div>
-      <div className="cp-preview-wrap"><CvPaper cv={cv} tpl="modern" t={L10N[lang]} /></div>
     </div>
   );
 }
 
-/* ================= MOCK INTERVIEW ================= */
-const QUESTIONS: { q: string; tag: string; kind: 'Behavioral' | 'Technical' }[] = [
-  { q: 'Tell me about a time you led a difficult migration. What was the situation and the result?', tag: 'STAR', kind: 'Behavioral' },
-  { q: 'Describe a conflict within your team and how you resolved it.', tag: 'STAR', kind: 'Behavioral' },
-  { q: 'How do you optimize change detection and rendering performance in a large Angular app?', tag: 'Technical', kind: 'Technical' },
-  { q: 'Walk me through how you design a reusable component library other teams will adopt.', tag: 'System', kind: 'Technical' },
-  { q: 'Tell me about a project that failed. What did you learn?', tag: 'STAR', kind: 'Behavioral' },
-  { q: 'How would you structure state management for a complex dashboard?', tag: 'System', kind: 'Technical' },
-];
-function MockInterviewPage() {
-  const { bump } = useCareer();
-  const [i, setI] = useState(0);
-  const [ans, setAns] = useState('');
-  const [rec, setRec] = useState(false);
-  const [fb, setFb] = useState<{ clarity: number; star: string; tips: string[] } | null>(null);
-  const timer = useRef<number | null>(null);
-  const q = QUESTIONS[i];
-
-  useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
-  const toggleRec = () => {
-    if (rec) { setRec(false); if (timer.current) window.clearInterval(timer.current); return; }
-    setRec(true);
-    // Simulated voice capture — appends transcript-style prompts so the textarea fills.
-    timer.current = window.setInterval(() => setAns((a) => a + (a ? ' ' : '') + '…'), 900);
-    window.setTimeout(() => { setRec(false); if (timer.current) window.clearInterval(timer.current); }, 3600);
-  };
-  const evaluate = () => {
-    const words = ans.trim().split(/\s+/).filter((w) => w !== '…').length;
-    const hasStar = /\b(situation|task|action|result|led|achieved|resulted|impact|%)\b/i.test(ans);
-    const clarity = Math.min(95, 40 + Math.min(words, 120) / 2 + (hasStar ? 12 : 0));
-    const tips = [
-      words < 40 ? 'Add more detail — aim for 120–200 words so the interviewer can follow the story.' : 'Good length — keep it focused and cut filler.',
-      hasStar ? 'Nice: your answer signals the STAR structure.' : 'Frame it with STAR: Situation, Task, Action, Result.',
-      /\d/.test(ans) ? 'Great — you quantified the impact.' : 'Quantify the result (%, time saved, users, scale).',
-    ];
-    setFb({ clarity: Math.round(clarity), star: hasStar ? 'Detected' : 'Not clear', tips });
-    bump((s) => ({ ...s, mockSessions: s.mockSessions + 1 }));
-  };
-  const next = () => { setI((n) => (n + 1) % QUESTIONS.length); setAns(''); setFb(null); };
-  const prev = () => { setI((n) => (n - 1 + QUESTIONS.length) % QUESTIONS.length); setAns(''); setFb(null); };
+interface ExpertsDirectoryPageProps { onBook: (expertId: string) => void; }
+function ExpertsDirectoryPage({ onBook }: ExpertsDirectoryPageProps) {
+  const [search, setSearch] = useState('');
+  const [industry, setIndustry] = useState(EXPERT_INDUSTRIES[0]);
+  const filteredExperts = CV_EXPERTS.filter((expert) => {
+    const matchesIndustry = industry === EXPERT_INDUSTRIES[0] || expert.industry === industry;
+    const query = search.trim().toLowerCase();
+    const matchesSearch = !query || [expert.name, expert.role, expert.specialty, expert.industry].some((value) => value.toLowerCase().includes(query));
+    return matchesIndustry && matchesSearch;
+  });
 
   return (
-    <div className="cp-grid">
-      <div className="cp-stack">
-        <div className="aa-card">
-          <div className="aa-card__head"><span className={`cp-qtag aa-pill aa-pill--${q.kind === 'Technical' ? 'recruiter' : 'good'}`}>{q.kind} · {q.tag}</span><span className="cp-help">{i + 1} / {QUESTIONS.length}</span></div>
-          <p className="cp-q">{q.q}</p>
-          <div className="aa-toolbar" style={{ marginTop: 14 }}>
-            <button className="aa-btn aa-btn--sm" onClick={prev}><Ic d={ICON.back} size={14} /> Prev</button>
-            <button className="aa-btn aa-btn--sm" onClick={next}>Next <Ic d="M9 18l6-6-6-6" size={14} /></button>
-          </div>
-        </div>
-        <div className="aa-card aa-form">
-          <div className="aa-card__head"><h3>Your answer</h3></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
-            <button className={`cp-mic${rec ? ' is-rec' : ''}`} onClick={toggleRec} aria-label="Record voice answer"><Ic d={ICON.mic} size={26} /></button>
-            <span className="cp-help">{rec ? 'Listening… (simulated capture)' : 'Tap to record a voice answer, or type below.'}</span>
-          </div>
-          <Field label="Transcript / typed answer" wide><textarea rows={7} value={ans} onChange={(e) => setAns(e.target.value)} placeholder="Answer using the STAR method…" /></Field>
-          <div className="aa-form__actions"><button className="aa-btn aa-btn--primary" onClick={evaluate} disabled={!ans.trim()}><Ic d={ICON.spark} size={15} /> Get feedback</button></div>
-        </div>
+    <div className="cp-directory-page">
+      <div className="cp-directory-intro"><div><h2>Find the right expert for your next move</h2><p>Browse specialists by industry, experience, and career focus.</p></div><span>{CV_EXPERTS.length} specialists</span></div>
+      <div className="cp-directory-filters">
+        <label className="cp-directory-search"><Ic d={ICON.search} size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search experts, roles, or skills" aria-label="Search experts" /></label>
+        <label className="cp-directory-select"><span>Industry</span><select value={industry} onChange={(event) => setIndustry(event.target.value)} aria-label="Filter by industry">{EXPERT_INDUSTRIES.map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
-      <div className="cp-stack">
-        {!fb && <div className="aa-card"><p className="cp-help">Answer the question, then get an instant read on clarity, STAR structure and concrete ways to sharpen your response.</p></div>}
-        {fb && (
-          <>
-            <div className="aa-card"><div className="cp-score">
-              <div className="cp-ring" style={{ '--v': fb.clarity } as CSSProperties}><div className="cp-ring__inner">{fb.clarity}</div></div>
-              <div><div className="aa-u__name" style={{ fontSize: 16 }}>Clarity score</div><p className="cp-help">STAR structure: <b>{fb.star}</b></p></div>
-            </div></div>
-            <div className="aa-card cp-feedback">
-              <div className="aa-card__head"><h3>Recommendations</h3></div>
-              <div className="cp-bullets" style={{ background: 'transparent' }}>{fb.tips.map((tip, k) => <div key={k} style={{ display: 'flex', gap: 8 }}><Ic d={ICON.check} size={15} /><span>{tip}</span></div>)}</div>
-            </div>
-          </>
-        )}
-      </div>
+      <div className="cp-directory-results"><strong>{filteredExperts.length} experts</strong><span>Each session is 30 minutes · Prices are shown in INR</span></div>
+      {filteredExperts.length ? (
+        <div className="cp-directory-grid">
+          {filteredExperts.map((expert) => (
+            <article className="aa-card cp-directory-expert" key={expert.id}>
+              <div className="cp-directory-expert__header">
+                <span className={`cp-expert-avatar cp-expert-avatar--${expert.color}`}>{expert.initials}</span>
+                <div><strong>{expert.name}</strong><span>★ {expert.rating} · {expert.reviews} reviews</span></div>
+              </div>
+              <span className="cp-directory-industry">{expert.industry}</span>
+              <h3>{expert.role}</h3>
+              <p>{expert.specialty}</p>
+              <div className="cp-directory-expert__footer"><strong>₹{expert.price} <small>/ 30 min</small></strong><button className="aa-btn aa-btn--sm aa-btn--primary" onClick={() => onBook(expert.id)}>Book slot</button></div>
+            </article>
+          ))}
+        </div>
+      ) : <div className="aa-card cp-directory-empty">No experts match those filters. Try another search or industry.</div>}
+    </div>
+  );
+}
+
+interface ExpertBookingModalProps {
+  expertId: string; setExpertId: (id: string) => void; mode: ExpertSessionMode;
+  bookings: ExpertBooking[]; onClose: () => void; onSubmit: (draft: ExpertBookingDraft) => void;
+}
+function ExpertBookingModal({ expertId, setExpertId, mode, bookings, onClose, onSubmit }: ExpertBookingModalProps) {
+  const { cv } = useCareer();
+  const [dateId, setDateId] = useState(BOOKING_DATES[0].id);
+  const [slot, setSlot] = useState('04:30 PM');
+  const [targetRole, setTargetRole] = useState('');
+  const [attachCv, setAttachCv] = useState(true);
+  const expert = CV_EXPERTS.find((item) => item.id === expertId) ?? CV_EXPERTS[0];
+  const date = BOOKING_DATES.find((item) => item.id === dateId) ?? BOOKING_DATES[0];
+  const slotIsBooked = (time: string) => bookings.some((booking) => booking.expertId === expert.id && booking.dateId === date.id && booking.slot === time);
+  const submitBooking = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!slot || slotIsBooked(slot)) return;
+    onSubmit({
+      expertId: expert.id,
+      dateId: date.id,
+      date: `${date.label}, ${date.date}`,
+      slot,
+      time: `${slot} – ${getSessionEndTime(slot)}`,
+      targetRole: targetRole.trim() || 'General CV guidance',
+      cvIncluded: attachCv,
+    });
+  };
+
+  return (
+    <div className="cp-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="cp-booking-modal" role="dialog" aria-modal="true" aria-labelledby="expert-booking-title">
+        <header><div><h2 id="expert-booking-title">Book a 30-minute session</h2><p>{mode === 'generate' ? 'Generate CV with Expert' : '1:1 Expert CV Review'}</p></div><button type="button" className="cp-modal-close" onClick={onClose} aria-label="Close booking dialog">×</button></header>
+        <form className="cp-modal-form" onSubmit={submitBooking}>
+          <Field label="Choose an expert">
+            <select value={expertId} onChange={(event) => setExpertId(event.target.value)} aria-label="Choose an expert">
+              {CV_EXPERTS.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.industry} · ₹{item.price}</option>)}
+            </select>
+          </Field>
+          <div className="cp-modal-expert"><span className={`cp-expert-avatar cp-expert-avatar--${expert.color}`}>{expert.initials}</span><div><strong>{expert.name}</strong><span>{expert.role} · ★ {expert.rating}</span></div><b>₹{expert.price}</b></div>
+          <div className="cp-booking-field">
+            <span className="cp-booking-label">Select date</span>
+            <div className="cp-date-grid">{BOOKING_DATES.map((item) => <button type="button" key={item.id} className={`cp-date-option${dateId === item.id ? ' is-selected' : ''}`} onClick={() => setDateId(item.id)} aria-pressed={dateId === item.id}><small>{item.label}</small><strong>{item.date}</strong></button>)}</div>
+          </div>
+          <div className="cp-booking-field">
+            <div className="cp-booking-slots__heading"><span className="cp-booking-label">Available 30-minute slots</span><span>{slot ? `${slot} – ${getSessionEndTime(slot)}` : 'Choose a time'}</span></div>
+            <div className="cp-slot-grid">{BOOKING_SLOTS.map((item) => {
+              const unavailable = !item.available || slotIsBooked(item.time);
+              return <button type="button" key={item.time} disabled={unavailable} className={`cp-slot-option${slot === item.time ? ' is-selected' : ''}`} onClick={() => setSlot(item.time)}>{item.time}</button>;
+            })}</div>
+          </div>
+          <Field label="Target role & session goals" wide><textarea rows={3} value={targetRole} onChange={(event) => setTargetRole(event.target.value)} placeholder="What would you like to work on with this expert?" /></Field>
+          <label className="cp-attach-cv"><span className="cp-attach-cv__copy"><Ic d={ICON.cv} size={15} /><span>Use my current Portal CV<small>{cv.title || cv.name || 'No CV details yet'}</small></span></span><input type="checkbox" checked={attachCv} onChange={(event) => setAttachCv(event.target.checked)} /></label>
+          <button className="aa-btn aa-btn--primary cp-book-button" type="submit" disabled={!slot || slotIsBooked(slot)}><Ic d={ICON.calendar} size={15} /> Request session · ₹{expert.price}</button>
+          <p className="cp-demo-note">Demo only: booking and payment are not connected.</p>
+        </form>
+      </section>
     </div>
   );
 }
 
 /* ================= SHELL ================= */
-type Section = 'dashboard' | 'cv' | 'role' | 'jd' | 'cover' | 'lang' | 'interview';
+type Section = 'dashboard' | 'cv' | 'role' | 'jd' | 'expert' | 'experts';
 const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: ICON.dash, group: 'Overview' },
   { id: 'cv', label: 'CV Generator', icon: ICON.cv, group: 'Build' },
   { id: 'role', label: 'AI Role Builder', icon: ICON.wand, group: 'Build' },
-  { id: 'lang', label: 'Translate CV', icon: ICON.globe, group: 'Build' },
   { id: 'jd', label: 'JD Match', icon: ICON.target, group: 'Apply' },
-  { id: 'cover', label: 'Cover Letter', icon: ICON.letter, group: 'Apply' },
-  { id: 'interview', label: 'Mock Interview', icon: ICON.mic, group: 'Prepare' },
+  { id: 'expert', label: 'Expert CV Review', icon: ICON.expert, group: 'Prepare' },
+  { id: 'experts', label: 'Experts Directory', icon: ICON.target, group: 'Prepare' },
 ];
 const TITLES: Record<Section, [string, string]> = {
   dashboard: ['Career Dashboard', 'Your tools to build, apply and prepare'],
   cv: ['CV Generator', 'Pick a template, edit live, export'],
   role: ['AI Role Builder', 'Role-optimized bullets and summary'],
   jd: ['JD Match & Skill Gaps', 'Score your CV against any job description'],
-  cover: ['Cover Letter', 'Draft a tailored, professional letter'],
-  lang: ['Multilingual CV', 'Translate your CV labels across 5 languages'],
-  interview: ['Mock Interview', 'Practise with instant AI feedback'],
+  expert: ['Expert CV Review', 'Co-build or refine your CV in a focused 30-minute session'],
+  experts: ['Experts Directory', 'Explore career specialists across industries'],
 };
 function sectionFromPath(): Section {
   const seg = location.pathname.split('/').filter(Boolean);
@@ -606,8 +805,12 @@ function sectionFromPath(): Section {
 export function CareerApp({ exit }: { exit: () => void }) {
   const { user, api } = useAuth();
   const [cv, setCvState] = useState<CvData>({ ...EMPTY, name: user?.name || '', email: user?.email || '' });
-  const [lang, setLang] = useState<Lang>('en');
-  const [stats, setStats] = useState<Stats>({ atsScores: [], jdRuns: 0, mockSessions: 0, coverLetters: 0 });
+  const [stats, setStats] = useState<Stats>({ atsScores: [], jdRuns: 0, expertSessions: 0 });
+  const [bookings, setBookings] = useState<ExpertBooking[]>([]);
+  const [expertId, setExpertId] = useState(CV_EXPERTS[0].id);
+  const [expertMode, setExpertMode] = useState<ExpertSessionMode>('generate');
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [expertNotice, setExpertNotice] = useState('');
   const [section, setSection] = useState<Section>(() => sectionFromPath());
   const [menuOpen, setMenuOpen] = useState(false);
   const [seeded, setSeeded] = useState(false);
@@ -648,15 +851,46 @@ export function CareerApp({ exit }: { exit: () => void }) {
     if (location.pathname !== path) history.pushState(null, '', path);
     setSection(s); setMenuOpen(false); window.scrollTo(0, 0);
   }, []);
+  const openExpertBooking = (id?: string) => {
+    if (id) setExpertId(id);
+    setBookingOpen(true);
+  };
+  const submitExpertBooking = (draft: ExpertBookingDraft) => {
+    const expert = CV_EXPERTS.find((item) => item.id === draft.expertId) ?? CV_EXPERTS[0];
+    setBookings((current) => [{
+      ...draft,
+      id: String(Date.now()),
+      expertName: expert.name,
+      expertRole: expert.role,
+      modeTitle: expertMode === 'generate' ? 'Generate CV with Expert' : '1:1 Expert CV Review',
+    }, ...current]);
+    setExpertNotice('Demo only: this request is saved on this page; no expert has been contacted and no payment was taken.');
+    setBookingOpen(false);
+    bump((current) => ({ ...current, expertSessions: current.expertSessions + 1 }));
+  };
+  const cancelExpertBooking = (id: string) => {
+    setBookings((current) => current.filter((booking) => booking.id !== id));
+    setExpertNotice('Demo request removed.');
+    bump((current) => ({ ...current, expertSessions: Math.max(0, current.expertSessions - 1) }));
+  };
 
   const body = (() => {
     switch (section) {
       case 'cv': return <CvGeneratorPage />;
       case 'role': return <RoleBuilderPage go={go} />;
       case 'jd': return <JdTailorPage />;
-      case 'cover': return <CoverLetterPage />;
-      case 'lang': return <LanguagePage />;
-      case 'interview': return <MockInterviewPage />;
+      case 'expert': return <ExpertReviewPage
+        mode={expertMode}
+        setMode={setExpertMode}
+        expertId={expertId}
+        setExpertId={setExpertId}
+        bookings={bookings}
+        notice={expertNotice}
+        onOpenBooking={openExpertBooking}
+        onBrowseExperts={() => go('experts')}
+        onCancelBooking={cancelExpertBooking}
+      />;
+      case 'experts': return <ExpertsDirectoryPage onBook={openExpertBooking} />;
       default: return <DashboardPage go={go} />;
     }
   })();
@@ -671,7 +905,7 @@ export function CareerApp({ exit }: { exit: () => void }) {
     return out;
   }, []);
 
-  const ctx: CareerCtx = { cv, setCv, lang, setLang, stats, bump };
+  const ctx: CareerCtx = { cv, setCv, stats, bump };
 
   return (
     <Ctx.Provider value={ctx}>
@@ -680,7 +914,7 @@ export function CareerApp({ exit }: { exit: () => void }) {
           <aside className={`aa-side${menuOpen ? ' is-open' : ''}`} aria-label="Career sections">
             <div className="aa-brand">
               <span className="aa-brand__mark"><Ic d={ICON.cv} size={20} /></span>
-              <div><div className="aa-brand__name">Career Portal</div><div className="aa-brand__sub">Huddle</div></div>
+              <div><div className="aa-brand__name">CV's Portal</div><div className="aa-brand__sub">Huddle</div></div>
             </div>
             <nav className="aa-nav">
               {grouped.map((g) => (
@@ -709,6 +943,7 @@ export function CareerApp({ exit }: { exit: () => void }) {
             <div className="aa-content">{seeded || section === 'dashboard' ? body : <div className="aa-skeleton" />}</div>
           </div>
         </div>
+        {bookingOpen && <ExpertBookingModal expertId={expertId} setExpertId={setExpertId} mode={expertMode} bookings={bookings} onClose={() => setBookingOpen(false)} onSubmit={submitExpertBooking} />}
       </div>
     </Ctx.Provider>
   );

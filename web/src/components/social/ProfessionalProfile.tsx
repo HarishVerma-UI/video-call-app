@@ -1,14 +1,15 @@
 import { ApiError, profileCompletion, type Education, type Experience, type ParsedCv, type Profile } from '@vca/shared';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { uploadFile } from '../../upload';
+import { uploadContentType, uploadFile } from '../../upload';
 import { Line } from '../Line';
 import { ProfileAvatar } from './common';
 
 type Msg = { ok: boolean; text: string } | null;
+type ProfileTab = 'all' | 'basics_cv' | 'exp_edu' | 'security';
 const toList = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
 
-export function ProfessionalProfile() {
+export function ProfessionalProfile({ profileTab, onCompletionChange }: { profileTab: ProfileTab; onCompletionChange: (completion: number) => void }) {
   const { api, user, refreshPhoto } = useAuth();
   const [p, setP] = useState<Profile | null>(null);
   const [headline, setHeadline] = useState('');
@@ -20,6 +21,7 @@ export function ProfessionalProfile() {
   const [focus, setFocus] = useState('');
   const [mentor, setMentor] = useState(false);
   const [mentee, setMentee] = useState(false);
+  const [openToReferrals, setOpenToReferrals] = useState(false);
   const [experience, setExperience] = useState<Experience[]>([]);
   const [education, setEducation] = useState<Education[]>([]);
   const [msg, setMsg] = useState<Msg>(null);
@@ -40,6 +42,7 @@ export function ProfessionalProfile() {
     setFocus((prof.focusAreas ?? []).join(', '));
     setMentor(!!prof.mentor);
     setMentee(!!prof.mentee);
+    setOpenToReferrals(!!prof.openToReferrals);
     setExperience(prof.experience ?? []);
     setEducation(prof.education ?? []);
   };
@@ -58,6 +61,7 @@ export function ProfessionalProfile() {
     focusAreas: toList(focus),
     mentor,
     mentee,
+    openToReferrals,
     experience: experience.filter((e) => e.title || e.company),
     education: education.filter((e) => e.school || e.degree),
   });
@@ -121,7 +125,7 @@ export function ProfessionalProfile() {
     setMsg(null);
     try {
       // Parse for review (best effort), then store the file and persist the CV reference.
-      const parsed = await api.parseCv(file, file.type).then((r) => r.parsed).catch(() => undefined);
+      const parsed = await api.parseCv(file, uploadContentType(file, 'cv')).then((r) => r.parsed).catch(() => undefined);
       const cvKey = await uploadFile(api, 'cv', file);
       const { profile } = await api.saveProfile({ ...fields(), cvKey, cvName: file.name });
       const filled = applyParsed(profile, parsed);
@@ -143,26 +147,26 @@ export function ProfessionalProfile() {
   const setExp = (i: number, patch: Partial<Experience>) => setExperience((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const setEdu = (i: number, patch: Partial<Education>) => setEducation((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
-  const completion = profileCompletion({ headline, bio, location, skills: toList(skills), experience, education, hasPhoto: !!p?.photoUrl });
+  const completion = profileCompletion({ headline, bio, location, skills: toList(skills), experience, education, hasCv: !!p?.hasCv });
+  const showBasics = profileTab === 'all' || profileTab === 'basics_cv';
+  const showExperience = profileTab === 'all' || profileTab === 'exp_edu';
 
-  if (!p || !user) return null;
+  useEffect(() => {
+    onCompletionChange(completion);
+  }, [completion, onCompletionChange]);
+
+  if (!p || !user || profileTab === 'security') return null;
 
   return (
-    <form className="card" onSubmit={save} noValidate aria-labelledby="pp-h">
+    <form className="card pp-profile-form" onSubmit={save} noValidate aria-labelledby="pp-h">
       <header className="card__head">
         <div>
           <h2 id="pp-h">Your professional profile</h2>
-          <p>This is what mentors and connections see. Private details (mobile, salary expectation, CV) show only to accepted connections.</p>
+          <p>This is what members see. Private details (email, mobile, salary expectation, CV) show only to accepted connections.</p>
         </div>
       </header>
 
-      <div className={`pp-meter${completion >= 70 ? ' pp-meter--ok' : ''}`}>
-        <div className="pp-meter__track"><span style={{ width: `${completion}%` }} /></div>
-        <span className="pp-meter__label">{completion}% complete{completion >= 70 ? ' — ready to apply for jobs ✓' : ' — reach 70% to apply for jobs'}</span>
-      </div>
-
-      {/* ─ Section: Basics ─ */}
-      <section className="pp-section">
+      {showBasics && <section className="pp-section" id="sec-basics">
         <div className="pp-section__head"><h3>Basics</h3><span className="pp-section__hint">Your photo, headline and summary</span></div>
         <div className="pp-photo">
           <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl: p.photoUrl }} size={72} />
@@ -182,27 +186,28 @@ export function ProfessionalProfile() {
           <span>About you</span>
           <textarea className="pp-textarea" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} placeholder="A short bio" />
         </label>
-      </section>
+      </section>}
 
       {/* ─ Section: Contact ─ */}
-      <section className="pp-section">
+      {showBasics && <section className="pp-section" id="sec-contact">
         <div className="pp-section__head"><h3>Contact</h3><span className="pp-section__hint">Mobile is shown only to accepted connections</span></div>
         <Line name="mobile" label="Mobile (private)" type="text" autoComplete="off" value={mobile} onChange={setMobile} />
-      </section>
+      </section>}
 
       {/* ─ Section: Skills & interests ─ */}
-      <section className="pp-section">
+      {showBasics && <section className="pp-section" id="sec-skills">
         <div className="pp-section__head"><h3>Skills &amp; interests</h3><span className="pp-section__hint">Skills power your job matches</span></div>
         <Line name="skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
         <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
         <div className="pp-flags">
           <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I&apos;m looking for mentorship</label>
           <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I&apos;m available as a mentor</label>
+          <label><input type="checkbox" checked={openToReferrals} onChange={(e) => setOpenToReferrals(e.target.checked)} /> I&apos;m open to referrals</label>
         </div>
-      </section>
+      </section>}
 
       {/* ─ Section: CV / Resume ─ */}
-      <section className="pp-section">
+      {showBasics && <section className="pp-section" id="sec-cv">
         <div className="pp-section__head"><h3>CV / Resume</h3><span className="pp-section__hint">Upload once — we pre-fill the sections below</span></div>
         <div className="pp-cv">
           <span>
@@ -218,10 +223,10 @@ export function ProfessionalProfile() {
           </button>
           <input ref={cvInput} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onCv(e)} />
         </div>
-      </section>
+      </section>}
 
       {/* ─ Section: Experience ─ */}
-      <section className="pp-section pp-repeat">
+      {showExperience && <section className="pp-section pp-repeat" id="sec-experience">
         <div className="pp-section__head"><h3>Experience</h3><span className="pp-section__hint">{experience.length} entr{experience.length === 1 ? 'y' : 'ies'}</span></div>
         {experience.map((x, i) => (
           <div className="pp-entry" key={i}>
@@ -238,10 +243,10 @@ export function ProfessionalProfile() {
         <button type="button" className="link-btn" onClick={() => setExperience((xs) => [...xs, { title: '', company: '', start: '', end: '', description: '' }])}>
           + Add experience
         </button>
-      </section>
+      </section>}
 
       {/* ─ Section: Education ─ */}
-      <section className="pp-section pp-repeat">
+      {showExperience && <section className="pp-section pp-repeat" id="sec-education">
         <div className="pp-section__head"><h3>Education</h3><span className="pp-section__hint">{education.length} entr{education.length === 1 ? 'y' : 'ies'}</span></div>
         {education.map((x, i) => (
           <div className="pp-row" key={i}>
@@ -254,7 +259,7 @@ export function ProfessionalProfile() {
         <button type="button" className="link-btn" onClick={() => setEducation((xs) => [...xs, { school: '', degree: '', year: '' }])}>
           + Add education
         </button>
-      </section>
+      </section>}
 
       <div className="pp-save">
         {msg && <p className={`form-msg${msg.ok ? ' form-msg--ok' : ''}`} role="status">{msg.text}</p>}
