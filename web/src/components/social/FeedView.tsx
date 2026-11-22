@@ -1,6 +1,7 @@
 import { ApiError, isSuperAdmin, type Ad, type ApiClient, type ConnectionState, type Post, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { useProfile } from '../../profile/ProfileContext';
 import { ago } from '../../format';
 import { uploadFile } from '../../upload';
 import { ConnectButton, EmojiPicker, ProfileAvatar, roleBadges } from './common';
@@ -200,10 +201,9 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav, saved, onTo
 
 function FeedLeft({ nav, savedCount, onSaved }: { nav: FeedNav; savedCount: number; onSaved: () => void }) {
   const { api, user, photoUrl } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { profile } = useProfile(); // shared copy: updates the moment the profile or CV changes anywhere
   const [connCount, setConnCount] = useState<number | null>(null);
   useEffect(() => {
-    api.myProfile().then(({ profile: p }) => setProfile(p)).catch(() => {});
     api.listConnections().then(({ connections }) => setConnCount(connections.length)).catch(() => setConnCount(0));
   }, [api]);
   if (!user) return null;
@@ -295,7 +295,7 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
 
       <div className="sidebar-card feed-expert-card">
         <div className="feed-expert-card__top">
-          <span>1:1 Career Studio</span>
+          <span>1:1 Resume review</span>
           <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>30 mins</span>
         </div>
         <div>
@@ -304,7 +304,7 @@ function FeedSidebar({ suggestions, ads, api, nav, onConn }: { suggestions: Prof
         </div>
         <button type="button" className="feed-expert-card__button" onClick={nav.openCareer}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-          Open Career Studio
+          Open Resume
         </button>
       </div>
 

@@ -153,12 +153,30 @@ export interface ParsedCv {
   phone: string;
   location: string;
   headline: string;
+  /** The CV's Summary / Profile / About section — used as the profile bio. */
+  summary: string;
   skills: string[];
   experience: Experience[];
   education: Education[];
   /** True when little usable text was found (e.g. a scanned/image PDF). */
   lowConfidence: boolean;
 }
+
+/** A CV being built in the AI chat (same shape the Resume page edits). */
+export interface CvDraft {
+  name: string; title: string; email: string; phone: string; location: string;
+  summary: string; skills: string[]; experience: Experience[]; education: Education[];
+}
+export interface CvChatMessage { role: 'user' | 'assistant'; text: string }
+/** A CV published at <app>/<number> (the CV's phone, digits only). */
+export interface PublishedCv { slug: string; template: string; updatedAt: string }
+export interface PublicCv { cv: CvDraft; template: string; updatedAt: string }
+/** The AI CV builder's master prompt, as the admin console edits it. */
+export interface CvPromptSettings {
+  prompt: string; isDefault: boolean; updatedAt: string | null; updatedBy: string | null;
+  defaultPrompt: string; fixedRules: string; maxChars: number;
+}
+export interface CvChatReply { reply: string; progress: number; suggestions: string[]; cv: CvDraft }
 
 export interface PostComment {
   id: string;
@@ -471,6 +489,20 @@ export interface ApiClient {
   saveProfile(input: Partial<Profile> & { photoKey?: string; cvKey?: string; cvName?: string }): Promise<{ profile: Profile }>;
   /** Parse an uploaded CV file into profile fields for review (nothing is saved). */
   parseCv(file: Blob, contentType?: string): Promise<{ parsed: ParsedCv }>;
+  /** AI CV builder chat (Gemini, server-side). */
+  cvChatStatus(): Promise<{ configured: boolean }>;
+  cvChat(input: { messages: CvChatMessage[]; cv: CvDraft }): Promise<CvChatReply>;
+  /** Super-admin: the AI CV builder's master prompt. */
+  adminCvPrompt(): Promise<CvPromptSettings>;
+  adminSaveCvPrompt(prompt: string): Promise<CvPromptSettings>;
+  adminResetCvPrompt(): Promise<CvPromptSettings>;
+  /** Your public CV link, if published. */
+  myPublicCv(): Promise<{ published: PublishedCv | null }>;
+  /** Publish (or update) your CV at /<phone digits>. */
+  publishCv(input: { cv: CvDraft; template: string }): Promise<{ published: PublishedCv }>;
+  unpublishCv(): Promise<{ published: null }>;
+  /** Anyone (no sign-in): the CV published at this number. */
+  publicCv(slug: string): Promise<PublicCv>;
   getProfile(userId: string): Promise<{ profile: Profile; posts: Post[] }>;
   searchPeople(opts?: { q?: string; role?: string }): Promise<{ people: Profile[] }>;
   uploadUrl(input: { kind: 'photo' | 'cv' | 'post'; contentType: string }): Promise<{ uploadUrl: string; key: string }>;
@@ -662,6 +694,15 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
       return request('GET', `/api/people${qs ? `?${qs}` : ''}`);
     },
     uploadUrl: (input) => request('POST', '/api/media/upload-url', input),
+    cvChatStatus: () => request('GET', '/api/career/cv-chat/status'),
+    cvChat: (input) => request('POST', '/api/career/cv-chat', input),
+    adminCvPrompt: () => request('GET', '/api/admin/ai/cv-prompt'),
+    adminSaveCvPrompt: (prompt) => request('PUT', '/api/admin/ai/cv-prompt', { prompt }),
+    adminResetCvPrompt: () => request('DELETE', '/api/admin/ai/cv-prompt'),
+    myPublicCv: () => request('GET', '/api/career/public-cv'),
+    publishCv: (input) => request('PUT', '/api/career/public-cv', input),
+    unpublishCv: () => request('DELETE', '/api/career/public-cv'),
+    publicCv: (slug) => request('GET', `/api/public/cv/${encodeURIComponent(slug)}`),
     requestConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/request`, {}),
     acceptConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/accept`, {}),
     declineConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/decline`, {}),

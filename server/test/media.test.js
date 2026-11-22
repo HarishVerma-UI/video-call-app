@@ -132,3 +132,12 @@ test('local upload rejects files larger than 5 MB', async () => {
     (err) => err.status === 413,
   );
 });
+
+test('plain-text (.txt) CVs are accepted; binary pretending to be text is not', async () => {
+  const { validateUploadBuffer } = await import('../src/media.js');
+  const ok = validateUploadBuffer('cv', 'text/plain', Buffer.from('Asha Rao\nProduct Manager\n• Shipped ₹2 crore of revenue\n', 'utf8'));
+  assert.ok(ok === undefined || ok);
+  assert.throws(() => validateUploadBuffer('cv', 'text/plain', Buffer.from([0x41, 0x00, 0x42, 0x43])), /malformed|allowed|match/i);
+  assert.throws(() => validateUploadBuffer('cv', 'text/plain', Buffer.from([0xff, 0xfe, 0xfd, 0x41])), /malformed|allowed|match/i);
+  assert.throws(() => validateUploadBuffer('photo', 'text/plain', Buffer.from('hi')), /allowed/);
+});

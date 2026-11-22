@@ -41,6 +41,22 @@ test('profiles: save, self sees full, stranger sees partial', async () => {
   assert.equal(seen.body.profile.expectedSalary, undefined);
 });
 
+test('a partial profile save keeps the fields it leaves out', async () => {
+  const u = await registerUser(t.base, 'Partial Saver');
+  await api(t.base, 'PUT', '/api/profile', { headline: 'Angular lead', location: 'Pune', skills: ['Angular', 'RxJS'], bio: 'Builds UIs.' }, u.token);
+  const res = await api(t.base, 'PUT', '/api/profile', { mentor: true }, u.token);
+  assert.equal(res.status, 200);
+  const me = (await api(t.base, 'GET', '/api/profile/me', null, u.token)).body.profile;
+  assert.equal(me.headline, 'Angular lead');
+  assert.equal(me.location, 'Pune');
+  assert.deepEqual(me.skills, ['Angular', 'RxJS']);
+  assert.equal(me.bio, 'Builds UIs.');
+  assert.equal(me.mentor, true);
+  // an explicit empty value still clears a field
+  await api(t.base, 'PUT', '/api/profile', { bio: '' }, u.token);
+  assert.equal((await api(t.base, 'GET', '/api/profile/me', null, u.token)).body.profile.bio, '');
+});
+
 test('connections: request, accept, and private fields unlock', async () => {
   const a = await registerUser(t.base, 'Conn A');
   const b = await registerUser(t.base, 'Conn B');

@@ -238,7 +238,7 @@ export function createSocial(deps) {
       parsed = parseCv(buf, contentType);
     } catch (err) {
       log('cv parse failed', err);
-      parsed = { name: '', email: '', phone: '', location: '', headline: '', skills: [], experience: [], education: [], lowConfidence: true };
+      parsed = { name: '', email: '', phone: '', location: '', headline: '', summary: '', skills: [], experience: [], education: [], lowConfidence: true };
     }
     sendJson(res, 200, { parsed });
   }
@@ -247,21 +247,22 @@ export function createSocial(deps) {
     const user = await requireUser(req);
     const b = await readJson(req);
     const before = await profiles.get(user.id);
-    const patch = {
-      name: user.name, // keep display name in sync with the account
-      headline: str(b.headline, 200),
-      bio: str(b.bio, 2000),
-      location: str(b.location, 120),
-      mobile: str(b.mobile, 40),
-      expectedSalary: str(b.expectedSalary, 120),
-      skills: arr(b.skills, 40, 40),
-      focusAreas: arr(b.focusAreas, 20, 40),
-      mentor: !!b.mentor,
-      mentee: !!b.mentee,
-      openToReferrals: !!b.openToReferrals,
-      experience: entries(b.experience, { title: 120, company: 120, start: 20, end: 20, description: 1000 }),
-      education: entries(b.education, { school: 120, degree: 120, year: 20 }),
-    };
+    // Only fields present in the request change; anything left out keeps its
+    // saved value (so e.g. a CV-only save can never blank the rest of the profile).
+    const has = (k) => Object.hasOwn(b, k);
+    const patch = { name: user.name }; // keep display name in sync with the account
+    if (has('headline')) patch.headline = str(b.headline, 200);
+    if (has('bio')) patch.bio = str(b.bio, 2000);
+    if (has('location')) patch.location = str(b.location, 120);
+    if (has('mobile')) patch.mobile = str(b.mobile, 40);
+    if (has('expectedSalary')) patch.expectedSalary = str(b.expectedSalary, 120);
+    if (has('skills')) patch.skills = arr(b.skills, 40, 40);
+    if (has('focusAreas')) patch.focusAreas = arr(b.focusAreas, 20, 40);
+    if (has('mentor')) patch.mentor = !!b.mentor;
+    if (has('mentee')) patch.mentee = !!b.mentee;
+    if (has('openToReferrals')) patch.openToReferrals = !!b.openToReferrals;
+    if (has('experience')) patch.experience = entries(b.experience, { title: 120, company: 120, start: 20, end: 20, description: 1000 });
+    if (has('education')) patch.education = entries(b.education, { school: 120, degree: 120, year: 20 });
     for (const [field, kind] of [['photoKey', 'photo'], ['cvKey', 'cv']]) {
       if (typeof b[field] !== 'string') continue;
       const key = b[field].slice(0, 300);

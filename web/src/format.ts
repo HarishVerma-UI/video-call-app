@@ -1,4 +1,5 @@
 // Display helpers for times, durations and room names.
+import { activeLocale } from './i18n';
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
@@ -34,22 +35,22 @@ export function duration(sec: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
-/** "3 minutes ago", "2 days ago". */
+/** "3 minutes ago", "2 days ago" — in the user's chosen language. */
 export function ago(input: string | number | Date | null): string {
   if (!input) return 'never';
+  const locale = activeLocale();
   const s = Math.max(0, (Date.now() - new Date(input).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  const units: [number, string][] = [
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  const justNow = locale.startsWith('en') ? 'just now' : rtf.format(0, 'second');
+  if (s < 60) return justNow;
+  const units: [number, Intl.RelativeTimeFormatUnit][] = [
     [86400 * 30, 'month'],
     [86400, 'day'],
     [3600, 'hour'],
     [60, 'minute'],
   ];
-  for (const [n, u] of units) if (s >= n) {
-    const v = Math.floor(s / n);
-    return `${v} ${u}${v === 1 ? '' : 's'} ago`;
-  }
-  return 'just now';
+  for (const [n, u] of units) if (s >= n) return rtf.format(-Math.floor(s / n), u);
+  return justNow;
 }
 
 /** "swift-comet-482" → "Swift comet 482" */

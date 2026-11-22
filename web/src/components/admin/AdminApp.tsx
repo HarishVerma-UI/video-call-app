@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import {
   ROLE_LABEL, normalizeRole,
   type AdminApplication, type AdminComment, type AdminConnection, type AdminPost,
-  type AdminStats, type AdminUser, type ApiClient, type AuditEvent, type AuditCategory,
+  type AdminStats, type AdminUser, type ApiClient, type AuditEvent, type AuditCategory, type CvPromptSettings,
   type Job, type JobCategory, type JobExperience, type JobInput, type JobType, type UserRole,
 } from '@vca/shared';
 import { useAuth } from '../../auth/AuthContext';
@@ -148,6 +148,7 @@ const ICON = {
   plus: 'M12 5v14M5 12h14',
   eye: 'M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  spark: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z',
 };
 
 function roleCls(role?: UserRole | string): string {
@@ -762,8 +763,69 @@ function JobImport({ api }: { api: ApiClient }) {
   );
 }
 
+/* ================= AI CV PROMPT ================= */
+/** Edit the AI CV builder's master prompt. Fixed honesty + output rules are always appended. */
+function AiPromptPage() {
+  const { api } = useAuth();
+  const [data, setData] = useState<CvPromptSettings | null>(null);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showFixed, setShowFixed] = useState(false);
+  const adopt = (d: CvPromptSettings) => { setData(d); setText(d.prompt); };
+  useEffect(() => { api.adminCvPrompt().then(adopt).catch((e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not load the prompt.' })); }, [api]);
+
+  const dirty = !!data && text.trim() !== data.prompt.trim();
+  const tooLong = !!data && text.length > data.maxChars;
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try { adopt(await api.adminSaveCvPrompt(text)); setMsg({ ok: true, text: 'Saved — the next AI CV chat message uses this prompt.' }); }
+    catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed.' }); }
+    finally { setBusy(false); }
+  };
+  const reset = async () => {
+    if (!confirm('Reset to the built-in default prompt? Your custom prompt will be removed.')) return;
+    setBusy(true); setMsg(null);
+    try { adopt(await api.adminResetCvPrompt()); setMsg({ ok: true, text: 'Reset to the default prompt.' }); }
+    catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Reset failed.' }); }
+    finally { setBusy(false); }
+  };
+
+  if (!data) return <div className="aa-card">{msg ? <p className="aa-msg">{msg.text}</p> : <div className="aa-empty">Loading…</div>}</div>;
+  return (
+    <div className="aa-card aa-form" data-testid="ai-prompt-page">
+      <div className="aa-card__head">
+        <h3>AI CV Builder — master prompt</h3>
+        <span className="aa-sub">
+          {data.isDefault ? 'Using the built-in default' : `Custom · edited ${data.updatedAt ? fmtDate(data.updatedAt) : ''}${data.updatedBy ? ` by ${data.updatedBy}` : ''}`}
+        </span>
+      </div>
+      <p className="aa-form__hint">
+        This is how the AI CV Co-Pilot behaves: its persona, how it interviews members, the suggestion chips and how it writes bullets.
+        Changes apply to the next message in every member’s chat. Huddle’s safety and output rules are always added after it, so the CV preview, downloads and public links keep working.
+      </p>
+      <textarea className="aa-json aa-prompt" rows={22} value={text} onChange={(e) => { setText(e.target.value); setMsg(null); }} spellCheck data-testid="ai-prompt-text" />
+      <div className="aa-prompt__meta">
+        <span className={tooLong ? 'aa-down' : ''}>{text.length.toLocaleString('en')} / {data.maxChars.toLocaleString('en')} characters</span>
+        {dirty && <span>Unsaved changes</span>}
+      </div>
+      <button type="button" className="aa-btn aa-btn--sm aa-prompt__toggle" onClick={() => setShowFixed((v) => !v)} aria-expanded={showFixed}>
+        {showFixed ? 'Hide' : 'Show'} the fixed rules added after your prompt
+      </button>
+      {showFixed && <pre className="aa-prompt__fixed" data-testid="ai-prompt-fixed">{data.fixedRules}</pre>}
+      {msg && <p className={`aa-msg${msg.ok ? ' aa-msg--ok' : ''}`} role="status">{msg.text}</p>}
+      <div className="aa-form__actions">
+        <button className="aa-btn" onClick={() => { setText(data.defaultPrompt); setMsg(null); }} disabled={busy || text === data.defaultPrompt} title="Load the default text into the editor (not saved until you press Save)">Load default</button>
+        {!data.isDefault && <button className="aa-btn aa-btn--danger" onClick={() => void reset()} disabled={busy}>Reset to default</button>}
+        <button className="aa-btn" onClick={() => { setText(data.prompt); setMsg(null); }} disabled={busy || !dirty}>Discard changes</button>
+        <button className="aa-btn aa-btn--primary" onClick={() => void save()} disabled={busy || !dirty || tooLong || text.trim().length < 50} data-testid="ai-prompt-save">{busy ? 'Saving…' : 'Save prompt'}</button>
+      </div>
+    </div>
+  );
+}
+
 /* ================= SHELL ================= */
-type Section = 'dashboard' | 'users' | 'connections' | 'posts' | 'comments' | 'jobs' | 'create-job' | 'applications' | 'logs';
+type Section = 'dashboard' | 'users' | 'connections' | 'posts' | 'comments' | 'jobs' | 'create-job' | 'applications' | 'ai-prompt' | 'logs';
 const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: ICON.dash, group: 'Overview' },
   { id: 'users', label: 'Users', icon: ICON.users, group: 'People & social' },
@@ -773,6 +835,7 @@ const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = 
   { id: 'jobs', label: 'Jobs', icon: ICON.jobs, group: 'Jobs & hiring' },
   { id: 'create-job', label: 'Post a Job', icon: ICON.plus, group: 'Jobs & hiring' },
   { id: 'applications', label: 'Applications', icon: ICON.apps, group: 'Jobs & hiring' },
+  { id: 'ai-prompt', label: 'AI CV Prompt', icon: ICON.spark, group: 'System' },
   { id: 'logs', label: 'Activity Logs', icon: ICON.logs, group: 'System' },
 ];
 const TITLES: Record<Section, [string, string]> = {
@@ -784,6 +847,7 @@ const TITLES: Record<Section, [string, string]> = {
   jobs: ['Jobs', 'Every job on the board'],
   'create-job': ['Post a Job', 'Create a job or import several from JSON'],
   applications: ['Applications', 'Candidate applications across roles'],
+  'ai-prompt': ['AI CV Prompt', 'Control how the AI CV Builder talks to members'],
   logs: ['Activity Logs', 'Full audit trail of platform events'],
 };
 
@@ -820,6 +884,7 @@ export function AdminApp({ exit }: { exit: () => void }) {
       case 'jobs': return <JobsPage />;
       case 'create-job': return <CreateJobPage goJobs={() => go('jobs')} />;
       case 'applications': return <ApplicationsPage />;
+      case 'ai-prompt': return <AiPromptPage />;
       case 'logs': return <LogsPage />;
       default: return <DashboardPage />;
     }

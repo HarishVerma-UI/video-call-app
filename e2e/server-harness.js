@@ -34,6 +34,8 @@ const config = {
   jwtExpiresInSec: 3600,
   registerRateLimit: 500,
   s3: { localDirectory: new URL('../server/uploads', import.meta.url).pathname },
+  // AI CV builder: only when a key is in the environment (off in CI).
+  ai: { geminiApiKey: process.env.GEMINI_API_KEY ?? '', geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite', geminiFallbackModel: 'gemini-3.1-flash-lite' },
 };
 
 const app = createApp(config, {

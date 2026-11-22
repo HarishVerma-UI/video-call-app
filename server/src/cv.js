@@ -140,6 +140,20 @@ function sectionLines(lines, headingRe) {
   return out;
 }
 
+const SUMMARY_HEAD = 'professional summary|career summary|summary|career objective|objective|professional profile|profile|about me|about';
+/** The "Summary / Profile / About" section as one paragraph — becomes the profile bio. */
+function extractSummary(lines) {
+  const inline = new RegExp(`^(?:${SUMMARY_HEAD})\\s*[:\\-–]\\s*(.+)$`, 'i');
+  for (const raw of lines) {
+    const m = raw.trim().match(inline);
+    if (m && m[1].length >= 40 && !/https?:\/\//i.test(m[1])) return m[1].trim().slice(0, 1200);
+  }
+  const body = sectionLines(lines, new RegExp(`^(?:${SUMMARY_HEAD})\\s*:?$`, 'i'))
+    .map((l) => l.trim().replace(/^[•\-*]\s*/, ''))
+    .filter(Boolean);
+  return body.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
+}
+
 function extractSkills(lines) {
   const block = sectionLines(lines, /^(skills|technical skills|core competencies)\b/i)
     .join('\n')
@@ -246,13 +260,14 @@ export function parseResume(text) {
   }
 
   const skills = extractSkills(lines);
+  const summary = extractSummary(lines);
   const experience = extractExperience(lines);
   const education = extractEducation(lines);
 
   const textFound = nonEmpty.length > 2;
   const lowConfidence = !textFound || (!email && !name && skills.length === 0);
 
-  return { name, email, phone, location, headline, skills, experience, education, lowConfidence };
+  return { name, email, phone, location, headline, summary, skills, experience, education, lowConfidence };
 }
 
 /** Convenience: bytes → parsed resume fields. */

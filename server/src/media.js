@@ -8,7 +8,7 @@ import { HttpError, readRaw } from './http.js';
 import { readZipEntry } from './cv.js';
 
 const IMAGE_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
-const DOC_EXT = { 'application/pdf': '.pdf', 'application/msword': '.doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx' };
+const DOC_EXT = { 'application/pdf': '.pdf', 'application/msword': '.doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx', 'text/plain': '.txt' };
 
 /** kind → allowed content types. */
 const ALLOWED = {
@@ -17,7 +17,14 @@ const ALLOWED = {
   cv: DOC_EXT,
 };
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MEDIA_KEY = /^(photo|post|cv)\/[a-f0-9]{24}\/\d+-[a-f0-9]{12}\.(jpg|png|webp|gif|pdf|doc|docx)$/;
+const MEDIA_KEY = /^(photo|post|cv)\/[a-f0-9]{24}\/\d+-[a-f0-9]{12}\.(jpg|png|webp|gif|pdf|doc|docx|txt)$/;
+
+/** A .txt CV: valid UTF-8 with no binary control bytes (NUL etc.). */
+function isPlainText(data) {
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x08\x0e-\x1f]/.test(data.toString('latin1'))) return false;
+  try { new TextDecoder('utf-8', { fatal: true }).decode(data); return true; } catch { return false; }
+}
 
 export function validateUploadBuffer(kind, contentType, data) {
   const map = ALLOWED[kind];
@@ -35,6 +42,8 @@ export function validateUploadBuffer(kind, contentType, data) {
           ? data.length >= 14 && ['GIF87a', 'GIF89a'].includes(data.toString('ascii', 0, 6)) && data[data.length - 1] === 0x3b
           : contentType === 'application/pdf'
             ? data.length >= 12 && data.subarray(0, 5).toString('ascii') === '%PDF-' && data.subarray(-2048).includes(Buffer.from('%%EOF'))
+            : contentType === 'text/plain'
+              ? isPlainText(data)
             : contentType === 'application/msword'
               ? data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))
               : data.length >= 4 && data.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) && !!readZipEntry(data, 'word/document.xml');

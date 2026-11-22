@@ -1,72 +1,137 @@
 import {
   ApiError,
+  analyzeJobFit,
+  canonicalSkill,
   profileCompletion,
+  type JobFit,
   type Job,
   type JobApplication,
   type JobCategory,
   type JobExperience,
   type JobFilters,
   type JobType,
-  type Profile,
 } from '@vca/shared';
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { activeLocale, convert, useMoney, type CurrencyCode } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
+import { useProfile } from '../profile/ProfileContext';
 import { ago } from '../format';
 import { Avatar } from './RoomBadge';
 import { BriefcaseIcon, CloseIcon, SearchIcon } from './Icons';
+import {
+  JobDrawer, ReadinessBlocker, ReadinessPanel, ReadinessStatus,
+  cardScanState, laserTop, readinessOf, useCvUpload, useScan,
+  type CardScan, type Readiness,
+} from './jobs/Readiness';
 
-const CAT_LABEL: Record<JobCategory, string> = { tech: 'Tech', 'non-tech': 'Non-Tech' };
-const TYPE_LABEL: Record<JobType, string> = { 'full-time': 'Full-time', 'part-time': 'Part-time', contract: 'Contract', internship: 'Internship' };
-const EXP_LABEL: Record<JobExperience, string> = { entry: 'Entry level', mid: 'Mid level', senior: 'Senior', lead: 'Lead / Principal' };
+const catLabel = (t: TFunction, c: JobCategory) => (c === 'tech' ? t('jobs.cat.tech') : t('jobs.cat.nonTech'));
+const JOB_TYPES: JobType[] = ['full-time', 'part-time', 'contract', 'internship'];
+const typeLabel = (t: TFunction, v: JobType) => ({ 'full-time': t('jobs.type.fullTime'), 'part-time': t('jobs.type.partTime'), contract: t('jobs.type.contract'), internship: t('jobs.type.internship') })[v];
+const EXPERIENCES: JobExperience[] = ['entry', 'mid', 'senior', 'lead'];
+const expLabel = (t: TFunction, v: JobExperience) => t(`jobs.exp.${v}`);
 const STATUS_LABEL: Record<string, string> = { applied: 'Applied', shortlisted: 'Shortlisted', rejected: 'Not selected' };
 
-function salaryText(j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>): string | null {
+type Money = (amount: number, from: string) => string;
+/** Salary range in the viewer's chosen currency (converted from the job's own currency). */
+function salaryText(j: Pick<Job, 'salaryMin' | 'salaryMax' | 'salaryCurrency'>, money: Money): string | null {
   const { salaryMin: lo, salaryMax: hi, salaryCurrency: cur } = j;
-  const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
-  if (lo && hi) return `${cur} ${fmt(lo)} - ${fmt(hi)}`;
-  if (lo) return `${cur} ${fmt(lo)}+`;
-  if (hi) return `Up to ${cur} ${fmt(hi)}`;
+  if (lo && hi) return `${money(lo, cur)} – ${money(hi, cur)}`;
+  if (lo) return `${money(lo, cur)}+`;
+  if (hi) return `≤ ${money(hi, cur)}`;
   return null;
 }
 const matchBand = (s: number) => (s >= 75 ? 'high' : s >= 50 ? 'mid' : 'low');
 const initial = (s: string) => (s || '?').charAt(0).toUpperCase();
 
+/** Delay before the automatic readiness scan after a reload on a Jobs page. */
+const SCAN_DELAY_MS = 3000;
+const SCANNED_KEY = 'huddle.jobsScanned';
+let jobsMountedThisLoad = false;
+let lastDecision: { at: number; mode: 'now' | 'delayed' | 'none' } | null = null;
+/** Decide (once per Jobs visit) whether this visit scans now, after a delay, or not at all. */
+function autoScanMode(): 'now' | 'delayed' | 'none' {
+  // React StrictMode (dev) calls state initialisers twice back-to-back: reuse the answer.
+  if (lastDecision && performance.now() - lastDecision.at < 250) return lastDecision.mode;
+  const mode = decideAutoScan();
+  lastDecision = { at: performance.now(), mode };
+  return mode;
+}
+function decideAutoScan(): 'now' | 'delayed' | 'none' {
+  const firstMountThisLoad = !jobsMountedThisLoad;
+  jobsMountedThisLoad = true;
+  // Reloaded while on a Jobs page (and this is that reload's Jobs view).
+  const nav = performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;
+  const reloadedOnJobs = !!nav && nav.type === 'reload' && new URL(nav.name).pathname.startsWith('/jobs');
+  if (firstMountThisLoad && reloadedOnJobs) return 'delayed';
+  try {
+    if (sessionStorage.getItem(SCANNED_KEY)) return 'none';
+    sessionStorage.setItem(SCANNED_KEY, '1');
+  } catch { /* storage blocked: treat as a first visit */ }
+  return 'now';
+}
+
 const EMPTY: JobFilters = { q: '', category: '', country: '', type: '', experience: '', remote: false };
 
+/** Client-side filter so results update instantly as you type or click (no round trip). */
+function matchesFilters(j: Job, f: JobFilters, skip?: keyof JobFilters): boolean {
+  if (skip !== 'category' && f.category && j.category !== f.category) return false;
+  if (skip !== 'type' && f.type && j.type !== f.type) return false;
+  if (skip !== 'experience' && f.experience && j.experience !== f.experience) return false;
+  if (skip !== 'remote' && f.remote && !j.remote) return false;
+  const country = (f.country ?? '').trim().toLowerCase();
+  const q = (f.q ?? '').trim().toLowerCase();
+  if (skip !== 'country' && country && !(j.country ?? '').toLowerCase().includes(country)) return false;
+  if (skip !== 'q' && q) {
+    const hay = [j.title, j.company, j.country, j.source, j.description, ...j.skills, ...(j.requirements ?? [])].join(' ').toLowerCase();
+    if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+  }
+  return true;
+}
+
 type JobSort = 'match' | 'recent' | 'salary';
-const SORT_LABEL: Record<JobSort, string> = { match: 'Best match', recent: 'Newest', salary: 'Top salary' };
+const SORTS: JobSort[] = ['match', 'recent', 'salary'];
 const salaryKey = (j: Job) => j.salaryMax ?? j.salaryMin ?? 0;
+/** Salary in USD so jobs posted in different currencies sort fairly. */
+const salaryUsd = (j: Job) => convert(salaryKey(j), j.salaryCurrency, 'USD').value;
 function sortJobs(jobs: Job[], sort: JobSort): Job[] {
   const xs = [...jobs];
   if (sort === 'recent') xs.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-  else if (sort === 'salary') xs.sort((a, b) => salaryKey(b) - salaryKey(a));
+  else if (sort === 'salary') xs.sort((a, b) => salaryUsd(b) - salaryUsd(a));
   else xs.sort((a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1));
   return xs;
 }
 
 /* ─── job card ─────────────────────────────────────────── */
-function JobCard({ job, onOpen, onApply }: { job: Job; onOpen: () => void; onApply: () => void }) {
-  const sal = salaryText(job);
+function JobCard({ job, onOpen, onView, onApply, scan = 'done', readiness }: {
+  job: Job; onOpen: () => void; onView: () => void; onApply: () => void; scan?: CardScan; readiness?: Readiness;
+}) {
+  const { t } = useTranslation();
+  const { money } = useMoney();
+  const sal = salaryText(job, money);
   return (
-    <div className="jcard" onClick={onOpen} role="button" tabIndex={0} data-testid="job-card">
+    <div className={`jcard${scan !== 'done' ? ` is-${scan}` : ''}`} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }} role="button" tabIndex={0} data-testid="job-card" data-scan={scan}>
       <div className="jcard__head">
         <div className="jcard__logo" aria-hidden="true">{initial(job.company)}</div>
         <div className="jcard__id">
           <div className="jcard__company">
             <span>{job.company}</span>
-            {job.remote && <span className="jtag jtag--remote">Remote</span>}
-            {job.applyUrl && <span className="jtag jtag--ext">↗ {job.source || 'External'}</span>}
+            {job.remote && <span className="jtag jtag--remote">{t('jobs.remote')}</span>}
+            {job.applyUrl && <span className="jtag jtag--ext">↗ {job.source || t('jobs.external')}</span>}
           </div>
           <h3 className="jcard__title">{job.title}</h3>
         </div>
-        {typeof job.matchScore === 'number' && (
-          <span className={`jmatch jmatch--${matchBand(job.matchScore)}`}>{job.matchScore}%<small>match</small></span>
-        )}
+        {scan === 'queued' ? <span className="jscanbadge jscanbadge--queued">{t('scan.queued')}</span>
+          : scan === 'scanning' ? <span className="jscanbadge">{t('scan.scanningFit')}</span>
+          : typeof job.matchScore === 'number' && (
+            <span className={`jmatch jmatch--${matchBand(job.matchScore)}`} data-testid="job-match">{job.matchScore}%<small>{t('jobs.match')}</small></span>
+          )}
       </div>
 
       <div className="jcard__facts">
         {sal && <span className="jsalary">💲 {sal}</span>}
-        <span className="jcard__loc">📍 {job.remote ? 'Remote' : job.country || 'Anywhere'}</span>
+        <span className="jcard__loc">📍 {job.remote ? t('jobs.remote') : job.country || t('jobs.anywhere')}</span>
       </div>
 
       {job.skills.length > 0 && (
@@ -79,13 +144,24 @@ function JobCard({ job, onOpen, onApply }: { job: Job; onOpen: () => void; onApp
       )}
 
       <div className="jcard__foot">
-        {job.appliedByMe && <span className="jcard__applied">✓ Applied</span>}
+        {job.appliedByMe && <span className="jcard__applied">{t('jobs.applied')}</span>}
+        {!job.appliedByMe && readiness && !readiness.ready && (
+          <span className="jcard__lock" data-testid="apply-lock">🔒 {!readiness.hasCv ? t('scan.lockCv') : t('scan.lockProfile', { pct: readiness.completion })}</span>
+        )}
+        <button
+          className="btn btn--secondary btn--small jcard__view"
+          onClick={(e) => { e.stopPropagation(); onView(); }}
+          data-testid="view-job"
+        >
+          {t('jobs.view')}
+        </button>
         <button
           className="btn btn--primary btn--small jcard__apply"
           onClick={(e) => { e.stopPropagation(); onApply(); }}
+          disabled={job.appliedByMe && !job.applyUrl}
           data-testid="apply-job"
         >
-          {job.applyUrl ? 'Apply ↗' : 'Apply'}
+          {job.applyUrl ? `${t('jobs.apply')} ↗` : job.appliedByMe ? t('jobs.applied') : t('jobs.apply')}
         </button>
       </div>
     </div>
@@ -151,23 +227,194 @@ function ApplyModal({ job, completion, onClose, onApplied }: { job: Job; complet
   );
 }
 
+/* ─── share a job by link ──────────────────────────────── */
+function ShareJobButton({ job }: { job: Job }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState<'idle' | 'ok' | 'failed'>('idle');
+  const ref = useRef<HTMLDivElement>(null);
+  const url = `${location.origin}/jobs/${encodeURIComponent(job.id)}`;
+  const title = `${job.title} — ${job.company}`;
+  const text = `${title} on Huddle`;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied('ok');
+      setTimeout(() => setCopied('idle'), 2500);
+    } catch {
+      setCopied('failed'); // clipboard blocked: show the link so it can be copied by hand
+    }
+  };
+  const nativeShare = async () => {
+    try { await navigator.share({ title, text, url }); setOpen(false); } catch { /* cancelled */ }
+  };
+  const links = [
+    { label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+    { label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}` },
+    { label: 'X / Twitter', href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
+    { label: t('jobs.email'), href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(`${text}\n${url}`)}` },
+  ];
+
+  return (
+    <div className="jshare" ref={ref}>
+      <button type="button" className="btn btn--secondary" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} data-testid="share-job">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
+        {t('jobs.share')}
+      </button>
+      {open && (
+        <div className="jshare__menu" role="menu" aria-label={t('jobs.share')}>
+          <div className="jshare__link">
+            <input readOnly value={url} aria-label={t('jobs.jobLink')} onFocus={(e) => e.currentTarget.select()} data-testid="share-url" />
+            <button type="button" className="btn btn--primary btn--small" onClick={() => void copy()} data-testid="copy-job-link">
+              {copied === 'ok' ? t('jobs.linkCopied') : t('jobs.copyLink')}
+            </button>
+          </div>
+          {copied === 'failed' && <p className="jshare__note">{t('jobs.copyManually')}</p>}
+          <div className="jshare__targets">
+            {links.map((l) => (
+              <a key={l.label} role="menuitem" href={l.href} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>{l.label}</a>
+            ))}
+            {typeof navigator.share === 'function' && (
+              <button type="button" role="menuitem" onClick={() => void nativeShare()}>{t('jobs.moreOptions')}</button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── low-match nudge: suggest an expert CV review ─────── */
+const NUDGE_MIN_MATCH = 70;
+const nudgeKey = (id: string) => `huddle.cvNudge.${id}`;
+/** Show once per job per browser session, never after applying, and only on a real (computed) score. */
+function shouldNudge(job: Job, fit: JobFit | null): boolean {
+  if (!fit || fit.score === null || fit.score >= NUDGE_MIN_MATCH || job.appliedByMe) return false;
+  try { return !sessionStorage.getItem(nudgeKey(job.id)); } catch { return true; }
+}
+const listOf = (items: string[], max = 3) => {
+  const shown = items.slice(0, max);
+  try { return new Intl.ListFormat(activeLocale(), { style: 'long', type: 'conjunction' }).format(shown); } catch { return shown.join(', '); }
+};
+
+/**
+ * Every line here comes from analyzeJobFit(): this job's tags + description compared with
+ * the viewer's profile right now. Lines only appear when they apply to this person.
+ */
+function CvNudgeModal({ job, fit, onClose, onBook }: { job: Job; fit: JobFit; onClose: () => void; onBook: () => void }) {
+  const { t } = useTranslation();
+  const primary = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    primary.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const score = fit.score ?? 0;
+  const total = fit.required.length;
+  const vars = { company: job.company, title: job.title, total, matched: fit.matched.length };
+  const fromJd = new Set(fit.fromDescription);
+  const bullets: string[] = [];
+  if (fit.missing.length) bullets.push(t('jobs.nudge.bGaps', { skills: listOf(fit.missing) }));
+  if (fit.partial.length) bullets.push(t('jobs.nudge.bPartial', { skills: listOf(fit.partial) }));
+  if (fit.levelGap && fit.years !== null) bullets.push(t('jobs.nudge.bLevel', { years: fit.years }));
+  else bullets.push(t('jobs.nudge.bAchieve'));
+  bullets.push(t('jobs.nudge.bExpert'));
+
+  return (
+    <div className="modal cv-nudge" role="dialog" aria-modal="true" aria-labelledby="cv-nudge-title" aria-describedby="cv-nudge-body" onClick={onClose} data-testid="cv-nudge">
+      <div className="modal__card card cv-nudge__card" onClick={(e: MouseEvent) => e.stopPropagation()}>
+        <button type="button" className="icon-btn cv-nudge__close" onClick={onClose} aria-label={t('jobs.nudge.later')}><CloseIcon width={18} height={18} /></button>
+        <div className="cv-nudge__top">
+          <div className="cv-nudge__ring" style={{ ['--pct' as string]: `${score}%` }} aria-hidden="true"><span>{score}%</span></div>
+          <div>
+            <span className="cv-nudge__eyebrow">{t('jobs.nudge.eyebrow')}</span>
+            <h2 id="cv-nudge-title">{score < 40 ? t('jobs.nudge.titleLow') : t('jobs.nudge.titleMid')}</h2>
+          </div>
+        </div>
+        <div id="cv-nudge-body" className="cv-nudge__body" data-testid="cv-nudge-body">
+          <p>{fit.matched.length || fit.partial.length ? t('jobs.nudge.bodyMatch', vars) : t('jobs.nudge.bodyNone', vars)}</p>
+          {fit.partial.length > 0 && <p>{t('jobs.nudge.bodyPartial', { skills: listOf(fit.partial) })}</p>}
+          {fit.levelGap && fit.years !== null && <p>{t('jobs.nudge.bodyLevel', { min: fit.minYears, years: fit.years })}</p>}
+        </div>
+        {fit.matched.length > 0 && (
+          <div className="cv-nudge__gaps cv-nudge__gaps--have">
+            <strong>{t('jobs.nudge.youHave')}</strong>
+            <div className="cv-nudge__chips">{fit.matched.slice(0, 8).map((s) => <span key={s}>✓ {s}</span>)}</div>
+          </div>
+        )}
+        {fit.missing.length > 0 && (
+          <div className="cv-nudge__gaps">
+            <strong>{t('jobs.nudge.gaps')}</strong>
+            <div className="cv-nudge__chips" data-testid="cv-nudge-missing">
+              {fit.missing.slice(0, 6).map((s) => (
+                <span key={s} title={fromJd.has(s) ? t('jobs.nudge.fromJd') : undefined}>{s}{fromJd.has(s) && <sup aria-hidden="true">JD</sup>}</span>
+              ))}
+              {fit.missing.length > 6 && <span>+{fit.missing.length - 6}</span>}
+            </div>
+          </div>
+        )}
+        <ul className="cv-nudge__list">{bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+        <div className="cv-nudge__actions">
+          <button type="button" className="btn btn--secondary" onClick={onClose} data-testid="cv-nudge-later">{t('jobs.nudge.later')}</button>
+          <button ref={primary} type="button" className="btn btn--primary" onClick={onBook} data-testid="cv-nudge-book">{t('jobs.nudge.cta')}</button>
+        </div>
+        <p className="cv-nudge__note">{t('jobs.nudge.basis')} {t('jobs.nudge.note')}</p>
+      </div>
+    </div>
+  );
+}
+
 /* ─── full job-detail page ─────────────────────────────── */
 type DetailTab = 'overview' | 'responsibilities' | 'skills' | 'salary';
-const DETAIL_TABS: { id: DetailTab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'responsibilities', label: 'Responsibilities' },
-  { id: 'skills', label: 'Skills & Tech' },
-  { id: 'salary', label: 'Salary & Benefits' },
-];
+const DETAIL_TABS: DetailTab[] = ['overview', 'responsibilities', 'skills', 'salary'];
 
-function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onOpenUser }: {
-  job: Job; allJobs: Job[] | null; saved: boolean; onToggleSave: () => void;
+function JobDetailPage({ job, fit, allJobs, saved, onToggleSave, onBack, onApply, onOpenUser, onOpenJob, onApplyJob, onOpenCareer }: {
+  job: Job; fit: JobFit | null; allJobs: Job[] | null; saved: boolean; onToggleSave: () => void;
   onBack: () => void; onApply: () => void; onOpenUser: (id: string) => void;
+  onOpenJob: (job: Job) => void; onApplyJob: (job: Job) => void; onOpenCareer: () => void;
 }) {
+  const { t } = useTranslation();
+  const { money } = useMoney();
   const [tab, setTab] = useState<DetailTab>('overview');
-  const sal = salaryText(job);
-  const matched = job.matchedSkills ?? [];
-  const missing = job.skills.filter((s) => !matched.includes(s));
+  const [nudge, setNudge] = useState(false);
+  // A new job opened from "Similar roles" starts on its overview, scrolled to the top,
+  // and (if the match is low) gets a short pause before the CV-review suggestion.
+  useEffect(() => {
+    setTab('overview');
+    window.scrollTo({ top: 0 });
+    setNudge(false);
+  }, [job.id]);
+  // Wait for the fit (it needs the viewer's profile) so the popup never uses a stale score.
+  const fitReady = fit !== null;
+  useEffect(() => {
+    if (!shouldNudge(job, fit)) return;
+    const timer = setTimeout(() => setNudge(true), 700);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened job, once the fit is known
+  }, [job.id, fitReady]);
+  const closeNudge = useCallback(() => {
+    setNudge(false);
+    try { sessionStorage.setItem(nudgeKey(job.id), '1'); } catch { /* ignore */ }
+  }, [job.id]);
+  const sal = salaryText(job, money);
+  // Fit from the shared analysis (job tags + description vs. the viewer's profile).
+  const required = fit?.required ?? job.skills;
+  const matched = fit?.matched ?? job.matchedSkills ?? [];
+  const partial = fit?.partial ?? [];
+  const missing = fit?.missing ?? job.skills.filter((s) => !matched.includes(s));
+  const matchedKeys = new Set(matched.map(canonicalSkill));
 
   const similar = useMemo(() => {
     const skillSet = new Set(job.skills.map((s) => s.toLowerCase()));
@@ -181,19 +428,19 @@ function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onO
   }, [allJobs, job]);
 
   const whyFit: string[] = [];
-  if (job.skills.length > 0) whyFit.push(`${matched.length}/${job.skills.length} required skills matched`);
-  whyFit.push(`${EXP_LABEL[job.experience]} role`);
-  if (sal) whyFit.push('Salary disclosed');
+  if (required.length > 0) whyFit.push(t('jobs.skillsMatched', { matched: matched.length, total: required.length }));
+  whyFit.push(expLabel(t, job.experience));
+  if (sal) whyFit.push(t('jobs.salaryDisclosed'));
 
   return (
     <section className="page jobd" aria-label={job.title} data-testid="job-detail">
       <div className="jobd__crumb">
-        <button className="link-btn jobd__back" onClick={onBack}>← Back to Jobs</button>
+        <button className="link-btn jobd__back" onClick={onBack}>{t('jobs.backToJobs')}</button>
         <span className="jobd__crumb-sep">/</span>
-        <span>{CAT_LABEL[job.category]}</span>
+        <span>{catLabel(t, job.category)}</span>
         <span className="jobd__crumb-sep">/</span>
         <span className="jobd__crumb-cur">{job.company} — {job.title}</span>
-        <span className="jobd__crumb-id">Job ID: {job.id.slice(0, 8).toUpperCase()}</span>
+        <span className="jobd__crumb-id">{t('jobs.jobId')}: {job.id.slice(0, 8).toUpperCase()}</span>
       </div>
 
       <div className="jobd__grid">
@@ -205,26 +452,26 @@ function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onO
               <div className="jobd__id">
                 <div className="jobd__company">
                   <span>{job.company}</span>
-                  {job.remote && <span className="jtag jtag--remote">Remote</span>}
-                  {job.applyUrl && <span className="jtag jtag--ext">↗ {job.source || 'External'}</span>}
+                  {job.remote && <span className="jtag jtag--remote">{t('jobs.remote')}</span>}
+                  {job.applyUrl && <span className="jtag jtag--ext">↗ {job.source || t('jobs.external')}</span>}
                 </div>
                 <h1>{job.title}</h1>
               </div>
               {typeof job.matchScore === 'number' && (
-                <span className={`jmatch jmatch--${matchBand(job.matchScore)} jobd__match`}>{job.matchScore}%<small>match</small></span>
+                <span className={`jmatch jmatch--${matchBand(job.matchScore)} jobd__match`}>{job.matchScore}%<small>{t('jobs.match')}</small></span>
               )}
             </div>
 
             <div className="jobd__facts">
-              <span>📍 {job.remote ? 'Remote' : job.country || 'Anywhere'}</span>
+              <span>📍 {job.remote ? t('jobs.remote') : job.country || t('jobs.anywhere')}</span>
               {sal && <span>💲 {sal}</span>}
-              <span>🗂 {TYPE_LABEL[job.type]} · {EXP_LABEL[job.experience]}</span>
-              {job.createdAt && <span>🕑 Posted {ago(job.createdAt)}</span>}
+              <span>🗂 {typeLabel(t, job.type)} · {expLabel(t, job.experience)}</span>
+              {job.createdAt && <span>🕑 {t('jobs.posted', { when: ago(job.createdAt) })}</span>}
             </div>
 
             {matched.length > 0 && (
               <div className="jobd__why">
-                <strong>Why you’re a strong candidate</strong>
+                <strong>{t('jobs.whyStrong')}</strong>
                 <div className="jobd__why-chips">
                   {whyFit.map((w) => <span key={w} className="jobd__why-chip">✓ {w}</span>)}
                 </div>
@@ -233,50 +480,55 @@ function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onO
 
             <div className="jobd__actions">
               <button className="btn btn--primary" onClick={onApply} data-testid="open-apply">
-                {job.applyUrl ? `Apply on ${job.source || 'company site'} ↗` : 'Apply Now →'}
+                {job.applyUrl ? t('jobs.applyOn', { site: job.source || t('jobs.companySite') }) : job.appliedByMe ? t('jobs.applied') : t('jobs.applyNow')}
               </button>
               <button className={`btn btn--secondary${saved ? ' is-on' : ''}`} onClick={onToggleSave} aria-pressed={saved}>
-                {saved ? '✓ Saved' : '🔖 Save Job'}
+                {saved ? t('jobs.savedJob') : t('jobs.saveJob')}
+              </button>
+              <ShareJobButton job={job} />
+              <button className="btn btn--secondary jobd__cvhelp" onClick={onOpenCareer} data-testid="job-cv-help">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                {t('top.cvHelp')}
               </button>
             </div>
           </div>
 
           {/* tabs */}
           <div className="jobd__tabs" role="tablist">
-            {DETAIL_TABS.map((t) => (
-              <button key={t.id} role="tab" aria-selected={tab === t.id} className={`jobd__tab${tab === t.id ? ' is-on' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            {DETAIL_TABS.map((id) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={`jobd__tab${tab === id ? ' is-on' : ''}`} onClick={() => setTab(id)}>{t(`jobs.tabs.${id}`)}</button>
             ))}
           </div>
 
           <div className="card jobd__panel">
             {tab === 'overview' && (
               <>
-                <h2>About the role</h2>
-                {job.description ? <p className="jobd__desc">{job.description}</p> : <p className="card__empty">No description provided for this role.</p>}
+                <h2>{t('jobs.aboutRole')}</h2>
+                {job.description ? <p className="jobd__desc">{job.description}</p> : <p className="card__empty">{t('jobs.noDescription')}</p>}
               </>
             )}
             {tab === 'responsibilities' && (
               <>
-                <h2>Key responsibilities</h2>
+                <h2>{t('jobs.keyResponsibilities')}</h2>
                 {job.requirements.length > 0 ? (
                   <ul className="jobd__reqs">{job.requirements.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                ) : <p className="card__empty">Responsibilities aren’t listed for this role.</p>}
+                ) : <p className="card__empty">{t('jobs.noResponsibilities')}</p>}
               </>
             )}
             {tab === 'skills' && (
               <>
-                <h2>Required skills &amp; tech {matched.length > 0 && <small>({matched.length} of {job.skills.length} match your profile)</small>}</h2>
+                <h2>{t('jobs.requiredSkills')} {matched.length > 0 && <small>{t('jobs.skillsMatchNote', { matched: matched.length, total: required.length })}</small>}</h2>
                 {job.skills.length > 0 ? (
                   <div className="jcard__skills jobd__skills">
-                    {job.skills.map((s) => <span key={s} className={`jskill${matched.includes(s) ? ' jskill--match' : ''}`}>{s}{matched.includes(s) && ' ✓'}</span>)}
+                    {job.skills.map((s) => { const on = matchedKeys.has(canonicalSkill(s)); return <span key={s} className={`jskill${on ? ' jskill--match' : ''}`}>{s}{on && ' ✓'}</span>; })}
                   </div>
-                ) : <p className="card__empty">No skills listed.</p>}
+                ) : <p className="card__empty">{t('jobs.noSkills')}</p>}
               </>
             )}
             {tab === 'salary' && (
               <>
-                <h2>Salary &amp; benefits</h2>
-                {sal ? <p className="jobd__salary-big">{sal}<small>per year</small></p> : <p className="card__empty">Salary isn’t disclosed for this role.</p>}
+                <h2>{t('jobs.salaryBenefits')}</h2>
+                {sal ? <p className="jobd__salary-big">{sal}<small>{t('jobs.perYear')}</small></p> : <p className="card__empty">{t('jobs.salaryHidden')}</p>}
                 <p className="jobd__note">Benefits are set by the employer and aren’t listed on Huddle for this role. Ask during the application if they aren’t in the description.</p>
               </>
             )}
@@ -287,56 +539,72 @@ function JobDetailPage({ job, allJobs, saved, onToggleSave, onBack, onApply, onO
         <aside className="jobd__side" aria-label="Role insights">
           {typeof job.matchScore === 'number' && (
             <div className="card jobd__fit">
-              <div className="jobd__fit-head"><h3>Role Fit Analysis</h3><span className={`jmatch jmatch--${matchBand(job.matchScore)}`}>{job.matchScore}%</span></div>
-              <p className="jobd__fit-sub">{matched.length} of {job.skills.length || '—'} required skills matched from your profile.</p>
+              <div className="jobd__fit-head"><h3>{t('jobs.fitTitle')}</h3><span className={`jmatch jmatch--${matchBand(job.matchScore)}`}>{job.matchScore}%</span></div>
+              <p className="jobd__fit-sub">{t('jobs.fitSummary', { matched: matched.length, total: required.length })}</p>
               {matched.map((s) => <div key={s} className="jobd__fit-row jobd__fit-row--on"><span>{s}</span><span>✓</span></div>)}
-              {missing.map((s) => <div key={s} className="jobd__fit-row"><span>{s}</span><span className="jobd__fit-add">add to profile</span></div>)}
+              {partial.map((s) => <div key={s} className="jobd__fit-row jobd__fit-row--partial"><span>{s}</span><span className="jobd__fit-add">{t('jobs.inExperience')}</span></div>)}
+              {missing.map((s) => <div key={s} className="jobd__fit-row"><span>{s}</span><span className="jobd__fit-add">{t('jobs.addToProfile')}</span></div>)}
             </div>
           )}
 
           <div className="card jobd__hire">
-            <h3>Hiring team</h3>
+            <h3>{t('jobs.hiringTeam')}</h3>
             {job.postedBy && job.postedByName ? (
               <button className="jobd__recruiter" onClick={() => onOpenUser(job.postedBy!)}>
                 <Avatar id={job.postedBy} name={job.postedByName} size={42} />
-                <span className="jobd__recruiter-info"><strong>{job.postedByName}</strong><em>Posted this role</em></span>
+                <span className="jobd__recruiter-info"><strong>{job.postedByName}</strong><em>{t('jobs.postedThisRole')}</em></span>
               </button>
             ) : (
-              <p className="jobd__hire-src">Listed via <strong>{job.source || 'Huddle'}</strong>.</p>
+              <p className="jobd__hire-src">{t('jobs.listedVia')} <strong>{job.source || 'Huddle'}</strong>.</p>
             )}
           </div>
 
           {similar.length > 0 && (
             <div className="card jobd__similar">
-              <h3>Similar open roles</h3>
+              <h3>{t('jobs.similarRoles')}</h3>
               <ul>
-                {similar.map((j) => (
-                  <li key={j.id} className="jobd__sim"><span className="jobd__sim-logo">{initial(j.company)}</span>
-                    <span className="jobd__sim-info"><strong>{j.title}</strong><em>{j.company}{j.country ? ` · ${j.country}` : ''}</em></span>
-                    {typeof j.matchScore === 'number' && <span className={`jmatch jmatch--${matchBand(j.matchScore)} jobd__sim-m`}>{j.matchScore}%</span>}
-                  </li>
-                ))}
+                {similar.map((j) => {
+                  const simSal = salaryText(j, money);
+                  return (
+                    <li key={j.id} className="jobd__sim" data-testid="similar-job">
+                      <div className="jobd__sim-top">
+                        <span className="jobd__sim-logo">{initial(j.company)}</span>
+                        <span className="jobd__sim-info"><strong>{j.title}</strong><em>{j.company}{j.country ? ` · ${j.country}` : ''}</em></span>
+                        {typeof j.matchScore === 'number' && <span className={`jmatch jmatch--${matchBand(j.matchScore)} jobd__sim-m`}>{j.matchScore}%</span>}
+                      </div>
+                      {simSal && <span className="jobd__sim-sal">💲 {simSal}</span>}
+                      <div className="jobd__sim-actions">
+                        <button type="button" className="btn btn--secondary btn--small" onClick={() => onOpenJob(j)} data-testid="similar-view">{t('jobs.view')}</button>
+                        <button type="button" className="btn btn--primary btn--small" onClick={() => onApplyJob(j)} disabled={j.appliedByMe && !j.applyUrl} data-testid="similar-apply">
+                          {j.applyUrl ? `${t('jobs.apply')} ↗` : j.appliedByMe ? t('jobs.applied') : t('jobs.apply')}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
         </aside>
       </div>
+      {nudge && fit && <CvNudgeModal job={job} fit={fit} onClose={closeNudge} onBook={() => { closeNudge(); onOpenCareer(); }} />}
     </section>
   );
 }
 
 /* ─── right rail: applications hub + top employers ─────── */
 function ApplicationsHub({ apps, onOpenAll }: { apps: JobApplication[] | null; onOpenAll: () => void }) {
+  const { t } = useTranslation();
   const a = apps ?? [];
   const tiles = [
-    { n: a.length, label: 'Submitted' },
-    { n: a.filter((x) => x.status === 'applied').length, label: 'Active' },
-    { n: a.filter((x) => x.status === 'shortlisted').length, label: 'Shortlisted' },
-    { n: a.filter((x) => x.status === 'rejected').length, label: 'Closed' },
+    { n: a.length, label: t('jobs.submitted') },
+    { n: a.filter((x) => x.status === 'applied').length, label: t('jobs.active') },
+    { n: a.filter((x) => x.status === 'shortlisted').length, label: t('jobs.shortlisted') },
+    { n: a.filter((x) => x.status === 'rejected').length, label: t('jobs.closed') },
   ];
   return (
     <div className="hub-card hub-card--accent">
-      <div className="hub-card__head"><h3>My Applications Hub</h3><button className="link-btn" onClick={onOpenAll}>View all</button></div>
+      <div className="hub-card__head"><h3>{t('jobs.hub')}</h3><button className="link-btn" onClick={onOpenAll}>{t('jobs.viewAll')}</button></div>
       <div className="hub-tiles">
         {tiles.map((t) => (
           <div key={t.label} className="hub-tile"><span className="hub-tile__n">{apps === null ? '–' : t.n}</span><span className="hub-tile__l">{t.label}</span></div>
@@ -347,6 +615,7 @@ function ApplicationsHub({ apps, onOpenAll }: { apps: JobApplication[] | null; o
 }
 
 function TopEmployers({ jobs, onPick }: { jobs: Job[] | null; onPick: (company: string) => void }) {
+  const { t } = useTranslation();
   const top = useMemo(() => {
     const counts = new Map<string, number>();
     for (const j of jobs ?? []) counts.set(j.company, (counts.get(j.company) ?? 0) + 1);
@@ -355,14 +624,14 @@ function TopEmployers({ jobs, onPick }: { jobs: Job[] | null; onPick: (company: 
   if (top.length === 0) return null;
   return (
     <div className="hub-card">
-      <div className="hub-card__head"><h3>Top employers hiring now</h3></div>
+      <div className="hub-card__head"><h3>{t('jobs.topEmployers')}</h3></div>
       <ul className="employers">
         {top.map((e) => (
           <li key={e.company}>
             <button className="employer" onClick={() => onPick(e.company)}>
               <span className="employer__logo">{initial(e.company)}</span>
               <span className="employer__name">{e.company}</span>
-              <span className="employer__count">{e.count} open</span>
+              <span className="employer__count">{t('jobs.openCount', { count: e.count })}</span>
             </button>
           </li>
         ))}
@@ -373,24 +642,32 @@ function TopEmployers({ jobs, onPick }: { jobs: Job[] | null; onPick: (company: 
 
 /* ─── salary insights (from the jobs currently shown) ──── */
 function SalaryInsights({ jobs }: { jobs: Job[] | null }) {
+  const { t } = useTranslation();
+  const { currency, money } = useMoney();
   const stat = useMemo(() => {
-    const vals = (jobs ?? []).map(salaryKey).filter((n) => n > 0).sort((a, b) => a - b);
+    // Convert every salary into the viewer's currency first, so mixed-currency
+    // listings compare correctly. Free-text currencies we can't convert are skipped.
+    const vals = (jobs ?? [])
+      .filter((j) => salaryKey(j) > 0)
+      .map((j) => convert(salaryKey(j), j.salaryCurrency, currency as CurrencyCode))
+      .filter((c) => c.currency === currency)
+      .map((c) => c.value)
+      .sort((a, b) => a - b);
     if (vals.length === 0) return null;
-    const cur = jobs?.find((j) => salaryKey(j) > 0)?.salaryCurrency ?? '';
     const median = vals[Math.floor(vals.length / 2)];
-    return { lo: vals[0], hi: vals[vals.length - 1], median, cur, n: vals.length };
-  }, [jobs]);
+    return { lo: vals[0], hi: vals[vals.length - 1], median, n: vals.length };
+  }, [jobs, currency]);
   if (!stat) return null;
-  const fmt = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const fmt = (n: number) => money(n, currency);
   const pct = stat.hi > stat.lo ? ((stat.median - stat.lo) / (stat.hi - stat.lo)) * 100 : 50;
   return (
     <div className="hub-card">
-      <div className="hub-card__head"><h3>Salary insights</h3></div>
+      <div className="hub-card__head"><h3>{t('jobs.salaryInsights')}</h3></div>
       <div className="sal-insight">
-        <div className="sal-insight__median">{stat.cur} {fmt(stat.median)}<small>median</small></div>
+        <div className="sal-insight__median">{fmt(stat.median)}<small>{t('jobs.median')}</small></div>
         <div className="sal-insight__track"><span className="sal-insight__dot" style={{ left: `${pct}%` }} /></div>
-        <div className="sal-insight__ends"><span>{stat.cur} {fmt(stat.lo)}</span><span>{stat.cur} {fmt(stat.hi)}</span></div>
-        <p className="sal-insight__note">Across {stat.n} listed salar{stat.n !== 1 ? 'ies' : 'y'} here.</p>
+        <div className="sal-insight__ends"><span>{fmt(stat.lo)}</span><span>{fmt(stat.hi)}</span></div>
+        <p className="sal-insight__note">{t('jobs.salariesCounted', { count: stat.n })}</p>
       </div>
     </div>
   );
@@ -440,8 +717,19 @@ function MyApplications({ apps, openDetail }: { apps: JobApplication[] | null; o
 }
 
 /* ─── main view ────────────────────────────────────────── */
-export function JobsView({ openUser }: { openUser: (id: string) => void }) {
+export function JobsView({ openUser, jobId, onJobChange, openCvExperts, openProfile }: {
+  openUser: (id: string) => void;
+  /** Job open in the URL (/jobs/:id), so a job can be shared by link. */
+  jobId?: string;
+  onJobChange: (id: string | null) => void;
+  /** Opens the Resume page's expert CV review. */
+  openCvExperts: () => void;
+  /** Opens Profile & Settings → Basics. */
+  openProfile: () => void;
+}) {
   const { api } = useAuth();
+  const { t } = useTranslation();
+  const { money } = useMoney();
   const [tab, setTab] = useState<'browse' | 'applied'>('browse');
   const [savedIds, setSavedIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('huddle.savedJobs') || '[]'); } catch { return []; }
@@ -455,47 +743,106 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
   const [sort, setSort] = useState<JobSort>('match');
   const [filters, setFilters] = useState<JobFilters>(EMPTY);
   const [selected, setSelected] = useState<Job | null>(null);
+  const [jobMissing, setJobMissing] = useState(false);
   const [applying, setApplying] = useState<Job | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [apps, setApps] = useState<JobApplication[] | null>(null);
 
+  // The shared profile (refreshed app-wide on tab focus, updated by every save or
+  // CV upload anywhere), so fit scores and readiness are always current.
+  const { profile, uploadCv } = useProfile();
   const completion = useMemo(() => profileCompletion(profile), [profile]);
+  const readiness = useMemo(() => readinessOf(profile), [profile]);
+  const fitOf = useCallback((job: Job): JobFit | null => (profile ? analyzeJobFit(job, profile) : null), [profile]);
 
-  useEffect(() => { api.myProfile().then(({ profile }) => setProfile(profile)).catch(() => {}); }, [api]);
+  // Readiness scan (Re-scan always runs it on demand). Automatic runs:
+  //   • first time Jobs opens in this browser session → straight away
+  //   • browser reload while on a Jobs page          → after SCAN_DELAY_MS
+  //   • coming back to Jobs from elsewhere in the app → no automatic scan
+  const [autoScan] = useState(autoScanMode);
+  const [scanRun, setScanRun] = useState(0);
+  const scan = useScan(scanRun, autoScan === 'now'); // 'now' holds at 0% until data arrives
+  const rescan = useCallback(() => setScanRun((n) => n + 1), []);
+  const dataReady = !!profile && jobs !== null;
+  useEffect(() => {
+    if (!dataReady || autoScan === 'none') return;
+    const timer = setTimeout(rescan, autoScan === 'delayed' ? SCAN_DELAY_MS : 0);
+    return () => clearTimeout(timer); // leaving the page first cancels it
+  }, [dataReady, autoScan, rescan]);
+
+  const [drawerJob, setDrawerJob] = useState<Job | null>(null);
+  const [blocking, setBlocking] = useState<Job | null>(null);
+  const cv = useCvUpload(uploadCv, rescan);
+  /** Jobs with match score + matched skills from the live fit (server values until the profile loads). */
+  const scoredJobs = useMemo(() => jobs?.map((j) => {
+    const fit = fitOf(j);
+    return fit ? { ...j, matchScore: fit.score ?? undefined, matchedSkills: fit.matched } : j;
+  }) ?? null, [jobs, fitOf]);
 
   const loadApps = useCallback(() => {
     api.myApplications().then(({ applications }) => setApps(applications)).catch(() => setApps([]));
   }, [api]);
   useEffect(() => loadApps(), [loadApps]);
 
-  const load = useCallback(() => {
-    setJobs(null);
-    api.jobs(filters).then(({ jobs }) => setJobs(jobs)).catch(() => setJobs([]));
-  }, [api, filters]);
+  // Load every open job once; filtering happens instantly on the client. Refresh
+  // quietly when the tab regains focus so new postings show up.
+  const loadJobs = useCallback(() => {
+    api.jobs(EMPTY).then(({ jobs }) => setJobs(jobs)).catch(() => setJobs((cur) => cur ?? []));
+  }, [api]);
   useEffect(() => {
-    const t = setTimeout(load, 250);
-    return () => clearTimeout(t);
-  }, [load]);
+    loadJobs();
+    window.addEventListener('focus', loadJobs);
+    return () => window.removeEventListener('focus', loadJobs);
+  }, [loadJobs]);
 
   const set = <K extends keyof JobFilters>(k: K, v: JobFilters[K]) => setFilters((f) => ({ ...f, [k]: v }));
   const clearFilters = () => setFilters(EMPTY);
   const activeFilters = !!(filters.category || filters.type || filters.experience || filters.country || filters.remote || filters.q);
-  const sortedJobs = useMemo(() => (jobs ? sortJobs(jobs, sort) : jobs), [jobs, sort]);
+  const visibleJobs = useMemo(() => scoredJobs?.filter((j) => matchesFilters(j, filters)) ?? null, [scoredJobs, filters]);
+  const sortedJobs = useMemo(() => (visibleJobs ? sortJobs(visibleJobs, sort) : visibleJobs), [visibleJobs, sort]);
+  /** How many jobs each filter option would show, given the other active filters. */
+  const countFor = <K extends keyof JobFilters>(k: K, v: JobFilters[K]) =>
+    (scoredJobs ?? []).filter((j) => matchesFilters(j, { ...filters, [k]: v }, undefined)).length;
+  const strongCount = useMemo(() => (scoredJobs ?? []).filter((j) => (j.matchScore ?? 0) >= 60).length, [scoredJobs]);
 
   // Quick-filter chips: one-tap toggles over the main filters.
-  const chips: { label: string; on: boolean; toggle: () => void }[] = [
-    { label: 'Remote', on: !!filters.remote, toggle: () => set('remote', !filters.remote) },
-    { label: 'Tech', on: filters.category === 'tech', toggle: () => set('category', filters.category === 'tech' ? '' : 'tech') },
-    { label: 'Non-Tech', on: filters.category === 'non-tech', toggle: () => set('category', filters.category === 'non-tech' ? '' : 'non-tech') },
-    { label: 'Full-time', on: filters.type === 'full-time', toggle: () => set('type', filters.type === 'full-time' ? '' : 'full-time') },
-    { label: 'Senior', on: filters.experience === 'senior', toggle: () => set('experience', filters.experience === 'senior' ? '' : 'senior') },
-    { label: 'Entry level', on: filters.experience === 'entry', toggle: () => set('experience', filters.experience === 'entry' ? '' : 'entry') },
+  const chips: { label: string; on: boolean; count: number; toggle: () => void }[] = [
+    { label: t('jobs.remote'), on: !!filters.remote, count: countFor('remote', true), toggle: () => set('remote', !filters.remote) },
+    { label: t('jobs.cat.tech'), on: filters.category === 'tech', count: countFor('category', 'tech'), toggle: () => set('category', filters.category === 'tech' ? '' : 'tech') },
+    { label: t('jobs.cat.nonTech'), on: filters.category === 'non-tech', count: countFor('category', 'non-tech'), toggle: () => set('category', filters.category === 'non-tech' ? '' : 'non-tech') },
+    { label: t('jobs.type.fullTime'), on: filters.type === 'full-time', count: countFor('type', 'full-time'), toggle: () => set('type', filters.type === 'full-time' ? '' : 'full-time') },
+    { label: t('jobs.exp.senior'), on: filters.experience === 'senior', count: countFor('experience', 'senior'), toggle: () => set('experience', filters.experience === 'senior' ? '' : 'senior') },
+    { label: t('jobs.exp.entry'), on: filters.experience === 'entry', count: countFor('experience', 'entry'), toggle: () => set('experience', filters.experience === 'entry' ? '' : 'entry') },
   ];
 
-  const markApplied = (jobId: string) => {
-    setJobs((cur) => cur?.map((j) => (j.id === jobId ? { ...j, appliedByMe: true } : j)) ?? cur);
-    setSelected((s) => (s && s.id === jobId ? { ...s, appliedByMe: true } : s));
+  // Opening a job updates the URL; the effect below turns the URL back into the
+  // selected job (also for shared links, Back/Forward, and reloads).
+  const openJob = (job: Job | null) => {
+    setSelected(job);
+    onJobChange(job?.id ?? null);
+  };
+  useEffect(() => {
+    if (!jobId) { setSelected(null); setJobMissing(false); return; }
+    if (selected?.id === jobId) return;
+    const known = jobs?.find((j) => j.id === jobId);
+    if (known) { setSelected(known); return; }
+    let live = true;
+    api.job(jobId)
+      .then(({ job }) => { if (live) { setSelected(job); setJobMissing(false); } })
+      .catch(() => { if (live) setJobMissing(true); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `selected` is the output of this effect
+  }, [jobId, jobs, api]);
+
+  const markApplied = (id: string) => {
+    setJobs((cur) => cur?.map((j) => (j.id === id ? { ...j, appliedByMe: true } : j)) ?? cur);
+    setSelected((s) => (s && s.id === id ? { ...s, appliedByMe: true } : s));
     loadApps();
+  };
+  /** Apply, unless the profile isn't ready yet — then explain what's missing first. */
+  const guardedApply = (job: Job) => {
+    if (!readiness.ready && !job.appliedByMe) { setDrawerJob(null); setBlocking(job); return; }
+    setDrawerJob(null);
+    startApply(job);
   };
   const startApply = (job: Job) => {
     if (job.applyUrl) {
@@ -504,23 +851,52 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
       markApplied(job.id);
     } else {
       setApplying(job);
-      setSelected(null);
+      openJob(null);
     }
   };
 
+  if (jobId && jobMissing) {
+    return (
+      <section className="page jobs" aria-label={t('jobs.title')}>
+        <div className="card__empty jobs__missing" data-testid="job-missing">
+          <p>{t('jobs.notFound')}</p>
+          <button className="btn btn--secondary btn--small" onClick={() => openJob(null)}>{t('jobs.backToJobs')}</button>
+        </div>
+      </section>
+    );
+  }
+
+  const selectedFit = selected ? fitOf(selected) : null;
   if (selected) {
     return (
       <>
         <JobDetailPage
-          job={selected}
-          allJobs={jobs}
+          job={selectedFit ? { ...selected, matchScore: selectedFit.score ?? undefined, matchedSkills: selectedFit.matched } : selected}
+          fit={selectedFit}
+          allJobs={scoredJobs}
           saved={savedIds.includes(selected.id)}
           onToggleSave={() => toggleSave(selected.id)}
-          onBack={() => setSelected(null)}
-          onApply={() => startApply(selected)}
+          onBack={() => openJob(null)}
+          onApply={() => guardedApply(selected)}
           onOpenUser={openUser}
+          onOpenJob={openJob}
+          onApplyJob={guardedApply}
+          onOpenCareer={openCvExperts}
         />
         {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(a) => { markApplied(a.jobId); setApplying(null); }} />}
+        {blocking && (
+          <ReadinessBlocker
+            job={blocking}
+            r={readiness}
+            onClose={() => setBlocking(null)}
+            uploadCv={cv.pick}
+            uploading={cv.busy}
+            uploadError={cv.error}
+            profileHref="/profile/basics"
+            onExpert={() => { setBlocking(null); openCvExperts(); }}
+            />
+        )}
+        {cv.fileInput}
       </>
     );
   }
@@ -530,41 +906,71 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
       <header className="jobs__top">
         <span className="jobs__icon"><BriefcaseIcon width={22} height={22} /></span>
         <div className="jobs__titles">
-          <h1>Jobs &amp; Careers</h1>
-          <p>Openings matched to your skills. {completion < 70 ? <a href="/profile">Complete your profile</a> : <a href="/profile">Update your skills</a>}{completion < 70 ? ' to apply.' : '.'}</p>
+          <h1>{t('jobs.title')}</h1>
+          <p>{t('jobs.subtitle')} {completion < 70 ? <a href="/profile">{t('jobs.completeProfile')}</a> : <a href="/profile">{t('jobs.updateSkills')}</a>}{completion < 70 ? t('jobs.completeProfileSuffix') : '.'}</p>
         </div>
+        {profile && <ReadinessStatus r={readiness} />}
         <button className={`btn btn--small ${tab === 'applied' ? 'btn--primary' : 'btn--secondary'}`} onClick={() => setTab((t) => (t === 'applied' ? 'browse' : 'applied'))} data-testid="my-applications">
-          My applications
+          {t('jobs.myApplications')}
         </button>
       </header>
 
+      {profile && jobs !== null && (
+        <ReadinessPanel
+          scan={scan}
+          r={readiness}
+          jobsCount={jobs.length}
+          strongCount={strongCount}
+          onRescan={rescan}
+          actions={<>
+            {!readiness.hasCv && (
+              <button type="button" className="rbtn rbtn--primary" onClick={cv.pick} disabled={cv.busy} data-testid="banner-upload">
+                {cv.busy ? t('scan.uploading') : `${t('scan.uploadCv')} (+10%)`}
+              </button>
+            )}
+            {readiness.completion < 70 && (
+              <button type="button" className="rbtn rbtn--ghost" onClick={openProfile} data-testid="banner-profile">{t('scan.completeProfile')}</button>
+            )}
+            <button type="button" className="rbtn rbtn--tint" onClick={openCvExperts} data-testid="banner-expert">{t('scan.expertReview')}</button>
+          </>}
+        />
+      )}
+      {cv.error && !blocking && <p className="form-msg" role="alert">{cv.error}</p>}
+      {cv.done && !cv.error && (
+        <p className="form-msg form-msg--ok" role="status" data-testid="cv-done">
+          {cv.done.filled.length
+            ? t('scan.cvDone', { fields: cv.done.filled.map((f) => t(`scan.fields.${f}`)).join(', ') })
+            : t('scan.cvDoneNone')}
+        </p>
+      )}
+
       <div className="jobs__grid">
         {/* left: filters + alerts */}
-        <aside className="jobs__side" aria-label="Filters">
+        <aside className="jobs__side" aria-label={t('jobs.filters')}>
           <div className="jobs__search">
             <SearchIcon width={16} height={16} />
-            <input value={filters.q} onChange={(e) => set('q', e.target.value)} placeholder="Search title, company, skill" aria-label="Search jobs" data-testid="jobs-search" />
+            <input value={filters.q} onChange={(e) => set('q', e.target.value)} placeholder={t('jobs.searchPlaceholder')} aria-label={t('jobs.searchLabel')} data-testid="jobs-search" />
           </div>
-          <label className="jobs__filter"><span>Category</span>
+          <label className="jobs__filter"><span>{t('jobs.category')}</span>
             <select value={filters.category} onChange={(e) => set('category', e.target.value as JobCategory | '')}>
-              <option value="">All</option><option value="tech">Tech</option><option value="non-tech">Non-Tech</option>
+              <option value="">{t('jobs.all')}</option><option value="tech">{t('jobs.cat.tech')} ({countFor('category', 'tech')})</option><option value="non-tech">{t('jobs.cat.nonTech')} ({countFor('category', 'non-tech')})</option>
             </select>
           </label>
-          <label className="jobs__filter"><span>Job type</span>
+          <label className="jobs__filter"><span>{t('jobs.jobType')}</span>
             <select value={filters.type} onChange={(e) => set('type', e.target.value as JobType | '')}>
-              <option value="">All</option>{Object.entries(TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              <option value="">{t('jobs.all')}</option>{JOB_TYPES.map((v) => <option key={v} value={v}>{typeLabel(t, v)} ({countFor('type', v)})</option>)}
             </select>
           </label>
-          <label className="jobs__filter"><span>Experience</span>
+          <label className="jobs__filter"><span>{t('jobs.experience')}</span>
             <select value={filters.experience} onChange={(e) => set('experience', e.target.value as JobExperience | '')}>
-              <option value="">All</option>{Object.entries(EXP_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              <option value="">{t('jobs.all')}</option>{EXPERIENCES.map((v) => <option key={v} value={v}>{expLabel(t, v)} ({countFor('experience', v)})</option>)}
             </select>
           </label>
-          <label className="jobs__filter"><span>Country</span>
-            <input value={filters.country} onChange={(e) => set('country', e.target.value)} placeholder="Any" />
+          <label className="jobs__filter"><span>{t('jobs.country')}</span>
+            <input value={filters.country} onChange={(e) => set('country', e.target.value)} placeholder={t('jobs.any')} />
           </label>
-          <label className="jobs__remote"><input type="checkbox" checked={!!filters.remote} onChange={(e) => set('remote', e.target.checked)} /> Remote only</label>
-          {activeFilters && <button className="link-btn" onClick={clearFilters} data-testid="clear-filters">Clear filters</button>}
+          <label className="jobs__remote"><input type="checkbox" checked={!!filters.remote} onChange={(e) => set('remote', e.target.checked)} /> {t('jobs.remoteOnly')} ({countFor('remote', true)})</label>
+          {activeFilters && <button className="link-btn" onClick={clearFilters} data-testid="clear-filters">{t('jobs.clearFilters')}</button>}
  
         </aside>
 
@@ -572,37 +978,50 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
         <div className="jobs__main">
           {tab === 'applied' ? (
             <>
-              <p className="jobs__count">Your applications</p>
-              <MyApplications apps={apps} openDetail={setSelected} />
+              <p className="jobs__count">{t('jobs.yourApplications')}</p>
+              <MyApplications apps={apps} openDetail={openJob} />
             </>
           ) : (
             <>
               {jobs !== null && jobs.length > 0 && (
-                <div className="jobs__chips" role="group" aria-label="Quick filters">
+                <div className="jobs__chips" role="group" aria-label={t('jobs.quickFilters')}>
                   {chips.map((c) => (
-                    <button key={c.label} type="button" className={`jchip${c.on ? ' is-on' : ''}`} aria-pressed={c.on} onClick={c.toggle}>{c.label}</button>
+                    <button key={c.label} type="button" className={`jchip${c.on ? ' is-on' : ''}`} aria-pressed={c.on} onClick={c.toggle} disabled={!c.on && c.count === 0}>{c.label}<small>{c.count}</small></button>
                   ))}
                 </div>
               )}
               {jobs === null ? (
                 <div className="skeleton-list" aria-hidden="true"><i /><i /><i /></div>
-              ) : jobs.length === 0 ? (
+              ) : (visibleJobs ?? []).length === 0 ? (
                 <div className="jobs__empty card__empty">
-                  <p>No jobs match your filters{activeFilters ? '.' : ' yet.'}</p>
-                  {activeFilters && <button className="btn btn--secondary btn--small" onClick={clearFilters}>Clear filters</button>}
+                  <p>{t('jobs.noJobs')}</p>
+                  {activeFilters && <button className="btn btn--secondary btn--small" onClick={clearFilters}>{t('jobs.clearFilters')}</button>}
                 </div>
               ) : (
                 <>
                   <div className="jobs__listhead">
-                    <p className="jobs__count">{jobs.length} open position{jobs.length !== 1 ? 's' : ''}</p>
+                    <p className="jobs__count" data-testid="jobs-count" aria-live="polite">{t('jobs.openPositions', { count: (visibleJobs ?? []).length })}</p>
                     <label className="jobs__sort">
-                      <span>Sort</span>
-                      <select value={sort} onChange={(e) => setSort(e.target.value as JobSort)} aria-label="Sort jobs">
-                        {Object.entries(SORT_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      <span>{t('jobs.sort')}</span>
+                      <select value={sort} onChange={(e) => setSort(e.target.value as JobSort)} aria-label={t('jobs.sort')}>
+                        {SORTS.map((v) => <option key={v} value={v}>{t(`jobs.sortBy.${v}`)}</option>)}
                       </select>
                     </label>
                   </div>
-                  {(sortedJobs ?? []).map((j) => <JobCard key={j.id} job={j} onOpen={() => setSelected(j)} onApply={() => startApply(j)} />)}
+                  <div className="jlist">
+                    {scan.running && <span className="jlist__laser" style={{ top: `${laserTop(scan.progress)}%` }} aria-hidden="true" />}
+                    {(sortedJobs ?? []).map((j, i, all) => (
+                      <JobCard
+                        key={j.id}
+                        job={j}
+                        scan={cardScanState(scan.progress, i, all.length)}
+                        readiness={readiness}
+                        onOpen={() => setDrawerJob(j)}
+                        onView={() => openJob(j)}
+                        onApply={() => guardedApply(j)}
+                      />
+                    ))}
+                  </div>
                 </>
               )}
             </>
@@ -612,13 +1031,37 @@ export function JobsView({ openUser }: { openUser: (id: string) => void }) {
         {/* right: hub + employers */}
         <aside className="jobs__hub" aria-label="Summary">
           <ApplicationsHub apps={apps} onOpenAll={() => setTab('applied')} />
-          <Pipeline apps={apps} openDetail={setSelected} />
+          <Pipeline apps={apps} openDetail={openJob} />
           <SalaryInsights jobs={jobs} />
           <TopEmployers jobs={jobs} onPick={(company) => { setTab('browse'); set('q', company); }} />
         </aside>
       </div>
 
       {applying && <ApplyModal job={applying} completion={completion} onClose={() => setApplying(null)} onApplied={(a) => { markApplied(a.jobId); setApplying(null); }} />}
+      {drawerJob && (
+        <JobDrawer
+          job={scoredJobs?.find((j) => j.id === drawerJob.id) ?? drawerJob}
+          fit={fitOf(drawerJob)}
+          r={readiness}
+          salary={salaryText(drawerJob, money)}
+          onClose={() => setDrawerJob(null)}
+          onApply={() => guardedApply(drawerJob)}
+          onOpenFull={() => { setDrawerJob(null); openJob(drawerJob); }}
+        />
+      )}
+      {blocking && (
+        <ReadinessBlocker
+          job={blocking}
+          r={readiness}
+          onClose={() => setBlocking(null)}
+          uploadCv={cv.pick}
+          uploading={cv.busy}
+          uploadError={cv.error}
+          profileHref="/profile/basics"
+          onExpert={() => { setBlocking(null); openCvExperts(); }}
+        />
+      )}
+      {cv.fileInput}
     </section>
   );
 }

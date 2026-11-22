@@ -162,6 +162,74 @@ function mongoProfileStore(col) {
   };
 }
 
+// ===================== SETTINGS =====================
+// Admin-editable app settings (e.g. the AI CV builder's master prompt), by key.
+export function createMemorySettingsStore() {
+  const byKey = new Map();
+  return {
+    kind: 'memory',
+    async get(key) { const d = byKey.get(key); return d ? { ...d } : null; },
+    async set(key, value, updatedBy = null) {
+      const d = { key, value, updatedBy, updatedAt: now() };
+      byKey.set(key, d);
+      return { ...d };
+    },
+    async remove(key) { return byKey.delete(key); },
+  };
+}
+
+function mongoSettingsStore(col) {
+  const toD = (d) => d && { key: d._id, value: d.value, updatedBy: d.updatedBy ?? null, updatedAt: d.updatedAt };
+  return {
+    kind: 'mongodb',
+    async get(key) { return toD(await col.findOne({ _id: key })); },
+    async set(key, value, updatedBy = null) {
+      await col.updateOne({ _id: key }, { $set: { value, updatedBy, updatedAt: now() } }, { upsert: true });
+      return toD(await col.findOne({ _id: key }));
+    },
+    async remove(key) { return (await col.deleteOne({ _id: key })).deletedCount > 0; },
+  };
+}
+
+// ===================== PUBLIC CVS =====================
+// A CV a member chose to publish at /<their mobile number>. Keyed by that slug
+// (digits only, unique); one per member — republishing replaces it.
+export function createMemoryPublicCvStore() {
+  const bySlug = new Map();
+  const copy = (d) => d && structuredClone(d);
+  return {
+    kind: 'memory',
+    async get(slug) { return copy(bySlug.get(slug) ?? null); },
+    async getByUser(userId) { return copy([...bySlug.values()].find((d) => d.userId === userId) ?? null); },
+    async put(userId, slug, data) {
+      for (const [k, d] of bySlug) if (d.userId === userId && k !== slug) bySlug.delete(k);
+      const doc = { slug, userId, ...data, updatedAt: now() };
+      bySlug.set(slug, doc);
+      return copy(doc);
+    },
+    async removeByUser(userId) {
+      let n = 0;
+      for (const [k, d] of bySlug) if (d.userId === userId) { bySlug.delete(k); n++; }
+      return n > 0;
+    },
+  };
+}
+
+function mongoPublicCvStore(col) {
+  const toD = (d) => d && { ...d, slug: d._id };
+  return {
+    kind: 'mongodb',
+    async get(slug) { return toD(await col.findOne({ _id: slug })); },
+    async getByUser(userId) { return toD(await col.findOne({ userId })); },
+    async put(userId, slug, data) {
+      await col.deleteMany({ userId, _id: { $ne: slug } });
+      await col.updateOne({ _id: slug }, { $set: { userId, ...data, updatedAt: now() } }, { upsert: true });
+      return toD(await col.findOne({ _id: slug }));
+    },
+    async removeByUser(userId) { return (await col.deleteMany({ userId })).deletedCount > 0; },
+  };
+}
+
 // ===================== CONNECTIONS =====================
 export function createMemoryConnectionStore() {
   const byPair = new Map();
@@ -1021,6 +1089,9 @@ export async function connectSocialStores(db, log = () => {}) {
   const notifications = mongoNotificationStore(db.collection('notifications'));
   const jobs = mongoJobStore(db.collection('jobs'), db.collection('jobApplications'), ObjectId);
   const audit = mongoAuditStore(db.collection('auditEvents'));
+  const publicCvs = mongoPublicCvStore(db.collection('publicCvs'));
+  const settings = mongoSettingsStore(db.collection('settings'));
+  await db.collection('publicCvs').createIndex({ userId: 1 }, { name: 'public_cvs_user' });
   await db.collection('profiles').createIndex({ updatedAt: -1 }, { name: 'profiles_recent' });
   await db.collection('connections').createIndex({ users: 1 }, { name: 'connections_users' });
   await db.collection('posts').createIndex({ authorId: 1, createdAt: -1 }, { name: 'posts_author' });
@@ -1033,7 +1104,7 @@ export async function connectSocialStores(db, log = () => {}) {
   await db.collection('auditEvents').createIndex({ ts: -1 }, { name: 'audit_recent' });
   await db.collection('auditEvents').createIndex({ category: 1, ts: -1 }, { name: 'audit_category' });
   log('social stores ready (profiles, connections, posts, dms, ads, notifications, jobs, audit)');
-  return { profiles, connections, posts, dms, ads, notifications, jobs, audit };
+  return { profiles, connections, posts, dms, ads, notifications, jobs, audit, publicCvs, settings };
 }
 
 export function createMemorySocialStores() {
@@ -1046,5 +1117,7 @@ export function createMemorySocialStores() {
     notifications: createMemoryNotificationStore(),
     jobs: createMemoryJobStore(),
     audit: createMemoryAuditStore(),
+    publicCvs: createMemoryPublicCvStore(),
+    settings: createMemorySettingsStore(),
   };
 }

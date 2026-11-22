@@ -1,16 +1,17 @@
-import { ApiError, profileCompletion, type Education, type Experience, type ParsedCv, type Profile } from '@vca/shared';
+import { ApiError, profileCompletion, type Education, type Experience, type Profile } from '@vca/shared';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { uploadContentType, uploadFile } from '../../upload';
+import { cvErrorText, useProfile } from '../../profile/ProfileContext';
+import { uploadFile } from '../../upload';
 import { Line } from '../Line';
 import { ProfileAvatar } from './common';
 
 type Msg = { ok: boolean; text: string } | null;
-type ProfileTab = 'all' | 'basics_cv' | 'exp_edu' | 'security';
+type ProfileTab = 'account' | 'basics' | 'exp_edu' | 'preferences' | 'security';
 const toList = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
 
 export function ProfessionalProfile({ profileTab, onCompletionChange }: { profileTab: ProfileTab; onCompletionChange: (completion: number) => void }) {
-  const { api, user, refreshPhoto } = useAuth();
+  const { api, user } = useAuth();
   const [p, setP] = useState<Profile | null>(null);
   const [headline, setHeadline] = useState('');
   const [bio, setBio] = useState('');
@@ -47,9 +48,13 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
     setEducation(prof.education ?? []);
   };
 
+  // Seed the form from the shared profile once it arrives. Later refreshes (tab focus)
+  // don't overwrite the form, so unsaved edits are never lost.
+  const { profile: shared, save: saveShared, uploadCv, replace } = useProfile();
   useEffect(() => {
-    api.myProfile().then(({ profile }) => fill(profile)).catch(() => setMsg({ ok: false, text: "Couldn't load your profile." }));
-  }, [api]);
+    if (shared && !p) fill(shared);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once
+  }, [shared]);
 
   const fields = () => ({
     headline,
@@ -71,8 +76,7 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
     setSaving(true);
     setMsg(null);
     try {
-      const { profile } = await api.saveProfile(fields());
-      fill(profile);
+      fill(await saveShared(fields()));
       setMsg({ ok: true, text: 'Profile saved.' });
     } catch (err) {
       setMsg({ ok: false, text: err instanceof ApiError ? err.message : "Couldn't save your profile." });
@@ -89,8 +93,8 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
     try {
       const photoKey = await uploadFile(api, 'photo', file);
       const { profile } = await api.saveProfile({ ...fields(), photoKey });
+      replace(profile); // shared copy + avatars everywhere
       fill(profile);
-      void refreshPhoto(); // update the avatar everywhere (titlebar, feed composer, rail)
     } catch (err) {
       setMsg({ ok: false, text: err instanceof ApiError ? err.message : (err as Error).message });
     } finally {
@@ -99,45 +103,21 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
     }
   };
 
-  // Overlay parsed CV fields onto the form, only where the field is still empty,
-  // so a member's own edits are never clobbered. Returns what got pre-filled.
-  const applyParsed = (prof: Profile, parsed: ParsedCv | undefined): string[] => {
-    fill(prof);
-    if (!parsed) return [];
-    const filled: string[] = [];
-    if (parsed.headline && !prof.headline) { setHeadline(parsed.headline); filled.push('headline'); }
-    if (parsed.location && !prof.location) { setLocation(parsed.location); filled.push('location'); }
-    if (parsed.phone && !prof.mobile) { setMobile(parsed.phone); filled.push('mobile'); }
-    if (parsed.skills?.length) {
-      const existing = prof.skills ?? [];
-      const merged = Array.from(new Set([...existing, ...parsed.skills]));
-      if (merged.length > existing.length) { setSkills(merged.join(', ')); filled.push('skills'); }
-    }
-    if (parsed.experience?.length && !(prof.experience?.length)) { setExperience(parsed.experience); filled.push('experience'); }
-    if (parsed.education?.length && !(prof.education?.length)) { setEducation(parsed.education); filled.push('education'); }
-    return filled;
-  };
-
+  // Read the CV, fill every empty field from it (the form's current values win),
+  // upload and save — one step, and every screen sees the result immediately.
   const onCv = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setBusyCv(true);
     setMsg(null);
     try {
-      // Parse for review (best effort), then store the file and persist the CV reference.
-      const parsed = await api.parseCv(file, uploadContentType(file, 'cv')).then((r) => r.parsed).catch(() => undefined);
-      const cvKey = await uploadFile(api, 'cv', file);
-      const { profile } = await api.saveProfile({ ...fields(), cvKey, cvName: file.name });
-      const filled = applyParsed(profile, parsed);
-      if (parsed && parsed.lowConfidence && filled.length === 0) {
-        setMsg({ ok: true, text: 'CV uploaded, but we couldn’t read it automatically — add your details below and Save.' });
-      } else if (filled.length) {
-        setMsg({ ok: true, text: `CV uploaded. Pre-filled ${filled.join(', ')} — review and Save.` });
-      } else {
-        setMsg({ ok: true, text: 'CV uploaded.' });
-      }
+      const { profile, filled, lowConfidence } = await uploadCv(file, fields());
+      fill(profile);
+      if (filled.length) setMsg({ ok: true, text: `CV uploaded and saved. Filled in from your CV: ${filled.join(', ')}. Check the details below.` });
+      else if (lowConfidence) setMsg({ ok: true, text: 'CV uploaded and saved, but we couldn’t read details from it automatically — add them below and Save.' });
+      else setMsg({ ok: true, text: 'CV uploaded and saved. Your profile already had these details, so nothing was changed.' });
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof ApiError ? err.message : (err as Error).message });
+      setMsg({ ok: false, text: cvErrorText(err) });
     } finally {
       setBusyCv(false);
       if (cvInput.current) cvInput.current.value = '';
@@ -148,14 +128,14 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
   const setEdu = (i: number, patch: Partial<Education>) => setEducation((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
   const completion = profileCompletion({ headline, bio, location, skills: toList(skills), experience, education, hasCv: !!p?.hasCv });
-  const showBasics = profileTab === 'all' || profileTab === 'basics_cv';
-  const showExperience = profileTab === 'all' || profileTab === 'exp_edu';
+  const showBasics = profileTab === 'basics';
+  const showExperience = profileTab === 'exp_edu';
 
   useEffect(() => {
     onCompletionChange(completion);
   }, [completion, onCompletionChange]);
 
-  if (!p || !user || profileTab === 'security') return null;
+  if (!p || !user || (!showBasics && !showExperience)) return null;
 
   return (
     <form className="card pp-profile-form" onSubmit={save} noValidate aria-labelledby="pp-h">
@@ -182,7 +162,7 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
           <Line name="location" label="Location" type="text" autoComplete="off" value={location} onChange={setLocation} />
           <Line name="expected-salary" label="Expected salary" type="text" autoComplete="off" value={expectedSalary} onChange={setExpectedSalary} placeholder="e.g. 120,000 USD per year" />
         </div>
-        <label className="line">
+        <label className="line pp-bio">
           <span>About you</span>
           <textarea className="pp-textarea" value={bio} onChange={(e) => setBio(e.target.value)} rows={3} placeholder="A short bio" />
         </label>
@@ -191,14 +171,18 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
       {/* ─ Section: Contact ─ */}
       {showBasics && <section className="pp-section" id="sec-contact">
         <div className="pp-section__head"><h3>Contact</h3><span className="pp-section__hint">Mobile is shown only to accepted connections</span></div>
-        <Line name="mobile" label="Mobile (private)" type="text" autoComplete="off" value={mobile} onChange={setMobile} />
+        <div className="card__grid">
+          <Line name="mobile" label="Mobile (private)" type="text" autoComplete="off" value={mobile} onChange={setMobile} />
+        </div>
       </section>}
 
       {/* ─ Section: Skills & interests ─ */}
       {showBasics && <section className="pp-section" id="sec-skills">
         <div className="pp-section__head"><h3>Skills &amp; interests</h3><span className="pp-section__hint">Skills power your job matches</span></div>
-        <Line name="skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
-        <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
+        <div className="card__grid">
+          <Line name="skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
+          <Line name="focus" label="Focus areas (comma separated)" type="text" autoComplete="off" value={focus} onChange={setFocus} />
+        </div>
         <div className="pp-flags">
           <label><input type="checkbox" checked={mentee} onChange={(e) => setMentee(e.target.checked)} /> I&apos;m looking for mentorship</label>
           <label><input type="checkbox" checked={mentor} onChange={(e) => setMentor(e.target.checked)} /> I&apos;m available as a mentor</label>

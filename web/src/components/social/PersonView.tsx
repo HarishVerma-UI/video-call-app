@@ -74,9 +74,32 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
           </div>
           <div className="person-identity__actions">
             <ConnectButton profile={profile} api={api} onChange={onConn} />
+            {!full && (
+              // Messages are limited to connections (server rule), so show the option
+              // but explain how to unlock it rather than hiding it.
+              <button
+                className="btn btn--secondary btn--small"
+                disabled
+                title={profile.connection === 'pending_outgoing' ? 'You can message once they accept your request.' : 'Connect first to send a message.'}
+                aria-describedby="person-msg-hint"
+                data-testid="person-message-locked"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                Message
+              </button>
+            )}
+            {!full && (
+              <p id="person-msg-hint" className="person-identity__hint">
+                {profile.connection === 'pending_outgoing'
+                  ? 'Request sent — you can message once they accept.'
+                  : profile.connection === 'pending_incoming'
+                    ? 'Accept their request to start messaging.'
+                    : 'Connect to send a message.'}
+              </p>
+            )}
             {full && profile.connection !== 'self' && (
               <>
-                <button className="btn btn--secondary btn--small" onClick={() => openMessages(profile.userId)}>
+                <button className="btn btn--secondary btn--small" onClick={() => openMessages(profile.userId)} data-testid="person-message">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
                   Message
                 </button>
