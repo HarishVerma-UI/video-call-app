@@ -199,11 +199,11 @@ test.describe('UI: Navigation', () => {
     await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
 
     // Navigate to Network
-    await page.locator('[data-testid="rail-network"]').click();
+    await page.locator('[data-testid="top-requests"]').click();
     await expect(page).toHaveURL(/\/network/);
 
     // Navigate to Messages
-    await page.locator('[data-testid="rail-messages"]').click();
+    await page.locator('[data-testid="top-messages"]').click();
     await expect(page).toHaveURL(/\/messages/);
 
     // Navigate to Meet

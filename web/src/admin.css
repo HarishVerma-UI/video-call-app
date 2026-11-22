@@ -298,3 +298,9 @@
 .aa-timeline__role { font-size: 14px; font-weight: 600; color: var(--aa-text); }
 .aa-timeline__when { font-size: 12px; color: var(--aa-muted); margin-top: 2px; }
 .aa-timeline__desc { font-size: 13px; color: var(--aa-text-2); margin: 6px 0 0; line-height: 1.5; }
+
+/* AI CV prompt editor */
+.aa-json.aa-prompt { min-height: 360px; font-family: inherit; font-size: 13.5px; line-height: 1.6; }
+.aa-prompt__meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--aa-text-2); }
+.aa-form .aa-prompt__toggle { justify-self: start; width: auto; }
+.aa-prompt__fixed { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto; white-space: pre-wrap; font: 12px/1.55 ui-monospace, "SF Mono", Menlo, monospace; color: var(--aa-text-2); background: var(--aa-surface-2); border: 1px solid var(--aa-border); border-radius: var(--aa-r-sm); }

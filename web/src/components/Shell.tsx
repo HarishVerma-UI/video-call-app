@@ -1,5 +1,6 @@
 import { isStaff, isSuperAdmin, normalizeRoomId, type AuthUser } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
 import type { LocalMedia } from '../hooks/useLocalMedia';
 import { AdminView } from './AdminView';
@@ -27,10 +28,10 @@ export type Route =
   | { view: 'person'; id: string }
   | { view: 'meet'; room: string }
   | { view: 'chat'; room: string }
-  | { view: 'jobs' }
+  | { view: 'jobs'; job?: string }
   | { view: 'calls' }
-  | { view: 'profile' }
-  | { view: 'career' }
+  | { view: 'profile'; section?: 'basics' }
+  | { view: 'career'; section?: 'expert' }
   | { view: 'admin' }
   | { view: 'recruiter' }
   | { view: 'logs' }
@@ -41,9 +42,9 @@ export function parseRoute(path = location.pathname): Route {
   if (seg[0] === 'r') return { view: 'meet', room: normalizeRoomId(seg[1] ?? '') ?? '' };
   if (seg[0] === 'meet') return { view: 'meet', room: '' };
   if (seg[0] === 'chat') return { view: 'chat', room: normalizeRoomId(seg[1] ?? '') ?? '' };
-  if (seg[0] === 'jobs') return { view: 'jobs' };
+  if (seg[0] === 'jobs') return seg[1] ? { view: 'jobs', job: seg[1] } : { view: 'jobs' };
   if (seg[0] === 'calls') return { view: 'calls' };
-  if (seg[0] === 'profile') return { view: 'profile' };
+  if (seg[0] === 'profile') return seg[1] === 'basics' ? { view: 'profile', section: 'basics' } : { view: 'profile' };
   if (seg[0] === 'career') return { view: 'career' };
   if (seg[0] === 'admin') return { view: 'admin' };
   if (seg[0] === 'recruiter') return { view: 'recruiter' };
@@ -61,6 +62,9 @@ export function routePath(r: Route): string {
   if (r.view === 'chat') return r.room ? `/chat/${encodeURIComponent(r.room)}` : '/chat';
   if (r.view === 'messages') return r.user ? `/messages/${encodeURIComponent(r.user)}` : '/messages';
   if (r.view === 'person') return `/u/${encodeURIComponent(r.id)}`;
+  if (r.view === 'jobs') return r.job ? `/jobs/${encodeURIComponent(r.job)}` : '/jobs';
+  if (r.view === 'career') return r.section ? `/career/${r.section}` : '/career';
+  if (r.view === 'profile') return r.section ? `/profile/${r.section}` : '/profile';
   if (r.view === 'not-found') return location.pathname;
   return `/${r.view}`;
 }
@@ -71,10 +75,11 @@ function readRoute(): Route {
     history.replaceState(null, '', '/');
     return { view: 'feed' };
   }
-  if (/^\/(admin|recruiter|career)\//.test(path)) {
-    const root = path.startsWith('/admin/') ? '/admin' : path.startsWith('/career/') ? '/career' : '/recruiter';
+  // Career keeps its sub-path (/career/expert…): the Resume page reads its section from it.
+  if (/^\/(admin|recruiter)\//.test(path)) {
+    const root = path.startsWith('/admin/') ? '/admin' : '/recruiter';
     history.replaceState(null, '', root);
-    return root === '/admin' ? { view: 'admin' } : root === '/career' ? { view: 'career' } : { view: 'recruiter' };
+    return root === '/admin' ? { view: 'admin' } : { view: 'recruiter' };
   }
   return parseRoute();
 }
@@ -95,16 +100,15 @@ export function useRoute(): [Route, (r: Route, replace?: boolean) => void] {
   return [route, go];
 }
 
-// People + Feed are merged into the Home feed, so People is no longer a separate rail item.
-const RAIL: { view: Route['view']; label: string; icon: ReactNode; testId: string }[] = [
-  { view: 'feed', label: 'Home', icon: <SparkIcon />, testId: 'rail-feed' },
-  { view: 'network', label: 'Network', icon: <UserIcon />, testId: 'rail-network' },
-  { view: 'messages', label: 'Messages', icon: <ChatIcon />, testId: 'rail-messages' },
-  { view: 'jobs', label: 'Jobs', icon: <BriefcaseIcon />, testId: 'rail-jobs' },
-  { view: 'career', label: 'Career', icon: (
+// People + Feed are merged into the Home feed. Network and Messages live in the
+// top bar (with the request badge), so they aren't repeated in the rail.
+const RAIL: { view: Route['view']; label: 'home' | 'jobs' | 'career' | 'meet'; icon: ReactNode; testId: string }[] = [
+  { view: 'feed', label: 'home', icon: <SparkIcon />, testId: 'rail-feed' },
+  { view: 'jobs', label: 'jobs', icon: <BriefcaseIcon />, testId: 'rail-jobs' },
+  { view: 'career', label: 'career', icon: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></svg>
   ), testId: 'rail-career' },
-  { view: 'meet', label: 'Meet', icon: <VideoIcon />, testId: 'rail-meet' },
+  { view: 'meet', label: 'meet', icon: <VideoIcon />, testId: 'rail-meet' },
 ];
 
 interface Props {
@@ -118,6 +122,7 @@ interface Props {
 
 export function Shell({ user, media, route, go, notice, onJoin }: Props) {
   const { api, photoUrl, logout } = useAuth();
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [pendingReqs, setPendingReqs] = useState(0);
   const [composeRoleSignal, setComposeRoleSignal] = useState(0);
@@ -212,13 +217,13 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           <input
             value={search}
             onChange={(e) => onSearch(e.target.value)}
-            placeholder="Search posts and people"
-            aria-label="Search posts and people"
+            placeholder={t('top.searchPlaceholder')}
+            aria-label={t('top.searchPlaceholder')}
             spellCheck={false}
             data-testid="global-search"
           />
           {search && (
-            <button type="button" className="titlebar__search-clear" onClick={() => setSearch('')} aria-label="Clear search">
+            <button type="button" className="titlebar__search-clear" onClick={() => setSearch('')} aria-label={t('top.clearSearch')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           )}
@@ -228,25 +233,25 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             <>
               <button className="titlebar__action titlebar__action--quiet" onClick={() => go({ view: 'career' })}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                <span>30-Min CV Help</span>
+                <span>{t('top.cvHelp')}</span>
               </button>
               <button className="titlebar__action titlebar__action--primary" onClick={startRolePost}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                <span>Post Role</span>
+                <span>{t('top.postRole')}</span>
               </button>
             </>
           )}
           <NotificationBell onOpenPost={() => go({ view: 'feed' })} onJoinCall={onJoin} />
-          <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label="Messages" title="Messages" data-testid="top-messages">
+          <button className="titlebar__icon" onClick={() => go({ view: 'messages', user: '' })} aria-label={t('top.messages')} title={t('top.messages')} data-testid="top-messages">
             <ChatIcon width={20} height={20} />
           </button>
-          <button className="titlebar__icon" onClick={() => go({ view: 'network' })} aria-label={pendingReqs > 0 ? `Requests (${pendingReqs} pending)` : 'Requests'} title="Connection requests" data-testid="top-requests">
+          <button className="titlebar__icon" onClick={() => go({ view: 'network' })} aria-label={pendingReqs > 0 ? t('top.requestsPending', { count: pendingReqs }) : t('top.requests')} title={t('top.requests')} data-testid="top-requests">
             <UserIcon width={20} height={20} />
             {pendingReqs > 0 && <span className="titlebar__badge">{pendingReqs > 9 ? '9+' : pendingReqs}</span>}
           </button>
           <ModeToggle />
           <div className="titlebar__account" ref={accountMenuRef}>
-            <button className="titlebar__me" type="button" onClick={() => setAccountMenuOpen((open) => !open)} data-testid="open-profile" aria-label="Account menu" aria-haspopup="menu" aria-expanded={accountMenuOpen} title={user.name}>
+            <button className="titlebar__me" type="button" onClick={() => setAccountMenuOpen((open) => !open)} data-testid="open-profile" aria-label={t('top.accountMenu')} aria-haspopup="menu" aria-expanded={accountMenuOpen} title={user.name}>
               <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={32} />
               <i className="presence" />
             </button>
@@ -258,11 +263,11 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
                 </div>
                 <button type="button" role="menuitem" onClick={() => { setAccountMenuOpen(false); go({ view: 'profile' }); }}>
                   <UserIcon width={17} height={17} />
-                  Profile &amp; Settings
+                  {t('top.profileSettings')}
                 </button>
                 <button type="button" role="menuitem" onClick={() => logout()} data-testid="account-sign-out">
                   <SignOutIcon width={17} height={17} />
-                  Sign out
+                  {t('top.signOut')}
                 </button>
               </div>
             )}
@@ -270,7 +275,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         </div>
       </header>
 
-      <nav className="rail" aria-label="Sections">
+      <nav className="rail" aria-label={t('nav.sections')}>
         {RAIL.map((item) => (
           <button
             key={item.view}
@@ -280,7 +285,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             data-testid={item.testId}
           >
             {item.icon}
-            <span>{item.label}</span>
+            <span>{t(`nav.${item.label}`)}</span>
           </button>
         ))}
         {isStaff(user.role) && (
@@ -291,7 +296,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             data-testid="rail-admin"
           >
             {isSuperAdmin(user.role) ? <ShieldIcon /> : <BriefcaseIcon />}
-            <span>{isSuperAdmin(user.role) ? 'Admin' : 'Recruiter'}</span>
+            <span>{isSuperAdmin(user.role) ? t('nav.admin') : t('nav.recruiter')}</span>
           </button>
         )}
         {isSuperAdmin(user.role) && (
@@ -302,7 +307,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
             data-testid="rail-logs"
           >
             <LogsIcon />
-            <span>Logs</span>
+            <span>{t('nav.logs')}</span>
           </button>
         )}
         <button
@@ -312,7 +317,7 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
           data-testid="rail-profile"
         >
           <ProfileAvatar profile={{ userId: user.id, name: user.name, photoUrl }} size={26} />
-          <span>Profile</span>
+          <span>{t('nav.profile')}</span>
         </button>
       </nav>
 
@@ -330,11 +335,19 @@ export function Shell({ user, media, route, go, notice, onJoin }: Props) {
         )}
         {route.view === 'chat' && <ChatView user={user} room={route.room} openRoom={(room) => go({ view: 'chat', room })} onJoin={onJoin} />}
         {route.view === 'calls' && <CallsView onJoin={onJoin} openChat={(room) => go({ view: 'chat', room })} />}
-        {route.view === 'profile' && <ProfileView onPreviewPublicProfile={() => go({ view: 'person', id: user.id })} onOpenCareerStudio={() => go({ view: 'career' })} />}
+        {route.view === 'profile' && <ProfileView key={route.section ?? 'account'} initialTab={route.section} onPreviewPublicProfile={() => go({ view: 'person', id: user.id })} onOpenCareerStudio={() => go({ view: 'career' })} />}
         {route.view === 'admin' && isSuperAdmin(user.role) && <AdminView />}
         {route.view === 'recruiter' && isStaff(user.role) && !isSuperAdmin(user.role) && <RecruiterDashboard />}
         {route.view === 'logs' && <LogsView />}
-        {route.view === 'jobs' && <JobsView openUser={(id) => go({ view: 'person', id })} />}
+        {route.view === 'jobs' && (
+          <JobsView
+            jobId={route.job}
+            onJobChange={(id) => go(id ? { view: 'jobs', job: id } : { view: 'jobs' })}
+            openUser={(id) => go({ view: 'person', id })}
+            openCvExperts={() => go({ view: 'career', section: 'expert' })}
+            openProfile={() => go({ view: 'profile', section: 'basics' })}
+          />
+        )}
         {route.view === 'feed' && <FeedView openUser={(id) => go({ view: 'person', id })} openMeet={() => go({ view: 'meet', room: '' })} openJobs={() => go({ view: 'jobs' })} openCareer={() => go({ view: 'career' })} openProfile={() => go({ view: 'profile' })} openNetwork={() => go({ view: 'network' })} composeRoleSignal={composeRoleSignal} savedPostIds={savedPostIds} onToggleSavedPost={toggleSavedPost} query={search} onQueryChange={setSearch} />}
         {route.view === 'network' && <NetworkView openUser={(id) => go({ view: 'person', id })} openMessages={(id) => go({ view: 'messages', user: id })} />}
         {route.view === 'messages' && <MessagesView key={route.user} initialUser={route.user || undefined} />}

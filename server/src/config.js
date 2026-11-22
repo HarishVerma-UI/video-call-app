@@ -92,6 +92,14 @@ export const config = {
     facebook: { clientId: process.env.FACEBOOK_CLIENT_ID ?? '', clientSecret: process.env.FACEBOOK_CLIENT_SECRET ?? '' },
   },
 
+  // --- AI (Gemini) for the CV builder chat. Key stays server-side. ---
+  ai: {
+    geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+    // Fast, low-cost model for structured CV JSON; the fallback is tried once if it's overloaded.
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+    geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL ?? 'gemini-3.1-flash-lite',
+  },
+
   // --- media uploads (S3) ---
   s3: {
     region: process.env.AWS_REGION || process.env.S3_REGION || '',

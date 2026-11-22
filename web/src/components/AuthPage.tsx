@@ -6,7 +6,7 @@ import { Aperture } from './Aperture';
 import { FacebookIcon, GitHubIcon, GoogleIcon } from './Icons';
 import { Line } from './Line';
 import { ModeToggle } from './ModeToggle';
-import { uploadFile } from '../upload';
+import { attachCv, toInput } from '../profile/ProfileContext';
 
 type Tab = 'login' | 'register';
 type LoginMode = 'user' | 'recruiter';
@@ -199,8 +199,10 @@ export function AuthPage() {
         }, async () => {
           if (registrationRole !== 'jobSeeker' || !cvFile) return;
           try {
-            const cvKey = await uploadFile(api, 'cv', cvFile);
-            await api.saveProfile({ cvKey, cvName: cvFile.name });
+            // Merge into the profile just created (a CV-only save would blank it),
+            // and fill any empty fields from the CV itself.
+            const { profile } = await api.myProfile();
+            await attachCv(api, cvFile, toInput(profile));
           } catch (error) {
             const detail = error instanceof Error ? ` ${error.message}` : '';
             throw new RegistrationUploadError(`Your account was created, but the CV upload failed.${detail} Sign in and upload it from your Profile.`);

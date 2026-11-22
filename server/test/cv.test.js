@@ -97,6 +97,15 @@ test('parseResume pulls out the key fields', () => {
   assert.equal(r.lowConfidence, false);
 });
 
+test('parseResume reads the summary section (heading or inline) as the bio', () => {
+  const block = parseResume('Asha Verma\nPune, India\n\nPROFESSIONAL SUMMARY\nFrontend engineer with 8 years building Angular apps.\nMentors teams.\n\nSkills\nAngular');
+  assert.equal(block.summary, 'Frontend engineer with 8 years building Angular apps. Mentors teams.');
+  const inline = parseResume('Raj\nSummary: Data analyst who turns messy data into clear decisions.\nSkills\nSQL');
+  assert.equal(inline.summary, 'Data analyst who turns messy data into clear decisions.');
+  // a "Profile:" link is not a summary
+  assert.equal(parseResume('Raj\nProfile: https://linkedin.com/in/raj-some-very-long-handle\nSkills\nSQL').summary, '');
+});
+
 test('parseResume flags low confidence on junk', () => {
   const r = parseResume('....\n\n####');
   assert.equal(r.lowConfidence, true);
@@ -120,14 +129,21 @@ test('POST /api/profile/cv/parse returns parsed fields', async () => {
   assert.ok(body.parsed.skills.includes('Angular'));
 });
 
-test('cv parse rejects file types other than PDF and Word', async () => {
+test('cv parse accepts plain-text CVs and rejects other file types', async () => {
   const u = await registerUser(t.base, 'CV Text User');
-  const res = await fetch(`http://${t.base}/api/profile/cv/parse`, {
+  const txt = await fetch(`http://${t.base}/api/profile/cv/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain', Authorization: `Bearer ${u.token}` },
     body: RESUME,
   });
-  assert.equal(res.status, 400);
+  assert.equal(txt.status, 200);
+  assert.ok((await txt.json()).parsed.skills.length > 0);
+  const png = await fetch(`http://${t.base}/api/profile/cv/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png', Authorization: `Bearer ${u.token}` },
+    body: RESUME,
+  });
+  assert.equal(png.status, 400);
 });
 
 test('cv parse requires auth', async () => {

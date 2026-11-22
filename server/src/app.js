@@ -8,13 +8,15 @@ import { createAdmin } from './auth/admin.js';
 import { isSuperAdmin } from './auth/roles.js';
 import { createMemoryActivityStore } from './db/activityStore.js';
 import { createMemoryMessageStore } from './db/messageStore.js';
-import { createMemorySocialStores } from './db/socialStore.js';
+import { createMemoryPublicCvStore, createMemorySettingsStore, createMemorySocialStores } from './db/socialStore.js';
 import { createMedia } from './media.js';
 import { createSocial } from './social.js';
 import { createRecruiter } from './recruiter.js';
 import { setAuditStore } from './audit.js';
 import { HttpError, readJson, sendJson } from './http.js';
 import { createRateLimiter } from './auth/rateLimit.js';
+import { createCvChat } from './cvChat.js';
+import { createPublicCv } from './publicCv.js';
 import { createLogStore } from './logStore.js';
 import { attachSignaling } from './signaling.js';
 
@@ -72,6 +74,7 @@ export function createApp(
     activity = createMemoryActivityStore(),
     social = createMemorySocialStores(),
     log = () => {},
+    cvChatGenerate, // tests inject a fake model
   },
 ) {
   const startedAt = Date.now();
@@ -106,6 +109,8 @@ export function createApp(
   // Late-bound: signaling is created below, but social only calls notify at request time.
   const notify = (userId, payload) => signaling?.notifyUser(userId, payload) ?? 0;
   const socialApi = createSocial({ ...social, users: store, media, requireUser: auth.requireUser, notify, log });
+  const cvChat = createCvChat({ apiKey: config.ai?.geminiApiKey, model: config.ai?.geminiModel, fallbackModel: config.ai?.geminiFallbackModel, requireUser: auth.requireUser, settings: social.settings ?? createMemorySettingsStore(), log, generate: cvChatGenerate });
+  const publicCv = createPublicCv({ store: social.publicCvs ?? createMemoryPublicCvStore(), requireUser: auth.requireUser, trustProxy: config.trustProxy, log });
   const recruiterApi = createRecruiter({ requireUser: auth.requireUser, social, log, store, media });
 
   const cors = (req) => {
@@ -146,9 +151,11 @@ export function createApp(
       return;
     }
     if (await auth.handle(req, res, path)) return;
+    if (await cvChat.handle(req, res, path)) return; // before admin: owns /api/admin/ai/*
     if (await admin.handle(req, res, path, url)) return;
     if (await recruiterApi.handle(req, res, path)) return;
     if (await media.handleLocal(req, res, url)) return;
+    if (await publicCv.handle(req, res, path)) return;
     if (await socialApi.handle(req, res, path, url)) return;
 
     // Server logs (admin only): GET /api/logs?since=&level=&q=&limit=
@@ -280,6 +287,8 @@ export function createApp(
         signaling.close();
         auth.close();
         chatPosts.close();
+        cvChat.close();
+        publicCv.close();
         server.close(() => resolve());
       }),
   };

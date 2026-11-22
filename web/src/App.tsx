@@ -5,6 +5,8 @@ import { CallingContext, IncomingCallModal } from './calling';
 import { AdminApp } from './components/admin/AdminApp';
 import { RecruiterApp } from './components/admin/RecruiterApp';
 import { CareerApp } from './components/career/CareerApp';
+import { PublicCvPage, publicCvSlug } from './components/career/PublicCvPage';
+import { ProfileProvider } from './profile/ProfileContext';
 import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
 import { Shell, useRoute } from './components/Shell';
@@ -13,6 +15,9 @@ import { PresenceProvider, usePresence, type PresenceMessage } from './presence'
 
 export function App() {
   const { status } = useAuth();
+  // Public CV links (<app>/<mobile number>) are open to everyone, signed in or not.
+  const cvSlug = publicCvSlug(location.pathname);
+  if (cvSlug) return <PublicCvPage slug={cvSlug} />;
   if (status === 'checking') {
     return (
       <div className="splash" aria-busy="true">
@@ -172,7 +177,8 @@ function SignedInApp() {
   );
   return (
     <CallingContext.Provider value={{ callUser, joinRoom: join }}>
-      {content}
+      {/* One shared profile for every signed-in screen (Profile, Jobs, Resume, Feed…). */}
+      <ProfileProvider>{content}</ProfileProvider>
       {callToast && <div className="call-toast" role="status">{callToast}</div>}
       {incoming && <IncomingCallModal fromName={incoming.fromName} fromId={incoming.from} onAccept={acceptIncoming} onDecline={declineIncoming} />}
     </CallingContext.Provider>

@@ -10,11 +10,12 @@ const CONTENT_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain',
 };
 const ALLOWED: Record<'photo' | 'post' | 'cv', string[]> = {
   photo: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   post: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-  cv: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  cv: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'],
 };
 
 export function uploadContentType(file: File, kind: 'photo' | 'cv' | 'post'): string {

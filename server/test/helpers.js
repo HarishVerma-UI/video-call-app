@@ -22,7 +22,7 @@ export async function startTestApp(overrides = {}) {
     registerRateLimit: 500,
     ...overrides.config,
   };
-  const app = createApp(config, { store, messages, credentials: overrides.credentials, activity: overrides.activity });
+  const app = createApp(config, { store, messages, credentials: overrides.credentials, activity: overrides.activity, cvChatGenerate: overrides.cvChatGenerate });
   const addr = await app.listen(0, '127.0.0.1');
   const base = `127.0.0.1:${addr.port}`;
   return { app, store, messages, base, http: `http://${base}`, config };
