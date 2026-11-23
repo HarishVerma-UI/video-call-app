@@ -11,7 +11,7 @@ type DetailUser = AdminUser | DirectoryUser;
 const AV = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#008300', '#e34948'];
 const avColor = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return AV[h % AV.length]; };
 const initials = (n: string) => (n || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase();
-const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 const roleCls = (role?: UserRole | string) => {
   const r = normalizeRole(role || 'member');
   return r === 'super_admin' ? 'admin' : r === 'recruiter' ? 'recruiter' : 'member';
@@ -44,7 +44,7 @@ export function UserDetailDrawer({ user, onClose }: { user: DetailUser; onClose:
           <span className="aa-u__av aa-u__av--lg" style={{ background: avColor(user.name) }}>{initials(user.name)}</span>
           <div className="aa-drawer__who">
             <div className="aa-drawer__name">{user.name}</div>
-            <div className="aa-drawer__mail">{user.email || '—'}</div>
+            <div className="aa-drawer__mail">{user.email || '-'}</div>
             <span className={`aa-pill aa-pill--${roleCls(user.role)}`}>{ROLE_LABEL[normalizeRole(user.role || 'member')]}</span>
           </div>
           <button className="aa-iconbtn" onClick={onClose} aria-label="Close"><Ic d="M18 6 6 18M6 6l12 12" size={18} /></button>
@@ -55,7 +55,7 @@ export function UserDetailDrawer({ user, onClose }: { user: DetailUser; onClose:
 
           <dl className="aa-dlgrid">
             <Row label="Joined" value={fmtDate(user.createdAt)} />
-            <Row label="Last active" value={user.lastLoginAt ? fmtDate(user.lastLoginAt) : '—'} />
+            <Row label="Last active" value={user.lastLoginAt ? fmtDate(user.lastLoginAt) : '-'} />
             <Row label="Location" value={p?.location} />
             <Row label="Mobile" value={p?.mobile} />
             <Row label="Expected salary" value={p?.expectedSalary} />

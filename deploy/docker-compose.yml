@@ -45,6 +45,10 @@ services:
       LOCAL_MEDIA_DIR: /app/uploads
       TURN_URLS: turn:${DOMAIN}:3478?transport=udp,turn:${DOMAIN}:3478?transport=tcp,turns:${DOMAIN}:5349?transport=tcp
       TURN_SECRET: ${TURN_SECRET}
+      # AI CV builder (Google Gemini). Without a key the builder shows "not set up".
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-gemini-3.1-flash-lite}
       MAX_PEERS: ${MAX_PEERS:-10}
       CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
     volumes:

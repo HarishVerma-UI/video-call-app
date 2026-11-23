@@ -30,7 +30,7 @@ function MyCvCard() {
     setBusy(true); setMsg(null);
     try {
       const filled = await uploadCv(file);
-      setMsg({ ok: true, text: filled.length ? `CV uploaded — filled ${filled.join(', ')} from it.` : 'CV uploaded and attached to your profile.' });
+      setMsg({ ok: true, text: filled.length ? `CV uploaded, filled ${filled.join(', ')} from it.` : 'CV uploaded and attached to your profile.' });
     } catch (e) { setMsg({ ok: false, text: cvErrorText(e) }); }
     finally { setBusy(false); if (input.current) input.current.value = ''; }
   };
@@ -42,7 +42,7 @@ function MyCvCard() {
         <span>
           {meta.hasUploadedCV
             ? (profile?.cvUrl ? <a href={profile.cvUrl} target="_blank" rel="noopener noreferrer" data-testid="my-cv-link">{meta.fileName || 'Download CV'}</a> : meta.fileName || 'CV attached')
-            : 'Upload it once — we fill your profile and this builder from it, and use it for job applications.'}
+            : 'Upload it once, we fill your profile and this builder from it, and use it for job applications.'}
         </span>
         {msg && <span className={msg.ok ? 'cp-mycv__ok' : 'cp-mycv__err'} role="status">{msg.text}</span>}
       </div>
@@ -99,7 +99,7 @@ async function copyText(text: string): Promise<boolean> {
 function cvToText(cv: CvData, t: typeof CV_LABELS): string {
   const lines = [cv.name, cv.title, [cv.email, cv.phone, cv.location].filter(Boolean).join(' · '), '', t.summary.toUpperCase(), cv.summary, ''];
   lines.push(t.experience.toUpperCase());
-  cv.experience.forEach((e) => { lines.push(`${e.title} — ${e.company} (${[e.start, e.end].filter(Boolean).join('–')})`); if (e.description) lines.push(e.description); lines.push(''); });
+  cv.experience.forEach((e) => { lines.push(`${e.title}, ${e.company} (${[e.start, e.end].filter(Boolean).join('–')})`); if (e.description) lines.push(e.description); lines.push(''); });
   lines.push(t.education.toUpperCase());
   cv.education.forEach((e) => lines.push(`${e.degree}, ${e.school} ${e.year ?? ''}`.trim()));
   lines.push('', t.skills.toUpperCase(), cv.skills.join(', '));
@@ -134,10 +134,10 @@ function CvGeneratorPage() {
     if (meta.dirty && !confirm('Replace your unsaved changes with your saved profile?')) return;
     setSyncing(true); setMsg('');
     try { await pullFromProfile(); setMsg('Synced from your Huddle profile.'); }
-    catch { setMsg('Could not reach your profile — nothing changed.'); }
+    catch { setMsg('Could not reach your profile, nothing changed.'); }
     finally { setSyncing(false); }
   };
-  const copy = async () => setMsg((await copyText(cvToText(cv, t))) ? 'CV text copied to clipboard.' : 'Copy failed — select the preview manually.');
+  const copy = async () => setMsg((await copyText(cvToText(cv, t))) ? 'CV text copied to clipboard.' : 'Copy failed, select the preview manually.');
 
   const setExp = (i: number, k: keyof Experience, v: string) => setCv((c) => ({ ...c, experience: c.experience.map((e, j) => j === i ? { ...e, [k]: v } : e) }));
   const addExp = () => setCv((c) => ({ ...c, experience: [...c.experience, { title: '', company: '', start: '', end: '', description: '' }] }));
@@ -198,7 +198,7 @@ function CvGeneratorPage() {
 
           <div className="aa-card aa-form cp-card">
             <div className="aa-card__head"><h3>Experience</h3><button className="aa-btn aa-btn--sm" onClick={addExp}><Ic d={ICON.plus} size={14} /> Add</button></div>
-            {cv.experience.length === 0 && <p className="cp-empty-note">No experience yet — add a role or sync from your profile.</p>}
+            {cv.experience.length === 0 && <p className="cp-empty-note">No experience yet, add a role or sync from your profile.</p>}
             {cv.experience.map((e, i) => (
               <div key={i} className="cp-entry">
                 <div className="cp-entry__head"><span>Role {i + 1}</span><button className="aa-btn aa-btn--sm aa-btn--danger" onClick={() => delExp(i)}><Ic d={ICON.trash} size={13} /> Remove</button></div>
@@ -231,7 +231,7 @@ function CvGeneratorPage() {
 
         <div className="cp-stack cp-preview-column">
           <div className="cp-preview-heading cp-noprint">
-            <div><h3>Live preview</h3><p>Your changes update the CV instantly — ATS score <b data-testid="gen-ats">{ats.score}</b>.</p></div>
+            <div><h3>Live preview</h3><p>Your changes update the CV instantly. ATS score <b data-testid="gen-ats">{ats.score}</b>.</p></div>
             <span>{activeTemplate.name}</span>
           </div>
           <div className="cp-preview-wrap" ref={previewRef}>
@@ -275,13 +275,13 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
   const fresh = useCallback((): ChatState => {
     const draft = cv;
     const first = (user?.name ?? '').split(' ')[0];
-    const known = draft.title ? ` I can see you're a ${draft.title} — I'll use what's on your profile.` : '';
+    const known = draft.title ? ` I can see you're a ${draft.title}, I'll use what's on your profile.` : '';
     return {
-      messages: [{ role: 'assistant', text: `Hi${first ? ` ${first}` : ''}! 👋 I'm your AI CV Co-Pilot. Answer 3 quick questions — or just tap a suggestion — and I'll write a job-ready CV for you.${known}\n\nFirst: what job are you looking for?` }],
+      messages: [{ role: 'assistant', text: `Hi${first ? ` ${first}` : ''}! 👋 I'm your AI CV Co-Pilot. Answer 3 quick questions (or just tap a suggestion) and I'll write a job-ready CV for you.${known}\n\nFirst: what job are you looking for?` }],
       progress: draft.experience.length ? 25 : 5,
       suggestions: draft.title
-        ? [draft.title, 'A senior role in my field', 'Switch to a new field', 'Not sure yet — help me']
-        : ['Customer support / BPO', 'Software engineer', 'Sales executive', 'Nurse / healthcare', 'Chef / hospitality', 'Fresher — first job'],
+        ? [draft.title, 'A senior role in my field', 'Switch to a new field', 'Not sure yet, help me']
+        : ['Customer support / BPO', 'Software engineer', 'Sales executive', 'Nurse / healthcare', 'Chef / hospitality', 'Fresher / first job'],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.name, cv.title, cv.experience.length]);
@@ -315,7 +315,7 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
 
   const openInGenerator = () => go('cv'); // same masterCV — nothing to copy
   const saveToProfile = async () => {
-    try { await saveMaster(); setNote('Saved to your profile — Jobs, applications and every Resume tool now use it.'); }
+    try { await saveMaster(); setNote('Saved to your profile. Jobs, applications and every Resume tool now use it.'); }
     catch (e) { setErr(cvErrorText(e)); }
   };
   const restart = () => { setState(fresh()); setErr(''); setNote(''); setInput(''); };
@@ -331,7 +331,7 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
     <div className="cp-grid cp-chat-grid">
       <div className="aa-card cp-chat" data-testid="cv-chat">
         <div className="cp-chat__head">
-          <div><strong>AI CV Builder</strong><span>Answer a few questions — your CV writes itself on the right.</span></div>
+          <div><strong>AI CV Builder</strong><span>Answer a few questions, your CV writes itself on the right.</span></div>
           <button className="aa-btn aa-btn--sm" onClick={restart} disabled={busy}><Ic d={ICON.sync} size={14} /> Start over</button>
         </div>
         <div className="cp-chat__list" ref={listRef} aria-live="polite">
@@ -340,7 +340,7 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
           ))}
           {busy && (
             <div className="cp-msg cp-msg--assistant cp-msg--typing" aria-label="Writing">
-              <span /><span /><span />{slow && <em>Polishing your CV — this can take up to a minute…</em>}
+              <span /><span /><span />{slow && <em>Polishing your CV, this can take up to a minute…</em>}
             </div>
           )}
         </div>
@@ -357,7 +357,7 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
           />
           <button className="aa-btn aa-btn--primary" type="submit" disabled={busy || !input.trim()} data-testid="chat-send"><Ic d={ICON.next} size={15} /> Send</button>
         </form>
-        <p className="cp-chat__fine">AI suggestions — check every detail before you use your CV. It won’t invent jobs, dates or numbers.</p>
+        <p className="cp-chat__fine">AI suggestions: check every detail before you use your CV. It won’t invent jobs, dates or numbers.</p>
       </div>
 
       <div className="cp-stack">
@@ -373,7 +373,7 @@ function AiCvChatPage({ go }: { go: (s: Section) => void }) {
           <div className="cp-chat-cv__bar"><span style={{ width: `${state.progress}%` }} /></div>
           {placeholders.length > 0 && (
             <p className="aa-msg cp-chat-cv__todo" data-testid="chat-placeholders">
-              Replace {placeholders.length} placeholder{placeholders.length > 1 ? 's' : ''} like <b>{placeholders[0]}</b> with your real numbers before you download or share — tell the AI or edit them in the CV Generator.
+              Replace {placeholders.length} placeholder{placeholders.length > 1 ? 's' : ''} like <b>{placeholders[0]}</b> with your real numbers before you download or share, tell the AI or edit them in the CV Generator.
             </p>
           )}
           {note && <p className="aa-msg aa-msg--ok">{note}</p>}
@@ -642,7 +642,7 @@ function ExpertBookingModal({ expertId, setExpertId, mode, bookings, onClose, on
         <form className="cp-modal-form" onSubmit={submitBooking}>
           <Field label="Choose an expert">
             <select value={expertId} onChange={(event) => setExpertId(event.target.value)} aria-label="Choose an expert">
-              {CV_EXPERTS.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.industry} · {money(item.price, 'INR', false)}</option>)}
+              {CV_EXPERTS.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.industry} · {money(item.price, 'INR', false)}</option>)}
             </select>
           </Field>
           <div className="cp-modal-expert"><span className={`cp-expert-avatar cp-expert-avatar--${expert.color}`}>{expert.initials}</span><div><strong>{expert.name}</strong><span>{expert.role} · ★ {expert.rating}</span></div><b>{money(expert.price, 'INR', false)}</b></div>
@@ -678,12 +678,12 @@ const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = 
   { id: 'sync', label: 'My Profile & Sync', icon: ICON.sync, group: 'Settings' },
 ];
 const TITLES: Record<Section, [string, string]> = {
-  dashboard: ['Career Dashboard', 'Upload, score and sync your CV — every tool uses the same copy'],
+  dashboard: ['Career Dashboard', 'Upload, score and sync your CV, every tool uses the same copy'],
   cv: ['CV Generator', 'Pick a template, edit live, export'],
-  role: ['AI CV Builder', 'Chat with AI — your CV builds itself as you answer'],
+  role: ['AI CV Builder', 'Chat with AI, your CV builds itself as you answer'],
   expert: ['Expert CV Review', 'Co-build or refine your CV in a focused 30-minute session'],
   experts: ['Experts Directory', 'Explore career specialists across industries'],
-  sync: ['My Profile & Sync', 'Edit your details once — save to sync everywhere'],
+  sync: ['My Profile & Sync', 'Edit your details once, save to sync everywhere'],
 };
 function sectionFromPath(): Section {
   const seg = location.pathname.split('/').filter(Boolean);

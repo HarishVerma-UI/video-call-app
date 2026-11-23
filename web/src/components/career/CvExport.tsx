@@ -83,7 +83,7 @@ export async function downloadPdf(cv: CvData, tpl: TemplateId) {
     pdf.setPage(1);
     pdf.setFontSize(6);
     pdf.text(pdf.splitTextToSize(plainText(cv), pageW - 20), 10, 10, { renderingMode: 'invisible' });
-    pdf.setProperties({ title: `${cv.name || 'CV'} — CV`, subject: cv.title, creator: 'Huddle Resume' });
+    pdf.setProperties({ title: `${cv.name || 'CV'} | CV`, subject: cv.title, creator: 'Huddle Resume' });
     pdf.save(`${fileBase(cv)}-CV.pdf`);
   } finally {
     root.unmount();
@@ -126,14 +126,14 @@ export function CvExportBar({ cv, tpl }: { cv: CvData; tpl: TemplateId }) {
   };
   const unpublish = async () => {
     setBusy('link'); setMsg(null);
-    try { await api.unpublishCv(); setPublished(null); setMsg({ ok: true, text: 'Link turned off — nobody can open it now.' }); }
+    try { await api.unpublishCv(); setPublished(null); setMsg({ ok: true, text: 'Link turned off, nobody can open it now.' }); }
     catch (e) { setMsg({ ok: false, text: errText(e) }); }
     finally { if (mounted.current) setBusy(''); }
   };
   const copy = async () => {
     if (!published) return;
     try { await navigator.clipboard.writeText(publicCvUrl(published.slug)); setCopied(true); setTimeout(() => setCopied(false), 1500); }
-    catch { setMsg({ ok: false, text: 'Copy failed — select the link and copy it.' }); }
+    catch { setMsg({ ok: false, text: 'Copy failed, select the link and copy it.' }); }
   };
   const digits = cv.phone.replace(/\D/g, '');
   const numberChanged = !!published && digits !== published.slug;
@@ -162,7 +162,7 @@ export function CvExportBar({ cv, tpl }: { cv: CvData; tpl: TemplateId }) {
               </div>
               <p className="cp-help">
                 Anyone with this link can see the published copy, including your email and phone.
-                {numberChanged ? ' Your phone number changed — updating will move the link to the new number.' : ' Edits here don’t go live until you update.'}
+                {numberChanged ? ' Your phone number changed, updating will move the link to the new number.' : ' Edits here don’t go live until you update.'}
               </p>
               <div className="cp-export__btns">
                 <button className="aa-btn aa-btn--primary aa-btn--sm" onClick={() => void publish()} disabled={!!busy} data-testid="cv-publish">{busy === 'link' ? 'Saving…' : 'Update public CV'}</button>
@@ -172,11 +172,11 @@ export function CvExportBar({ cv, tpl }: { cv: CvData; tpl: TemplateId }) {
           ) : (
             <>
               <p className="cp-help">
-                Share your CV with anyone — no sign-in needed. Your link will be
+                Share your CV with anyone, no sign-in needed. Your link will be
                 {' '}<strong>{digits.length >= 7 ? publicCvUrl(digits) : `${location.origin}/<your mobile number>`}</strong>.
                 It shows your email and phone. You can turn it off any time.
               </p>
-              {digits.length < 7 && <p className="cp-help cp-export__warn">Add your mobile number to the CV first — it becomes your link.</p>}
+              {digits.length < 7 && <p className="cp-help cp-export__warn">Add your mobile number to the CV first, it becomes your link.</p>}
               <button className="aa-btn aa-btn--primary aa-btn--sm" onClick={() => void publish()} disabled={!!busy || digits.length < 7} data-testid="cv-publish">{busy === 'link' ? 'Publishing…' : 'Publish my CV'}</button>
             </>
           )}

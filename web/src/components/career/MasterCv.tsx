@@ -153,7 +153,7 @@ export function MasterCvProvider({ children }: { children: ReactNode }) {
     try {
       if (state?.meta.dirty) sessionStorage.setItem(storeKey, JSON.stringify(state));
       else sessionStorage.removeItem(storeKey);
-    } catch { /* storage blocked — unsaved work just won't survive a reload */ }
+    } catch { /* storage blocked, unsaved work just won't survive a reload */ }
   }, [state, storeKey]);
 
   const setCv = useCallback((fn: (c: CvData) => CvData, source: CvSource = 'edited') => {

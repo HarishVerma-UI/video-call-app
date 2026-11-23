@@ -46,7 +46,7 @@ function PreferencesCard() {
         <label className="profile-prefs__field">
           <span>{t('settings.prefs.currency')}</span>
           <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)} data-testid="pref-currency">
-            {(Object.keys(CURRENCIES) as CurrencyCode[]).map((c) => <option key={c} value={c}>{c} — {CURRENCIES[c].label}</option>)}
+            {(Object.keys(CURRENCIES) as CurrencyCode[]).map((c) => <option key={c} value={c}>{c} · {CURRENCIES[c].label}</option>)}
           </select>
         </label>
       </div>

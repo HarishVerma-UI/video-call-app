@@ -47,7 +47,7 @@ if (social && adminUser) {
   log(`social ensured profile for admin account ${adminUser.email ?? adminUser.id}`);
 }
 if (config.isProd && config.adminPassword === 'admin')
-  console.warn('  ⚠  Admin password is the default "admin" — set ADMIN_PASSWORD to something private.');
+  console.warn('  ⚠  Admin password is the default "admin", set ADMIN_PASSWORD to something private.');
 
 const app = createApp(config, { store, messages, activity, social, log });
 await app.listen();
@@ -63,7 +63,7 @@ console.log(`
   Local:      http://localhost:${config.port}
   WebSocket:  ws://localhost:${config.port}/ws
 ${lanIps.map((ip) => `  Network:    http://${ip}:${config.port}   (phone: ws://${ip}:${config.port}/ws)`).join('\n')}
-  Database:   ${store.kind === 'mongodb' ? `MongoDB (${config.mongoDb})` : 'IN-MEMORY — accounts are lost on restart. Set MONGODB_URI to persist.'}
+  Database:   ${store.kind === 'mongodb' ? `MongoDB (${config.mongoDb})` : 'IN-MEMORY, accounts are lost on restart. Set MONGODB_URI to persist.'}
   Max people per room: ${config.maxPeersPerRoom}
 ${config.usingDevSecret ? '  ⚠  Using the development JWT secret. Set JWT_SECRET before deploying.\n' : ''}`);
 

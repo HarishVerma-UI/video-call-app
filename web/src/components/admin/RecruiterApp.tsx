@@ -20,7 +20,7 @@ const AV = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#
 const avColor = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return AV[h % AV.length]; };
 const initials = (n: string) => (n || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase();
 const fmt = (n: number) => n.toLocaleString('en-US');
-const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 function ago(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 60) return 'just now';
@@ -270,11 +270,11 @@ function CandidatesPage() {
                       <span className="aa-u__av" style={{ background: avColor(a.userName) }}>{initials(a.userName)}</span>
                       <div>
                         <div className="aa-u__name">{a.userName}</div>
-                        <div className="aa-u__mail">{a.profile?.headline || (a.profile?.skills?.length ? a.profile.skills.slice(0, 3).join(' · ') : '—')}</div>
+                        <div className="aa-u__mail">{a.profile?.headline || (a.profile?.skills?.length ? a.profile.skills.slice(0, 3).join(' · ') : '-')}</div>
                       </div>
                     </div>
                   </td>
-                  <td>{a.job ? <><div className="aa-u__name">{a.job.title}</div><div className="aa-u__mail">{a.job.company}</div></> : '—'}</td>
+                  <td>{a.job ? <><div className="aa-u__name">{a.job.title}</div><div className="aa-u__mail">{a.job.company}</div></> : '-'}</td>
                   <td><span className={`aa-pill aa-pill--${STATUS_PILL[a.status] || 'muted'}`}>{STATUS_LABEL[a.status] || a.status}</span></td>
                   <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(a.createdAt)}</td>
                   <td>
@@ -327,10 +327,10 @@ function PeoplePage() {
                 <tr key={u.id} onClick={() => setDetail(u)} style={{ cursor: 'pointer' }}>
                   <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
                   <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span></td>
-                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 220 }}>{u.profile?.headline || '—'}</div></td>
-                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.location || '—'}</td>
-                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '—'}</td>
-                  <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>—</span>}</td>
+                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 220 }}>{u.profile?.headline || '-'}</div></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.location || '-'}</td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '-'}</td>
+                  <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>-</span>}</td>
                   <td onClick={(e) => e.stopPropagation()}><div className="aa-rowact"><button className="aa-iconbtn" title="View details" onClick={() => setDetail(u)}><Ic d={ICON.eye} size={15} /></button></div></td>
                 </tr>
               ))}
@@ -476,7 +476,7 @@ function JobImport({ api }: { api: ApiClient }) {
   };
   return (
     <div className="aa-card aa-form">
-      <p className="aa-form__hint">Paste a JSON array of jobs (each needs at least <code>title</code> and <code>company</code>). Verify first, then import — each is posted under your account.</p>
+      <p className="aa-form__hint">Paste a JSON array of jobs (each needs at least <code>title</code> and <code>company</code>). Verify first, then import, each is posted under your account.</p>
       <textarea className="aa-json" rows={12} value={raw} onChange={(e) => { setRaw(e.target.value); setParsed(null); setResult(null); }} spellCheck={false}
         placeholder={'[\n  {\n    "title": "Senior Angular Developer",\n    "company": "Infosys",\n    "category": "tech",\n    "country": "Bengaluru, IN",\n    "skills": ["Angular", "TypeScript"],\n    "applyUrl": "https://..."\n  }\n]'} />
       {err && <p className="aa-msg">{err}</p>}
@@ -510,7 +510,7 @@ const TITLES: Record<Section, [string, string]> = {
   jobs: ['My Jobs', 'Every role you’ve posted'],
   'create-job': ['Post a Job', 'Create a job or import several from JSON'],
   candidates: ['Candidates', 'Everyone who applied to your roles'],
-  people: ['People', 'Browse every member — view only'],
+  people: ['People', 'Browse every member (view only)'],
 };
 
 function sectionFromPath(): Section {

@@ -159,7 +159,7 @@ export function createAuth(opts) {
       user = await opts.store.create({ name, email, passwordHash: await hashPassword(password), recruiterApplication });
     } catch (err) {
       if (err instanceof DuplicateEmailError)
-        throw new HttpError(409, 'An account with this email already exists.', { fields: { email: 'Already registered — try signing in.' } });
+        throw new HttpError(409, 'An account with this email already exists.', { fields: { email: 'Already registered. Try signing in.' } });
       throw err;
     }
     opts.log?.(`auth   registered ${email}`);

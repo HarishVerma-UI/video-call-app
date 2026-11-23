@@ -114,7 +114,7 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
       const { profile, filled, lowConfidence } = await uploadCv(file, fields());
       fill(profile);
       if (filled.length) setMsg({ ok: true, text: `CV uploaded and saved. Filled in from your CV: ${filled.join(', ')}. Check the details below.` });
-      else if (lowConfidence) setMsg({ ok: true, text: 'CV uploaded and saved, but we couldn’t read details from it automatically — add them below and Save.' });
+      else if (lowConfidence) setMsg({ ok: true, text: 'CV uploaded and saved, but we couldn’t read details from it automatically, add them below and Save.' });
       else setMsg({ ok: true, text: 'CV uploaded and saved. Your profile already had these details, so nothing was changed.' });
     } catch (err) {
       setMsg({ ok: false, text: cvErrorText(err) });
@@ -192,7 +192,7 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
 
       {/* ─ Section: CV / Resume ─ */}
       {showBasics && <section className="pp-section" id="sec-cv">
-        <div className="pp-section__head"><h3>CV / Resume</h3><span className="pp-section__hint">Upload once — we pre-fill the sections below</span></div>
+        <div className="pp-section__head"><h3>CV / Resume</h3><span className="pp-section__hint">Upload once, we pre-fill the sections below</span></div>
         <div className="pp-cv">
           <span>
             {p.hasCv ? 'CV: ' : 'No CV uploaded'}
@@ -205,7 +205,7 @@ export function ProfessionalProfile({ profileTab, onCompletionChange }: { profil
           <button type="button" className="btn btn--secondary btn--small" disabled={busyCv} onClick={() => cvInput.current?.click()} title="We'll read your CV and pre-fill your profile for you to review">
             {busyCv ? 'Reading CV…' : p.hasCv ? 'Replace CV & auto-fill' : 'Upload CV & auto-fill'}
           </button>
-          <input ref={cvInput} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onCv(e)} />
+          <input ref={cvInput} type="file" accept=".pdf,.doc,.docx,.txt" hidden onChange={(e) => void onCv(e)} />
         </div>
       </section>}
 

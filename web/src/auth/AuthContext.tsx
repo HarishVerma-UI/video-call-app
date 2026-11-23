@@ -93,6 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   tokenRef.current = session?.token ?? null;
 
   const logout = useCallback((reason?: string) => {
+    // "/" is the public landing page when signed out — send members to the sign-in form instead.
+    if (location.pathname === '/') history.replaceState(null, '', '/login');
     save(null);
     setSession(null);
     setStatus('signed-out');

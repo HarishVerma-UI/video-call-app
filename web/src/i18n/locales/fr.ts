@@ -206,7 +206,7 @@ export const fr: Messages = {
     completeProfile: 'Compléter mon profil',
     expertReview: 'Relecture de CV de 30 min avec un expert',
     lockCv: 'Ajoutez votre CV pour postuler',
-    lockProfile: 'Profil {{pct}} % — 70 % requis',
+    lockProfile: 'Profil {{pct}} % (70 % requis)',
     blockerTitle: 'Presque prêt : complétez votre profil pour postuler',
     blockerBody: 'En postulant à {{title}} chez {{company}}, l’employeur voit votre profil Huddle et votre CV. Terminez d’abord :',
     profileGate: 'Profil {{pct}} % (70 % requis)',

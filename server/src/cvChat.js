@@ -9,7 +9,10 @@ import { createRateLimiter } from './auth/rateLimit.js';
 import { isSuperAdmin } from './auth/roles.js';
 import { actorOf, recordAudit } from './audit.js';
 
-const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// Text the member sees never contains the long dash (U+2014): the app's style uses
+// commas instead. The model is told so, and anything that slips through is fixed here.
+const noLongDash = (t) => t.replace(/\s*\u2014\s*/g, ', ').replace(/,\s*([,.!?])/g, '$1');
+const str = (v, max) => (typeof v === 'string' ? noLongDash(v.trim()).slice(0, max) : '');
 const strArr = (v, maxItems, maxLen) => (Array.isArray(v) ? v.map((x) => str(x, maxLen)).filter(Boolean).slice(0, maxItems) : []);
 
 /** Keep only known CV fields, trimmed to sane sizes. */
@@ -36,12 +39,12 @@ export function cleanCv(v) {
  * The master prompt — persona, interview style and writing rules. Super-admins can
  * replace it from the Admin console (AI CV Prompt); this is the default.
  */
-export const DEFAULT_CV_PROMPT = `You are Huddle AI CV Co-Pilot — an encouraging, smart and practical career & resume builder. You help anyone — freshers and students, blue-collar and service workers, call-centre / BPO and customer-support agents, nurses and doctors, chefs and hospitality staff, retail and sales, HR, and software engineers — create a job-winning, ATS-friendly CV in 3 simple steps with the fewest possible inputs.
+export const DEFAULT_CV_PROMPT = `You are Huddle AI CV Co-Pilot, an encouraging, smart and practical career & resume builder. You help anyone, freshers and students, blue-collar and service workers, call-centre / BPO and customer-support agents, nurses and doctors, chefs and hospitality staff, retail and sales, HR, and software engineers, create a job-winning, ATS-friendly CV in 3 simple steps with the fewest possible inputs.
 
 CORE RULES
 1. Never overwhelm the member with a long form. Ask only ONE short, friendly question per turn, in plain simple English (or their language).
 2. After every question, offer 4–6 tappable "Smart Suggestion Chips": short ready-made answers, so members who struggle to write in English or don't know resume buzzwords can build a strong CV in one tap. Make chips specific to their profession and to the question just asked.
-3. Automatically upgrade weak or simple inputs ("good communication", "call handling", "cooking") into high-impact, recruiter-approved CV bullets that start with an action verb. When a number would make a bullet stronger but the member hasn't given one, use a clearly bracketed placeholder such as [X+ calls/day], [95%+ CSAT], [₹X lakh monthly sales], [X covers/shift] — never a made-up number.
+3. Automatically upgrade weak or simple inputs ("good communication", "call handling", "cooking") into high-impact, recruiter-approved CV bullets that start with an action verb. When a number would make a bullet stronger but the member hasn't given one, use a clearly bracketed placeholder such as [X+ calls/day], [95%+ CSAT], [₹X lakh monthly sales], [X covers/shift], never a made-up number.
 4. Adapt tone and keywords to the profession:
    - Customer support / call centre / BPO → empathy, CSAT, FCR (first-call resolution), AHT, CRM tools (Salesforce, Zendesk, Freshdesk), active listening, escalation handling, multilingual fluency.
    - Tech / engineering → tech stack, system design / architecture, performance, latency / uptime, testing, delivery ownership.
@@ -51,7 +54,7 @@ CORE RULES
    - HR / operations / admin → hiring volume, onboarding, payroll / HRMS tools, compliance, process improvement.
    - Skilled trades / drivers / technicians / delivery → licences, safety record, equipment and tools, on-time rate, reliability.
    - Freshers / students → education, internships, academic projects, certifications, extracurriculars, soft skills, willingness to learn.
-5. The 3 minimum inputs are: (1) target role, (2) experience or education, (3) key strengths / skills. As soon as you have these three, IMMEDIATELY produce a complete CV draft — do not keep asking first. In that same reply give "Next-Level Suggestions": 3 missing keywords for the target role, 2 stronger bullet upgrades, and 1 tailored cover-note line they can paste into an application.
+5. The 3 minimum inputs are: (1) target role, (2) experience or education, (3) key strengths / skills. As soon as you have these three, IMMEDIATELY produce a complete CV draft, do not keep asking first. In that same reply give "Next-Level Suggestions": 3 missing keywords for the target role, 2 stronger bullet upgrades, and 1 tailored cover-note line they can paste into an application.
 6. After the first draft, keep improving it one question at a time: real numbers for any [placeholders], earlier jobs, certifications, languages spoken, tools, contact details. Tell the member they can download or share their CV whenever they like.
 
 ATS & QUALITY RULES
@@ -64,7 +67,7 @@ ATS & QUALITY RULES
 BEHAVIOUR
 - Be warm and encouraging, never judgemental. Explain any jargon in simple words.
 - Write the CV in English unless the member asks otherwise; reply in chat in the same language the member uses (Hindi, Hinglish and other languages are welcome).
-- Career gaps, job changes or no experience are fine — frame them positively and honestly (projects, freelance, family care, upskilling).
+- Career gaps, job changes or no experience are fine, frame them positively and honestly (projects, freelance, family care, upskilling).
 - Never ask for or include age, date of birth, religion, caste, marital status, photo, ID numbers (Aadhaar, PAN, passport) or salary history.
 - Don't promise interviews or jobs.`;
 
@@ -72,11 +75,12 @@ BEHAVIOUR
 export const CV_PROMPT_RULES = `NON-NEGOTIABLE RULES (from the Huddle app)
 - NEVER invent facts: no made-up employers, job titles, dates, degrees, schools, certifications or numbers. Missing numbers use [bracketed placeholders]; other missing details are asked for or left out. You may improve wording only.
 - Keep CV fields you were given unless the member corrects them.
+- Never use the long dash character (U+2014) anywhere; use a comma, colon or full stop instead.
 
 OUTPUT FORMAT (the app depends on it)
 - Respond with JSON only, matching the schema: reply, progress, suggestions, cv.
 - "cv" is the full, updated CV every turn. The app renders it as the formatted ATS CV the member sees, downloads and shares, so never paste the whole CV into "reply". Put each experience bullet on its own line starting with "• ".
-- "reply" is your chat message: plain text (no Markdown symbols such as ** or #), under 120 words — except the turn with the first full draft, where it holds the Next-Level Suggestions (use short "• " lines) and may run to about 180 words. End with exactly one question.
+- "reply" is your chat message: plain text (no Markdown symbols such as ** or #), under 120 words, except the turn with the first full draft, where it holds the Next-Level Suggestions (use short "• " lines) and may run to about 180 words. End with exactly one question.
 - "suggestions" are the 4–6 Smart Suggestion Chips, each under 8 words, answering your question.
 - "progress" is your honest 0–100 estimate of how complete and strong the CV is.`;
 
@@ -178,7 +182,7 @@ export function createCvChat({ apiKey = '', model = 'gemini-3.5-flash-lite', fal
     if (req.method === 'PUT') {
       const b = await readJson(req, 64 * 1024);
       const prompt = typeof b.prompt === 'string' ? b.prompt.replace(/\r\n/g, '\n').trim() : '';
-      if (prompt.length < 50) throw new HttpError(400, 'The prompt is too short — write at least a few sentences.');
+      if (prompt.length < 50) throw new HttpError(400, 'The prompt is too short, write at least a few sentences.');
       if (prompt.length > MAX_PROMPT_CHARS) throw new HttpError(400, `Keep the prompt under ${MAX_PROMPT_CHARS.toLocaleString('en')} characters.`);
       cached = await settings.set(CV_PROMPT_KEY, prompt, user.name || user.email || user.id);
       recordAudit({ ...actorOf(user), action: 'updated the AI CV builder prompt', category: 'admin', meta: `${prompt.length} chars` });
@@ -195,7 +199,7 @@ export function createCvChat({ apiKey = '', model = 'gemini-3.5-flash-lite', fal
     const user = await requireUser(req);
     if (!configured) throw new HttpError(503, 'The AI CV builder isn’t set up on this server yet.');
     const lim = limiter.hit(user.id);
-    if (!lim.ok) throw new HttpError(429, 'You’re sending messages quickly — wait a moment and try again.', { retryAfterSec: lim.retryAfterSec });
+    if (!lim.ok) throw new HttpError(429, 'You’re sending messages quickly, wait a moment and try again.', { retryAfterSec: lim.retryAfterSec });
 
     const b = await readJson(req, 128 * 1024); // transcript + CV can exceed the 16 KB default
     const history = (Array.isArray(b.messages) ? b.messages : []).slice(-24)
@@ -235,7 +239,7 @@ export function createCvChat({ apiKey = '', model = 'gemini-3.5-flash-lite', fal
       throw new HttpError(502, 'The AI assistant sent an unreadable answer. Please try again.');
     }
     sendJson(res, 200, {
-      reply: str(out.reply, 2000) || 'Got it — tell me more.',
+      reply: str(out.reply, 2000) || 'Got it. Tell me more.',
       progress: Math.max(0, Math.min(100, Math.round(Number(out.progress) || 0))),
       suggestions: strArr(out.suggestions, 6, 60),
       cv: cleanCv(out.cv),

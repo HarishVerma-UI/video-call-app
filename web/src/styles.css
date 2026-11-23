@@ -4078,3 +4078,6 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
   .feed-tabs { align-items: center; }
   .feed-tabs__count { font-size: 0.63rem; }
 }
+
+/* Sign-in card: the logo links back to the public home page. */
+.auth__brandmark--link { color: inherit; text-decoration: none; }

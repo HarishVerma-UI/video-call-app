@@ -36,7 +36,7 @@ export function StudioStatus({ go }: { go: (s: StudioSection) => void }) {
         {meta.dirty && <em className="st-dot" title="Unsaved changes">Unsaved</em>}
       </button>
       <span className={`st-badge st-badge--${atsTone(ats.score)}`} data-testid="status-ats" title="Live ATS score">ATS <b>{ats.score}</b></span>
-      <span className={`st-badge st-badge--${ready ? 'good' : readiness >= 50 ? 'warn' : 'crit'}`} data-testid="status-ready" title={`Job readiness — apply needs ${READY_GATE}% and a CV file`}>
+      <span className={`st-badge st-badge--${ready ? 'good' : readiness >= 50 ? 'warn' : 'crit'}`} data-testid="status-ready" title={`Job readiness: apply needs ${READY_GATE}% and a CV file`}>
         Ready <b>{readiness}%</b><small>/ {READY_GATE}%</small>
       </span>
     </div>
@@ -68,7 +68,7 @@ function useScanRunner() {
   };
   const scanFile = (file: File) => run('file', file.name, async () => {
     const filled = await uploadCv(file);
-    return filled.length ? `Saved to your profile — filled ${filled.join(', ')} from your CV.` : 'Saved to your profile. Jobs and applications now use this CV.';
+    return filled.length ? `Saved to your profile, filled ${filled.join(', ')} from your CV.` : 'Saved to your profile. Jobs and applications now use this CV.';
   });
   const scanSample = (id: string) => {
     const p = PERSONAS.find((x) => x.id === id);
@@ -76,7 +76,7 @@ function useScanRunner() {
     if (p) run('sample', `Sample · ${p.label}`, async () => {
       await new Promise((r) => { timers.current.push(window.setTimeout(r, (SCAN_STAGES.length - 1) * STAGE_MS + 250)); });
       loadSample(id);
-      return 'Sample loaded into the studio — not saved to your profile.';
+      return 'Sample loaded into the studio, not saved to your profile.';
     });
   };
   return { scan, setScan, scanFile, scanSample };
@@ -92,7 +92,7 @@ function ScanPanel({ scan, onClose }: { scan: ScanState; onClose: () => void }) 
       <div className="st-scan__body">
         <div className="st-scan__head">
           <strong>{scan.error ? 'Scan failed' : scan.done ? 'Scan complete' : 'Optical CV scan'}</strong>
-          <span className="st-scan__pct" data-testid="scan-pct">{scan.error ? '—' : `${scan.pct}%`}</span>
+          <span className="st-scan__pct" data-testid="scan-pct">{scan.error ? '-' : `${scan.pct}%`}</span>
         </div>
         <span className="st-scan__file">{scan.label}</span>
         <div className="st-scan__bar"><span style={{ width: `${scan.error ? 100 : scan.pct}%` }} /></div>
@@ -127,7 +127,7 @@ function UploadCard() {
   return (
     <section className="aa-card st-card st-upload" data-testid="cv-upload-card">
       <div className="st-card__head">
-        <div><h3>Your CV</h3><p>Upload once — we read it, score it and sync your profile, jobs and every tool here.</p></div>
+        <div><h3>Your CV</h3><p>Upload once, we read it, score it and sync your profile, jobs and every tool here.</p></div>
         {meta.hasUploadedCV && <span className="st-pill st-pill--ok"><I d={P.check} size={12} /> {meta.fileName}</span>}
       </div>
       {scan ? <ScanPanel scan={scan} onClose={() => setScan(null)} /> : (
@@ -189,7 +189,7 @@ export function SkillEditor({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`st-skills${compact ? ' st-skills--compact' : ''}`}>
       <div className="st-chips" data-testid="skill-chips">
-        {cv.skills.length === 0 && <span className="st-muted">No skills yet — add a few below.</span>}
+        {cv.skills.length === 0 && <span className="st-muted">No skills yet, add a few below.</span>}
         {cv.skills.map((s) => (
           <span key={s} className="st-chip-skill">{s}<button onClick={() => remove(s)} aria-label={`Remove ${s}`}><I d={P.x} size={11} /></button></span>
         ))}
@@ -238,11 +238,11 @@ function AtsAnalyzer() {
             </div>
           </div>
           <div className="st-kw">
-            <h4>Missing — tap to add <span>{ats.missing.length}</span></h4>
+            <h4>Missing (tap to add) <span>{ats.missing.length}</span></h4>
             <div className="st-chips" data-testid="ats-missing">
-              {ats.missing.length ? ats.missing.map((k) => <button key={k} className="st-kw-chip is-miss" onClick={() => addKeyword(k)}><I d={P.plus} size={11} /> {k}</button>) : <span className="st-muted">All covered — nice.</span>}
+              {ats.missing.length ? ats.missing.map((k) => <button key={k} className="st-kw-chip is-miss" onClick={() => addKeyword(k)}><I d={P.plus} size={11} /> {k}</button>) : <span className="st-muted">All covered, nice.</span>}
             </div>
-            <p className="st-muted st-kw__note">Only add skills you really have — recruiters will ask about them.</p>
+            <p className="st-muted st-kw__note">Only add skills you really have, recruiters will ask about them.</p>
           </div>
           <div className="st-kw">
             <h4>Your skills <span>{cv.skills.length}</span></h4>
@@ -269,14 +269,14 @@ function ReadinessCard({ go }: { go: (s: StudioSection) => void }) {
         <div className="st-gate__legend"><span>0%</span><span style={{ left: `${READY_GATE}%` }}>{READY_GATE}% gate</span><span>100%</span></div>
       </div>
       <ul className="st-facts">
-        <li><span>Name</span><b>{cv.name || '—'}</b></li>
-        <li><span>Headline</span><b>{cv.title || '—'}</b></li>
+        <li><span>Name</span><b>{cv.name || '-'}</b></li>
+        <li><span>Headline</span><b>{cv.title || '-'}</b></li>
         <li><span>CV file</span><b>{meta.hasUploadedCV ? meta.fileName : 'Not uploaded'}</b></li>
         <li><span>Last synced</span><b>{when(meta.lastSyncedAt)}</b></li>
       </ul>
       {meta.dirty ? (
         <div className="st-unsaved">
-          <span>{meta.source === 'sample' ? 'Sample CV in use — your profile is unchanged.' : 'You have changes that Jobs and recruiters don’t see yet.'}</span>
+          <span>{meta.source === 'sample' ? 'Sample CV in use, your profile is unchanged.' : 'You have changes that Jobs and recruiters don’t see yet.'}</span>
           <button className="aa-btn aa-btn--sm aa-btn--primary" onClick={() => void save()} disabled={saving} data-testid="dash-save">{saving ? 'Saving…' : 'Save & sync'}</button>
         </div>
       ) : <p className="st-synced"><I d={P.check} size={13} /> In sync with your profile and Jobs</p>}
@@ -290,7 +290,7 @@ function ReadinessCard({ go }: { go: (s: StudioSection) => void }) {
 export function StudioDashboard({ go }: { go: (s: StudioSection) => void }) {
   const tools: { id: StudioSection; icon: string; title: string; desc: string }[] = [
     { id: 'cv', icon: P.cv, title: 'CV Generator', desc: '10 templates, live edit, PDF / CSV / public link' },
-    { id: 'role', icon: P.wand, title: 'AI CV Builder', desc: 'Answer 3 questions — AI writes your CV' },
+    { id: 'role', icon: P.wand, title: 'AI CV Builder', desc: 'Answer 3 questions, AI writes your CV' },
     { id: 'expert', icon: P.expert, title: 'Expert CV Review', desc: '30-minute session with a specialist' },
     { id: 'sync', icon: P.sync, title: 'My Profile & Sync', desc: 'Edit details and sync everywhere' },
   ];
@@ -302,7 +302,7 @@ export function StudioDashboard({ go }: { go: (s: StudioSection) => void }) {
       </div>
       <AtsAnalyzer />
       <section className="aa-card st-card">
-        <div className="st-card__head"><div><h3>Career toolkit</h3><p>Everything uses the same CV — changes show up everywhere instantly.</p></div></div>
+        <div className="st-card__head"><div><h3>Career toolkit</h3><p>Everything uses the same CV, changes show up everywhere instantly.</p></div></div>
         <div className="st-tools">
           {tools.map((t) => (
             <button key={t.id} className="st-tool" onClick={() => go(t.id)}>
@@ -330,7 +330,7 @@ export function ProfileSyncPage({ go }: { go: (s: StudioSection) => void }) {
 
   const save = async () => {
     setBusy('save'); setMsg(null);
-    try { await saveToProfile(); setMsg({ ok: true, text: 'Saved — your profile, Jobs, applications and every Resume tool now use this CV.' }); }
+    try { await saveToProfile(); setMsg({ ok: true, text: 'Saved. Your profile, Jobs, applications and every Resume tool now use this CV.' }); }
     catch (e) { setMsg({ ok: false, text: cvErrorText(e) }); }
     finally { setBusy(''); }
   };
@@ -355,10 +355,10 @@ export function ProfileSyncPage({ go }: { go: (s: StudioSection) => void }) {
             <Row label="Location"><input value={cv.location} onChange={(e) => set('location', e.target.value)} /></Row>
           </div>
           <Row label="Professional summary" wide><textarea rows={4} value={cv.summary} onChange={(e) => set('summary', e.target.value)} data-testid="sync-summary" /></Row>
-          <p className="st-muted">Name and email on CV are used in downloads and public links but aren’t saved to your profile — after a reload they show your account name and email (change those in Huddle Settings). Everything else here is saved by “Save &amp; sync”.</p>
+          <p className="st-muted">Name and email on CV are used in downloads and public links but aren’t saved to your profile, after a reload they show your account name and email (change those in Huddle Settings). Everything else here is saved by “Save &amp; sync”.</p>
         </section>
         <section className="aa-card st-card">
-          <div className="st-card__head"><div><h3>Skills</h3><p>ATS score {ats.score} — updates as you edit.</p></div></div>
+          <div className="st-card__head"><div><h3>Skills</h3><p>ATS score {ats.score}, updates as you edit.</p></div></div>
           <SkillEditor />
         </section>
         <section className="aa-card st-card">
@@ -369,7 +369,7 @@ export function ProfileSyncPage({ go }: { go: (s: StudioSection) => void }) {
           <ul className="st-facts">
             {cv.experience.map((e, i) => <li key={`e${i}`}><span>{[e.start, e.end].filter(Boolean).join(' – ') || 'Role'}</span><b>{e.title}{e.company ? ` · ${e.company}` : ''}</b></li>)}
             {cv.education.map((e, i) => <li key={`d${i}`}><span>{e.year || 'Education'}</span><b>{e.degree}{e.school ? ` · ${e.school}` : ''}</b></li>)}
-            {!cv.experience.length && !cv.education.length && <li><span>—</span><b>Nothing yet</b></li>}
+            {!cv.experience.length && !cv.education.length && <li><span>-</span><b>Nothing yet</b></li>}
           </ul>
         </section>
       </div>

@@ -33,10 +33,29 @@ const MIME = {
   '.woff2': 'font/woff2',
   '.map': 'application/json',
   '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
 };
+
+// Public website pages, prerendered at build time (web/vite.config.ts → dist/landing/*.html)
+// so search engines and link previews see the full page without running JavaScript.
+const LANDING_PAGES = {
+  '/': 'home',
+  '/index.html': 'home',
+  '/for-job-seekers': 'job-seekers',
+  '/for-recruiters': 'recruiters',
+  '/public-cv-link': 'public-cv-link',
+};
+// Old addresses that moved: permanent redirects (keep shared links working).
+const REDIRECTS = { '/beta': '/register' };
 
 function serveStatic(res, webDist, urlPath) {
   const indexFile = path.join(webDist, 'index.html');
+  const landing = LANDING_PAGES[urlPath.replace(/(.)\/+$/, '$1')];
+  if (landing) {
+    // Fall back to the plain app shell if this build has no prerendered pages.
+    const file = path.join(webDist, 'landing', `${landing}.html`);
+    if (fs.existsSync(file)) urlPath = `/landing/${landing}.html`;
+  }
   let filePath = path.join(webDist, path.normalize(urlPath));
   if (!filePath.startsWith(webDist)) filePath = indexFile;
 
@@ -249,8 +268,14 @@ export function createApp(
       return;
     }
     if (path.startsWith('/api/')) throw new HttpError(404, 'Not found');
+    const moved = REDIRECTS[path.replace(/(.)\/+$/, '$1')];
+    if (moved && (req.method === 'GET' || req.method === 'HEAD')) {
+      res.writeHead(301, { Location: moved, 'Cache-Control': 'public, max-age=86400' });
+      res.end();
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Method not allowed');
-    serveStatic(res, config.webDist, decodeURIComponent(path === '/' ? '/index.html' : path));
+    serveStatic(res, config.webDist, decodeURIComponent(path));
   }
 
   const server = http.createServer((req, res) => {
