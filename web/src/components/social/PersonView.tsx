@@ -32,7 +32,7 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
 
   const onConn = () => void load();
 
-  if (missing) return <section className="page page--narrow" data-testid="member-not-found"><button className="link-btn" onClick={back}>&larr; Back</button><div className="card__empty"><h1>404 — Member Not Found</h1><p>This Huddle member profile could not be found.</p></div></section>;
+  if (missing) return <section className="page page--narrow" data-testid="member-not-found"><button className="link-btn" onClick={back}>&larr; Back</button><div className="card__empty"><h1>404: Member not found</h1><p>This Huddle member profile could not be found.</p></div></section>;
   if (loadError) return <section className="page page--narrow"><button className="link-btn" onClick={back}>&larr; Back</button><p className="form-msg" role="alert">{loadError}</p><button className="btn btn--secondary btn--small" onClick={() => void load()}>Retry</button></section>;
   if (!profile) return <section className="page page--narrow"><div className="skeleton-list" aria-hidden="true"><i /></div></section>;
 
@@ -91,7 +91,7 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
             {!full && (
               <p id="person-msg-hint" className="person-identity__hint">
                 {profile.connection === 'pending_outgoing'
-                  ? 'Request sent — you can message once they accept.'
+                  ? 'Request sent, you can message once they accept.'
                   : profile.connection === 'pending_incoming'
                     ? 'Accept their request to start messaging.'
                     : 'Connect to send a message.'}
@@ -165,7 +165,7 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
                     <div>
                       <h4>{item.title || 'Role'}</h4>
                       {item.company && <p>{item.company}</p>}
-                      {(item.start || item.end) && <span>{item.start || '—'} – {item.end || 'Present'}</span>}
+                      {(item.start || item.end) && <span>{item.start || '-'} – {item.end || 'Present'}</span>}
                       {item.description && <p className="person-history__description">{item.description}</p>}
                     </div>
                   </article>

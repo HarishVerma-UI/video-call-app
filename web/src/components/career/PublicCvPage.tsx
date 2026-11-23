@@ -20,9 +20,17 @@ export function PublicCvPage({ slug }: { slug: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
+  // Members share these links themselves; keep them out of search results.
+  useEffect(() => {
+    const m = document.createElement('meta');
+    m.name = 'robots';
+    m.content = 'noindex, nofollow';
+    document.head.appendChild(m);
+    return () => m.remove();
+  }, []);
   useEffect(() => {
     api.publicCv(slug)
-      .then((r) => { setData(r); document.title = `${r.cv.name || 'CV'} — CV`; })
+      .then((r) => { setData(r); document.title = `${r.cv.name || 'CV'} | CV`; })
       .catch((e: { status?: number }) => setError(e?.status === 404 ? 'missing' : 'failed'));
   }, [api, slug]);
   useEffect(() => {

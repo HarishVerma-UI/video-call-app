@@ -20,7 +20,7 @@ const AV = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#6250d6', '#
 const avColor = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return AV[h % AV.length]; };
 const initials = (n: string) => (n || '?').split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase();
 const fmt = (n: number) => n.toLocaleString('en-US');
-const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+const fmtDate = (s?: string | null) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 function ago(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 60) return 'just now';
@@ -230,7 +230,7 @@ function DashboardPage() {
             audit.events.map((e) => (
               <div className="aa-feeditem" key={e.id}>
                 <span className="aa-feed-dot" style={{ background: 'var(--aa-accent-soft)', color: 'var(--aa-accent)' }}><Ic d={ICON.logs} size={16} /></span>
-                <div className="aa-feed-main"><p><b>{e.actorName}</b> {e.action}{e.target ? <> — <b>{e.target}</b></> : ''}</p><span className="aa-t">{ago(e.ts)}</span></div>
+                <div className="aa-feed-main"><p><b>{e.actorName}</b> {e.action}{e.target ? <>: <b>{e.target}</b></> : ''}</p><span className="aa-t">{ago(e.ts)}</span></div>
               </div>
             ))}
         </div>
@@ -298,12 +298,12 @@ function UsersPage() {
                 <tr key={u.id} className={sel.has(u.id) ? 'is-sel' : ''} onClick={() => setDetail(u)} style={{ cursor: 'pointer' }}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="aa-check" checked={sel.has(u.id)} onChange={() => toggle(u.id)} aria-label={`Select ${u.name}`} /></td>
                   <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(u.name) }}>{initials(u.name)}</span><div><div className="aa-u__name">{u.name}</div><div className="aa-u__mail">{u.email}</div></div></div></td>
-                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span>{u.recruiterApplication?.status === 'pending' && <span className="aa-pill aa-pill--warn" title="Applied as recruiter — awaiting approval" style={{ marginLeft: 6 }}>Recruiter · pending</span>}</td>
-                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{u.profile?.headline || '—'}</div></td>
-                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '—'}</td>
-                  <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>—</span>}</td>
+                  <td><span className={`aa-pill aa-pill--${roleCls(u.role)}`}>{ROLE_LABEL[normalizeRole(u.role || 'member')]}</span>{u.recruiterApplication?.status === 'pending' && <span className="aa-pill aa-pill--warn" title="Applied as recruiter, awaiting approval" style={{ marginLeft: 6 }}>Recruiter · pending</span>}</td>
+                  <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{u.profile?.headline || '-'}</div></td>
+                  <td style={{ color: 'var(--aa-text-2)' }}>{u.profile?.expectedSalary || '-'}</td>
+                  <td>{u.profile?.cvUrl ? <a href={u.profile.cvUrl} target="_blank" rel="noreferrer" className="aa-pill aa-pill--good" onClick={(e) => e.stopPropagation()}><Ic d={ICON.download} size={12} /> CV</a> : <span style={{ color: 'var(--aa-muted)' }}>-</span>}</td>
                   <td>{fmtDate(u.createdAt)}</td>
-                  <td style={{ color: 'var(--aa-muted)' }}>{u.lastLoginAt ? ago(new Date(u.lastLoginAt).getTime()) : '—'}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{u.lastLoginAt ? ago(new Date(u.lastLoginAt).getTime()) : '-'}</td>
                   <td onClick={(e) => e.stopPropagation()}><div className="aa-rowact">
                     <button className="aa-iconbtn" title="View details" onClick={() => setDetail(u)}><Ic d={ICON.eye} size={15} /></button>
                     <button className="aa-iconbtn" title="Edit user" onClick={() => setEdit(u)}><Ic d={ICON.edit} size={15} /></button>
@@ -358,7 +358,7 @@ function ConnectionsPage() {
                   <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.to.name) }}>{initials(c.to.name)}</span><span className="aa-u__name">{c.to.name}</span></div></td>
                   <td><span className={`aa-pill aa-pill--${c.status === 'accepted' ? 'good' : 'warn'}`}>{c.status === 'accepted' ? 'Accepted' : 'Pending'}</span></td>
                   <td style={{ color: 'var(--aa-muted)' }}>{fmtDate(c.createdAt)}</td>
-                  <td style={{ color: 'var(--aa-muted)' }}>{c.status === 'accepted' ? fmtDate(c.updatedAt) : '—'}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{c.status === 'accepted' ? fmtDate(c.updatedAt) : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -451,7 +451,7 @@ function CommentsPage() {
                   <td><div className="aa-u"><span className="aa-u__av" style={{ background: avColor(c.name) }}>{initials(c.name)}</span><span className="aa-u__name">{c.name}</span></div></td>
                   <td><div className="aa-trunc" style={{ maxWidth: 240 }}>{c.text}</div></td>
                   <td style={{ color: 'var(--aa-text-2)' }}><div className="aa-trunc" style={{ maxWidth: 200 }}>{c.postAuthor}: {c.postExcerpt}</div></td>
-                  <td style={{ color: 'var(--aa-muted)' }}>{c.ts ? ago(c.ts) : '—'}</td>
+                  <td style={{ color: 'var(--aa-muted)' }}>{c.ts ? ago(c.ts) : '-'}</td>
                   <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete comment" onClick={() => del([c.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
                 </tr>
               ))}
@@ -503,7 +503,7 @@ function JobsPage() {
                   <td><div className="aa-u__name">{j.title}</div><div className="aa-u__mail">{j.company}</div></td>
                   <td><span className={`aa-pill aa-pill--${catPill(j.category)}`}>{j.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span></td>
                   <td style={{ color: 'var(--aa-text-2)' }}>{j.type}</td>
-                  <td>{j.postedByName || '—'}</td>
+                  <td>{j.postedByName || '-'}</td>
                   <td className="aa-tnum"><b>{j.applicantCount ?? 0}</b></td>
                   <td><span className={`aa-pill aa-pill--${j.active === false ? 'muted' : 'good'}`}><span className="aa-pdot" />{j.active === false ? 'Closed' : 'Live'}</span></td>
                   <td><div className="aa-rowact"><button className="aa-iconbtn aa-iconbtn--danger" title="Delete job" onClick={() => del([j.id])}><Ic d={ICON.trash} size={15} /></button></div></td>
@@ -598,7 +598,7 @@ function LogsPage() {
               <div className="aa-logrow" key={e.id}>
                 <span className="aa-log-time">{fmtTs(e.ts)}</span>
                 <span className="aa-log-ic" style={{ background: `color-mix(in srgb, var(${c}) 14%, transparent)`, color: `var(${c})` }}><Ic d={ICON.logs} size={16} /></span>
-                <span className="aa-log-text"><b>{e.actorName}</b> {e.action}{e.target ? <span className="aa-meta"> — {e.target}</span> : ''}{e.meta ? <span className="aa-meta"> · {e.meta}</span> : ''}</span>
+                <span className="aa-log-text"><b>{e.actorName}</b> {e.action}{e.target ? <span className="aa-meta"> · {e.target}</span> : ''}{e.meta ? <span className="aa-meta"> · {e.meta}</span> : ''}</span>
                 <span className="aa-log-tag" style={{ background: `color-mix(in srgb, var(${c}) 14%, transparent)`, color: `var(${c})` }}>{e.category}</span>
               </div>
             );
@@ -743,7 +743,7 @@ function JobImport({ api }: { api: ApiClient }) {
   };
   return (
     <div className="aa-card aa-form">
-      <p className="aa-form__hint">Paste a JSON array of jobs (each needs at least <code>title</code> and <code>company</code>). Verify first, then import — duplicates are skipped.</p>
+      <p className="aa-form__hint">Paste a JSON array of jobs (each needs at least <code>title</code> and <code>company</code>). Verify first, then import, duplicates are skipped.</p>
       <textarea className="aa-json" rows={12} value={raw} onChange={(e) => { setRaw(e.target.value); setParsed(null); setResult(null); }} spellCheck={false}
         placeholder={'[\n  {\n    "title": "Senior Angular Developer",\n    "company": "Infosys",\n    "category": "tech",\n    "country": "Bengaluru, IN",\n    "skills": ["Angular", "TypeScript"],\n    "applyUrl": "https://..."\n  }\n]'} />
       {err && <p className="aa-msg">{err}</p>}
@@ -779,7 +779,7 @@ function AiPromptPage() {
   const tooLong = !!data && text.length > data.maxChars;
   const save = async () => {
     setBusy(true); setMsg(null);
-    try { adopt(await api.adminSaveCvPrompt(text)); setMsg({ ok: true, text: 'Saved — the next AI CV chat message uses this prompt.' }); }
+    try { adopt(await api.adminSaveCvPrompt(text)); setMsg({ ok: true, text: 'Saved. The next AI CV chat message uses this prompt.' }); }
     catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Save failed.' }); }
     finally { setBusy(false); }
   };
@@ -795,7 +795,7 @@ function AiPromptPage() {
   return (
     <div className="aa-card aa-form" data-testid="ai-prompt-page">
       <div className="aa-card__head">
-        <h3>AI CV Builder — master prompt</h3>
+        <h3>AI CV Builder: master prompt</h3>
         <span className="aa-sub">
           {data.isDefault ? 'Using the built-in default' : `Custom · edited ${data.updatedAt ? fmtDate(data.updatedAt) : ''}${data.updatedBy ? ` by ${data.updatedBy}` : ''}`}
         </span>

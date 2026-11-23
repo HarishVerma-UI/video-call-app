@@ -95,7 +95,7 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
           <span className="line__rule" />
         </div>
         <Line name="r-skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
-        <Line name="r-apply" label="Apply URL — opens the company’s site (optional)" type="text" autoComplete="off" value={f.applyUrl ?? ''} onChange={(v) => upd('applyUrl', v)} error={fields.applyUrl} />
+        <Line name="r-apply" label="Apply URL (optional, opens the company’s site)" type="text" autoComplete="off" value={f.applyUrl ?? ''} onChange={(v) => upd('applyUrl', v)} error={fields.applyUrl} />
         <div className="job-form__toggles">
           <label className="admin-ads__active"><input type="checkbox" checked={!!f.remote} onChange={(e) => upd('remote', e.target.checked)} /> Remote</label>
           <label className="admin-ads__active"><input type="checkbox" checked={f.active !== false} onChange={(e) => upd('active', e.target.checked)} /> Active (visible on the Jobs board)</label>

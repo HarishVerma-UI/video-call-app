@@ -120,7 +120,7 @@ export function useCvUpload(upload: (file: File) => Promise<CvResult>, onDone?: 
       if (input.current) input.current.value = '';
     }
   };
-  const fileInput = <input ref={input} type="file" accept=".pdf,.doc,.docx" hidden onChange={(e) => void onChange(e)} data-testid="cv-file" />;
+  const fileInput = <input ref={input} type="file" accept=".pdf,.doc,.docx,.txt" hidden onChange={(e) => void onChange(e)} data-testid="cv-file" />;
   return { pick, busy, error, done, fileInput };
 }
 
@@ -200,7 +200,7 @@ export function ReadinessPanel({ scan, r, jobsCount, strongCount, onRescan, acti
         </header>
         <div className="raudit__meter" title={t('scan.readiness')}>
           <div className={`raudit__track is-${readinessTone(r.completion)}`} aria-label={t('scan.readiness')}><span style={{ width: `${scan.step < 3 ? 0 : r.completion}%` }} /><i style={{ left: `${READY_GATE}%` }} /></div>
-          <b>{scan.step < 3 ? '—' : `${r.completion}%`}</b>
+          <b>{scan.step < 3 ? '-' : `${r.completion}%`}</b>
         </div>
         <ul>
           {auditRow(t('scan.roleLocation'), 1, r.checks.roleLocation, t('scan.verified'), t('scan.needsUpdate'), t('scan.checking'), 'audit-role')}
@@ -289,7 +289,7 @@ export function JobDrawer({ job, fit, r, onClose, onApply, onOpenFull, salary }:
 
         <section className="rdrawer__sec">
           <div className="rdrawer__score">
-            <div className="rring" style={{ ['--pct' as string]: `${score ?? 0}%` }} aria-hidden="true"><span>{score ?? '—'}{score != null && '%'}</span></div>
+            <div className="rring" style={{ ['--pct' as string]: `${score ?? 0}%` }} aria-hidden="true"><span>{score ?? '-'}{score != null && '%'}</span></div>
             <div>
               <strong>{t('scan.drawerSkills')}</strong>
               <p>{fit ? t('jobs.fitSummary', { matched: fit.matched.length, total: fit.required.length }) : t('scan.checking')}</p>

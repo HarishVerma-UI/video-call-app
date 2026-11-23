@@ -3,6 +3,9 @@
 
 const { test, expect } = require('@playwright/test');
 
+// The ui project clicks slowly on purpose (slowMo 2s per action), so give each test headroom.
+test.describe.configure({ timeout: 90_000 });
+
 let counter = 0;
 function freshCreds(name = 'UI User') {
   counter++;
@@ -15,7 +18,7 @@ function freshCreds(name = 'UI User') {
 
 /** Register via the UI login form. */
 async function registerViaUI(page, creds) {
-  await page.goto('/');
+  await page.goto('/login');
   // Switch to registration form
   await page.getByTestId('tab-register').click();
   await page.getByLabel(/name/i).fill(creds.name);
@@ -38,7 +41,7 @@ async function registerAndLogin(page, request, name) {
   const body = await res.json();
 
   // Log in via UI
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel(/email/i).fill(creds.email);
   await page.getByLabel(/password/i).fill(creds.password);
   await page.getByRole('button', { name: /sign in|log in/i }).click();
@@ -75,12 +78,14 @@ test.describe('UI: Profile photo upload', () => {
     const registered = await request.post('/api/auth/register', { data: user });
     expect(registered.status()).toBe(201);
 
-    await page.goto('/');
+    await page.goto('/login');
     await page.getByLabel(/email/i).fill(user.email);
     await page.getByLabel(/password/i).fill(user.password);
     await page.getByTestId('password-submit').click();
     await expect(page.getByTestId('rail-profile')).toBeVisible({ timeout: 5000 });
     await page.getByTestId('rail-profile').click();
+    // The photo lives in the "Basics" settings section (the page opens on Name & email).
+    await page.getByTestId('settings-tab-basics').click();
 
     await page.locator('input[accept="image/*"]').setInputFiles({
       name: 'profile.png',
@@ -112,7 +117,8 @@ test.describe('UI: Profile photo upload', () => {
     await expect(page.getByTestId('submit-post')).toBeEnabled();
     await page.getByTestId('submit-post').click();
 
-    const postImage = page.locator('.post__img');
+    // Newest post is first; earlier runs on the same server may have image posts too.
+    const postImage = page.locator('.post__img').first();
     await expect(postImage).toHaveAttribute('src', /^\/media\/post\//);
     await expect.poll(() => postImage.evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
   });
@@ -138,21 +144,22 @@ test.describe('UI: Feed visibility', () => {
     const aliceRes = await (await request.post('/api/auth/register', { data: alice })).json();
     await request.post('/api/auth/register', { data: bob });
 
-    // Alice creates a post via API
+    // Alice creates a post via API (unique text, so reruns on the same server don't collide)
+    const postText = `Hello from the UI test! ${Date.now()}`;
     await request.post('/api/posts', {
       headers: { Authorization: `Bearer ${aliceRes.token}` },
-      data: { text: 'Hello from the UI test!' },
+      data: { text: postText },
     });
 
     // Bob logs in via UI
-    await page.goto('/');
+    await page.goto('/login');
     await page.getByLabel(/email/i).fill(bob.email);
     await page.getByLabel(/password/i).fill(bob.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();
     await expect(page.locator('[data-testid="rail-feed"]')).toBeVisible({ timeout: 5000 });
 
     // Bob should see Alice's post in the feed
-    await expect(page.getByText('Hello from the UI test!')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(postText)).toBeVisible({ timeout: 5000 });
   });
 });
 
@@ -164,7 +171,7 @@ test.describe('UI: People search', () => {
     await request.post('/api/auth/register', { data: target });
     await request.post('/api/auth/register', { data: searcher });
 
-    await page.goto('/');
+    await page.goto('/login');
     await page.getByLabel(/email/i).fill(searcher.email);
     await page.getByLabel(/password/i).fill(searcher.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();
@@ -176,7 +183,7 @@ test.describe('UI: People search', () => {
   test('legacy /people URL redirects to Home', async ({ page, request }) => {
     const user = freshCreds('LegacyRouteUser');
     await request.post('/api/auth/register', { data: user });
-    await page.goto('/');
+    await page.goto('/login');
     await page.getByLabel(/email/i).fill(user.email);
     await page.getByLabel(/password/i).fill(user.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();
@@ -192,7 +199,7 @@ test.describe('UI: Navigation', () => {
     const user = freshCreds('NavUser');
     await request.post('/api/auth/register', { data: user });
 
-    await page.goto('/');
+    await page.goto('/login');
     await page.getByLabel(/email/i).fill(user.email);
     await page.getByLabel(/password/i).fill(user.password);
     await page.getByRole('button', { name: /sign in|log in/i }).click();

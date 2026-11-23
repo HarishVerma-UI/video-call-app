@@ -1,0 +1,105 @@
+/* Tailwind for the public landing pages only.
+ *
+ * - Only classes used in Landing.jsx are generated (source(none) + @source below),
+ *   so the rest of the app's CSS is untouched.
+ * - No Tailwind preflight (it would reset the whole app). A small reset scoped to
+ *   the landing root (.hl) gives the landing what preflight would have.
+ * - Utilities are unlayered on purpose: the app's global element rules
+ *   (button { padding: 0; background: none } …) are unlayered too, and layered
+ *   utilities would always lose to them.
+ * - "grid" is excluded: the app's own .grid (video call layout) would leak into
+ *   the landing — the landing uses hl-grid instead.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+@tailwind utilities source(none);
+@source "./Landing.jsx";
+@source not inline("grid");
+
+@utility hl-grid {
+  display: grid;
+}
+
+/* ---- scoped reset (what Tailwind preflight would give) ----
+ * Specificity: :where(.hl) adds 0; "button:is(button)" = (0,0,2) beats the app's
+ * global "button" (0,0,1) but loses to any utility class (0,1,0). */
+.hl {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+}
+:where(.hl), :where(.hl) *, :where(.hl) ::before, :where(.hl) ::after {
+  box-sizing: border-box;
+  border: 0 solid;
+}
+:where(.hl) button:is(button),
+:where(.hl) input:is(input),
+:where(.hl) select:is(select),
+:where(.hl) textarea:is(textarea) {
+  font: inherit;
+  color: inherit;
+  border: 0 solid;
+  background-color: transparent;
+  border-radius: 0;
+}
+:where(.hl) button:is(button) {
+  text-align: center;
+  padding: 0;
+  cursor: pointer;
+}
+:where(.hl) :is(h1, h2, h3, h4, h5, h6):is(h1, h2, h3, h4, h5, h6) {
+  font-size: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+:where(.hl) :is(p, blockquote, figure, dl, dd):is(p, blockquote, figure, dl, dd) {
+  margin: 0;
+}
+:where(.hl) :is(ol, ul, menu):is(ol, ul, menu) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+:where(.hl) a:is(a) {
+  color: inherit;
+  text-decoration: inherit;
+}
+:where(.hl) :is(img, svg, video, canvas):is(img, svg, video, canvas) {
+  display: block;
+  vertical-align: middle;
+}
+:where(.hl) :is(img, video):is(img, video) {
+  max-width: 100%;
+  height: auto;
+}
+:where(.hl) ::placeholder {
+  opacity: 1;
+  color: color-mix(in oklab, currentcolor 50%, transparent);
+}
+:where(.hl) [hidden]:where(:not([hidden="until-found"])) {
+  display: none !important;
+}
+
+/* Brand mark: the same aperture logo + wordmark as the sign-in page (.auth__brandmark). */
+.hl .hl-brandmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1;
+}
+.hl .hl-brandmark .mark {
+  width: 30px;
+  height: 30px;
+}
+.hl .hl-brandmark--small {
+  font-size: 16px;
+  gap: 8px;
+}
+.hl .hl-brandmark--small .mark {
+  width: 24px;
+  height: 24px;
+}

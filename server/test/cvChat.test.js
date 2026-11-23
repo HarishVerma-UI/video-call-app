@@ -43,7 +43,7 @@ test('cv chat sends history + current CV to the model and returns a cleaned CV',
     cv: { name: 'Chatty', title: '' },
   }, u.token);
   assert.equal(res.status, 200);
-  assert.equal(res.body.reply, 'Great — what did you achieve at Acme?');
+  assert.equal(res.body.reply, 'Great, what did you achieve at Acme?'); // long dash replaced
   assert.equal(res.body.progress, 100);
   assert.deepEqual(res.body.suggestions, ['Led a team', 'Cut costs', 'Shipped app', 'Won award', 'Trained juniors', 'Saved money']);
   assert.deepEqual(res.body.cv.skills, ['Angular', 'TypeScript']);
@@ -125,4 +125,21 @@ test('master prompt: default is used, admins can edit / reset it, members cannot
   assert.equal(reset.body.isDefault, true);
   turn = await ask();
   assert.match(turn.system, /Huddle AI CV Co-Pilot/);
+});
+
+test('long dashes from the model are replaced before members see them', async () => {
+  const u = await registerUser(t.base, 'No Dash');
+  nextReply = JSON.stringify({
+    reply: 'Great — what did you do there?',
+    progress: 20,
+    suggestions: ['Led a team — 5 people'],
+    cv: { name: 'No Dash', summary: 'Support lead — calm under pressure —.', experience: [{ title: 'Lead', company: 'Acme', start: '', end: '', description: '• Cut wait times — by 30%' }] },
+  });
+  const res = await api(t.base, 'POST', '/api/career/cv-chat', { messages: [{ role: 'user', text: 'hi' }] }, u.token);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.reply, 'Great, what did you do there?');
+  assert.deepEqual(res.body.suggestions, ['Led a team, 5 people']);
+  assert.equal(res.body.cv.summary, 'Support lead, calm under pressure.');
+  assert.equal(res.body.cv.experience[0].description, '• Cut wait times, by 30%');
+  assert.doesNotMatch(JSON.stringify(res.body), /—/);
 });

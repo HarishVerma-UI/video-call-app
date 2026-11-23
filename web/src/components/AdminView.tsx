@@ -194,15 +194,15 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AdminUser; isSelf: boolea
         <div className="admin-user__identity">
           <Avatar id={u.id} name={u.name || u.email || '?'} size={38} />
           <div className="admin-dir__info">
-            <strong>{u.name || '—'}</strong>
+            <strong>{u.name || '-'}</strong>
             <span>{u.email || 'No email'}</span>
           </div>
         </div>
       </td>
       <td><span className={`pill pill--role-${u.role ?? 'member'}`}>{ROLE_LABEL[(u.role ?? 'member') as UserRole] ?? u.role}</span></td>
-      <td>{u.profile?.headline || u.profile?.experience[0]?.title || '—'}</td>
-      <td>{u.profile?.location || '—'}</td>
-      <td>{u.profile?.expectedSalary || '—'}</td>
+      <td>{u.profile?.headline || u.profile?.experience[0]?.title || '-'}</td>
+      <td>{u.profile?.location || '-'}</td>
+      <td>{u.profile?.expectedSalary || '-'}</td>
       <td>
         {u.profile?.experience.length ? (
           <ul className="admin-user__details">
@@ -214,7 +214,7 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AdminUser; isSelf: boolea
               </li>
             ))}
           </ul>
-        ) : '—'}
+        ) : '-'}
       </td>
       <td>
         {u.profile?.education.length ? (
@@ -227,17 +227,17 @@ function UserRow({ u, isSelf, onEdit, onDelete }: { u: AdminUser; isSelf: boolea
               </li>
             ))}
           </ul>
-        ) : '—'}
+        ) : '-'}
       </td>
-      <td>{u.profile?.skills.length ? u.profile.skills.join(', ') : '—'}</td>
+      <td>{u.profile?.skills.length ? u.profile.skills.join(', ') : '-'}</td>
       <td>
         {u.profile?.cvUrl ? (
           <a className="btn btn--secondary btn--small" href={u.profile.cvUrl} target="_blank" rel="noreferrer" aria-label={`Download CV for ${u.name || u.email}`}>
             Download{u.profile.cvName ? ` ${u.profile.cvName}` : ' CV'}
           </a>
-        ) : '—'}
+        ) : '-'}
       </td>
-      <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+      <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</td>
       <td>{u.lastLoginAt ? ago(u.lastLoginAt) : 'Never'}</td>
       <td>
         <div className="admin-dir__menu" ref={ref}>
@@ -324,7 +324,7 @@ function AdForm({ editing, onClose, onSaved }: { editing: Ad | null; onClose: ()
           </div>
           <span className="line__rule" />
         </div>
-        <Line name="ad-link" label="Link URL (optional) — https://…" type="text" autoComplete="off" value={linkUrl} onChange={setLinkUrl} />
+        <Line name="ad-link" label="Link URL (optional): https://…" type="text" autoComplete="off" value={linkUrl} onChange={setLinkUrl} />
         <div className="line">
           <label>Image (optional)</label>
           {preview && <img src={preview} alt="" className="admin-ads__thumb" />}
@@ -454,7 +454,7 @@ function RecruitersDirectory() {
           {recs.map((r) => (
             <div key={r.id} className="admin-rec">
               <Avatar id={r.id} name={r.name} size={38} />
-              <div className="admin-rec__info"><strong>{r.name || '—'}</strong><span>{r.email}</span></div>
+              <div className="admin-rec__info"><strong>{r.name || '-'}</strong><span>{r.email}</span></div>
               <span className="admin-rec__stat"><b>{r.jobCount}</b> job{r.jobCount !== 1 ? 's' : ''}</span>
               <span className="admin-rec__stat"><b>{r.applicantCount}</b> applicant{r.applicantCount !== 1 ? 's' : ''}</span>
               <span className={`pill pill--role-${r.role ?? 'member'}`}>{ROLE_LABEL[(r.role ?? 'member') as UserRole] ?? r.role}</span>
@@ -580,7 +580,7 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
         </div>
         <Line name="job-skills" label="Skills (comma separated)" type="text" autoComplete="off" value={skills} onChange={setSkills} />
         <div className="job-form__row">
-          <Line name="job-apply" label="Apply URL — opens the company’s site (optional)" type="text" autoComplete="off" value={f.applyUrl ?? ''} onChange={(v) => upd('applyUrl', v)} error={fields.applyUrl} />
+          <Line name="job-apply" label="Apply URL (optional, opens the company’s site)" type="text" autoComplete="off" value={f.applyUrl ?? ''} onChange={(v) => upd('applyUrl', v)} error={fields.applyUrl} />
           <Line name="job-source" label="Source (optional)" type="text" autoComplete="off" value={f.source ?? ''} onChange={(v) => upd('source', v)} />
         </div>
         <div className="job-form__toggles">
@@ -709,7 +709,7 @@ function JsonImportModal({ onClose, onDone }: { onClose: () => void; onDone: (cr
         ? (data as { jobs: unknown[] }).jobs
         : null;
     if (!arr) { setParseErr('Expected a JSON array of jobs, or an object like { "jobs": [ … ] }.'); return; }
-    if (arr.length === 0) { setParseErr('The list is empty — nothing to import.'); return; }
+    if (arr.length === 0) { setParseErr('The list is empty, nothing to import.'); return; }
     if (arr.length > 500) { setParseErr('Please import at most 500 jobs at a time.'); return; }
 
     const problems: Checked['problems'] = [];
@@ -1187,7 +1187,7 @@ export function AdminView() {
                   <li key={r.roomId}>
                     <span className="admin-activity__icon admin-activity__icon--call"><VideoIcon width={14} height={14} /></span>
                     <span className="admin-activity__text">
-                      <strong>{r.roomId}</strong> — {r.participants.length} participant{r.participants.length !== 1 ? 's' : ''}
+                      <strong>{r.roomId}</strong>: {r.participants.length} participant{r.participants.length !== 1 ? 's' : ''}
                       <em>{r.participants.map((p) => p.name).join(', ')}</em>
                     </span>
                   </li>

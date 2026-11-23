@@ -6,6 +6,8 @@ import { AdminApp } from './components/admin/AdminApp';
 import { RecruiterApp } from './components/admin/RecruiterApp';
 import { CareerApp } from './components/career/CareerApp';
 import { PublicCvPage, publicCvSlug } from './components/career/PublicCvPage';
+import Landing from './components/landing/Landing.jsx';
+import { isLandingPath } from './components/landing/routes.js';
 import { ProfileProvider } from './profile/ProfileContext';
 import { AuthPage } from './components/AuthPage';
 import { CallRoom } from './components/CallRoom';
@@ -18,6 +20,10 @@ export function App() {
   // Public CV links (<app>/<mobile number>) are open to everyone, signed in or not.
   const cvSlug = publicCvSlug(location.pathname);
   if (cvSlug) return <PublicCvPage slug={cvSlug} />;
+  // Public website: the home page for visitors (signed-in members at "/" get the app),
+  // and the marketing pages (/for-job-seekers, /for-recruiters, …) for everyone.
+  const path = location.pathname.replace(/\/+$/, '') || '/';
+  if (isLandingPath(path) && (path !== '/' || status === 'signed-out')) return <Landing initialPath={path} />;
   if (status === 'checking') {
     return (
       <div className="splash" aria-busy="true">

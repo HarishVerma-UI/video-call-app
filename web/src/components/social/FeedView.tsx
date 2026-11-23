@@ -228,7 +228,7 @@ function FeedLeft({ nav, savedCount, onSaved }: { nav: FeedNav; savedCount: numb
         </div>
         <div className="feed-me__stats">
           <a className="feed-me__stat" href="/network" onClick={(e) => { e.preventDefault(); nav.openNetwork(); }}>
-            <b>{connCount ?? '—'}</b>
+            <b>{connCount ?? '-'}</b>
             <span>Connections</span>
           </a>
           <button className="feed-me__stat" type="button" onClick={onSaved}>
@@ -593,7 +593,7 @@ export function FeedView({ openUser, openMeet, openJobs, openCareer, openProfile
               : activeFeedTab !== 'For You'
                 ? `No ${activeFeedTab.toLowerCase()} posts yet. Share one to start the conversation.`
                 : searchQuery
-                  ? (peopleResults && peopleResults.length > 0 ? 'No posts match — see people above.' : 'Nothing matches your search.')
+                  ? (peopleResults && peopleResults.length > 0 ? 'No posts match, see people above.' : 'Nothing matches your search.')
                   : 'No posts yet. Share something, or connect with people to see theirs.'}
           </p>
         ) : (

@@ -1,4 +1,4 @@
-// Browser-level end-to-end tests for admin dashboard workflows.
+// Browser-level end-to-end tests for the Admin Control Center (/admin), step by step.
 
 const { test, expect } = require('@playwright/test');
 
@@ -7,87 +7,115 @@ const ADMIN = {
   password: 'admin-test-1234',
 };
 
+test.use({ launchOptions: { slowMo: 0 } });
+
 async function signInAsAdmin(page) {
-  await page.goto('/');
+  await page.goto('/login');
   await page.getByLabel(/email/i).fill(ADMIN.email);
   await page.getByLabel(/password/i).fill(ADMIN.password);
   await page.getByTestId('password-submit').click();
   await expect(page.getByTestId('rail-admin')).toBeVisible();
 }
 
-test.describe('UI: Admin dashboard', () => {
-  test('admin creates, updates, and deletes a user', async ({ page }) => {
-    test.setTimeout(120_000);
-    const user = {
-      name: `Managed User ${Date.now()}`,
-      updatedName: `Updated User ${Date.now()}`,
-      email: `managed-${Date.now()}@example.test`,
-      password: 'managed-user-1234',
-    };
+async function adminNav(page, label) {
+  await page.locator('.aa-nav__item', { hasText: label }).click();
+  await expect(page.locator('.aa-topbar__title')).toHaveText(label);
+}
 
+/** The Users table row for an email. */
+const userRow = (page, email) => page.locator('.aa-table-wrap tbody tr', { hasText: email });
+
+test.describe('UI: Admin dashboard', () => {
+  test('admin opens every section of the control center', async ({ page }) => {
+    // Step 1: the Admin rail item opens the console on the dashboard
     await signInAsAdmin(page);
     await page.getByTestId('rail-admin').click();
-    await expect(page.getByRole('heading', { name: 'Platform Administration & Intelligence' })).toBeVisible();
-    for (const [label, hash] of [
-      ['Overview', 'overview'],
-      ['Users', 'users'],
-      ['Recruiters', 'recruiters'],
-      ['Jobs', 'jobs'],
-      ['Activity', 'audit'],
-      ['Ads', 'ads'],
-    ]) {
-      await page.getByRole('link', { name: label, exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`#${hash}$`));
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.locator('.aa-topbar__title')).toHaveText('Dashboard');
+    await expect(page.locator('.aa-kpi').first()).toBeVisible();
+
+    // Step 2: every section opens with its title
+    for (const label of ['Users', 'Connections', 'Posts', 'Comments', 'Jobs', 'Post a Job', 'Applications', 'AI CV Prompt', 'Activity Logs', 'Dashboard']) {
+      await adminNav(page, label);
     }
-    await expect(page.getByRole('columnheader', { name: 'Expected salary' })).toBeVisible();
-    const jobsHeading = page.getByRole('heading', { name: 'Jobs Manager' });
-    await jobsHeading.scrollIntoViewIfNeeded();
-    await expect(jobsHeading).toBeVisible();
-    await expect.poll(() => page.locator('.admin-dash').evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-    await expect(page).toHaveURL(/\/admin(?:#.*)?$/);
+    // Step 3: Back to Huddle leaves the console
+    await page.getByRole('button', { name: /Back to Huddle/ }).click();
+    await expect(page.getByTestId('rail-feed')).toBeVisible();
+  });
 
-    await page.getByTestId('add-user').click();
-    await expect(page.getByRole('dialog', { name: 'Add user' })).toBeVisible();
-    await page.getByLabel('Name', { exact: true }).fill(user.name);
-    await page.getByLabel('Email', { exact: true }).fill(user.email);
-    await page.getByLabel('Password', { exact: true }).fill(user.password);
-    await page.getByTestId('user-role').selectOption('member');
-    await page.getByTestId('save-user').click();
+  test('admin finds, edits and deletes a user', async ({ page, request }) => {
+    test.setTimeout(90_000);
+    const stamp = Date.now();
+    const user = { name: `Managed User ${stamp}`, email: `managed-${stamp}@example.test`, password: 'managed-user-1234' };
+    const updatedName = `Updated User ${stamp}`;
+    // Step 1: a member signs up (API)
+    expect((await request.post('/api/auth/register', { data: user })).status()).toBe(201);
 
-    const row = page.getByTestId('user-table').locator('.admin-dir__row').filter({ hasText: user.email });
+    // Step 2: admin searches the Users table
+    await signInAsAdmin(page);
+    await page.goto('/admin');
+    await adminNav(page, 'Users');
+    await page.getByPlaceholder('Search candidates by name, email…').fill(user.email);
+    const row = userRow(page, user.email);
+    await expect(row).toHaveCount(1);
     await expect(row).toContainText(user.name);
     await expect(row).toContainText('Member');
 
-    await row.getByRole('button', { name: 'Actions' }).click();
-    await row.getByRole('button', { name: 'Edit' }).click();
-    await page.getByLabel('Name', { exact: true }).fill(user.updatedName);
-    await page.getByTestId('user-role').selectOption('recruiter');
-    await page.getByTestId('save-user').click();
+    // Step 3: view details
+    await row.getByTitle('View details').click();
+    const details = page.getByRole('dialog', { name: `${user.name} details` });
+    await expect(details).toBeVisible();
+    await expect(details).toContainText(user.email);
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
 
-    await expect(row).toContainText(user.updatedName);
+    // Step 4: edit name + role in the drawer
+    await row.getByTitle('Edit user').click();
+    await expect(page.getByRole('dialog', { name: `Edit ${user.name}` })).toBeVisible();
+    // (the drawer's label follows the name, so after saving it becomes "Edit <new name>")
+    const drawer = page.getByRole('dialog', { name: /^Edit / });
+    await drawer.getByLabel('Full name').fill(updatedName);
+    await drawer.getByLabel('Role').selectOption('recruiter');
+    await drawer.getByRole('button', { name: 'Save changes' }).click();
+    await expect(drawer.locator('.aa-msg--ok')).toHaveText('Saved.');
+    await drawer.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(row).toContainText(updatedName);
     await expect(row).toContainText('Recruiter');
 
+    // Step 5: the role filter finds them as a recruiter
+    await page.getByLabel('Filter by role').selectOption('recruiter');
+    await expect(row).toHaveCount(1);
+    await page.getByLabel('Filter by role').selectOption('');
+
+    // Step 6: delete (with confirmation)
     page.once('dialog', (dialog) => dialog.accept());
-    await row.getByRole('button', { name: 'Actions' }).click();
-    await row.getByRole('button', { name: 'Delete' }).click();
+    await row.getByTitle('Delete user').click();
     await expect(row).toHaveCount(0);
+    // Step 7: the deletion is in the audit log
+    await adminNav(page, 'Activity Logs');
+    await expect(page.locator('.aa-logstream')).toBeVisible();
   });
 
   test('admin cannot remove their own admin role or delete their own account', async ({ page }) => {
-    test.setTimeout(90_000);
     await signInAsAdmin(page);
-    await page.getByTestId('rail-admin').click();
-    await expect(page.getByRole('link', { name: 'User Directory' })).toHaveCount(0);
-
-    const selfRow = page.getByTestId('user-table').locator('.admin-dir__row').filter({ hasText: ADMIN.email });
-    await selfRow.scrollIntoViewIfNeeded();
+    await page.goto('/admin');
+    await adminNav(page, 'Users');
+    await page.getByPlaceholder('Search candidates by name, email…').fill(ADMIN.email);
+    const selfRow = userRow(page, ADMIN.email);
     await expect(selfRow).toContainText('E2E Admin');
-    await selfRow.getByRole('button', { name: 'Actions' }).click();
-    await selfRow.getByRole('button', { name: 'Edit' }).click();
-    await expect(page.getByTestId('user-role')).toBeDisabled();
-    await page.getByRole('button', { name: 'Cancel' }).click();
 
-    await selfRow.getByRole('button', { name: 'Actions' }).click();
-    await expect(selfRow.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    // Step 1: own delete button is disabled
+    await expect(selfRow.getByTitle('Delete user')).toBeDisabled();
+    // Step 2: choosing a lower role for yourself shows a warning
+    await selfRow.getByTitle('Edit user').click();
+    const drawer = page.getByRole('dialog', { name: 'Edit E2E Admin' });
+    await drawer.getByLabel('Role').selectOption('member');
+    await expect(drawer).toContainText('You can’t remove your own super-admin access.');
+    // Step 3: the server refuses the change too
+    await drawer.getByRole('button', { name: 'Save changes' }).click();
+    await expect(drawer.locator('.aa-msg:not(.aa-msg--ok)').last()).toBeVisible();
+    await expect(drawer.locator('.aa-msg--ok')).toHaveCount(0);
+    await drawer.getByRole('button', { name: 'Close', exact: true }).last().click();
+    await expect(selfRow).toContainText('Super Admin');
   });
 });

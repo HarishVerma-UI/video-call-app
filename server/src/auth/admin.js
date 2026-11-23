@@ -554,7 +554,7 @@ export function createAdmin(opts) {
     await Promise.all(jobIds.map(async (id) => { jobsById[id] = await store.byId(id); }));
     const applications = items.map((a) => {
       const j = jobsById[a.jobId];
-      return { ...publicApplication(a), jobTitle: j?.title ?? '—', company: j?.company ?? '', jobCategory: j?.category ?? '' };
+      return { ...publicApplication(a), jobTitle: j?.title ?? '-', company: j?.company ?? '', jobCategory: j?.category ?? '' };
     });
     sendJson(res, 200, { applications, total, page, limit });
   }

@@ -193,7 +193,7 @@ function ApplyModal({ job, completion, onClose, onApplied }: { job: Job; complet
       <div className="modal__card card" onClick={(e: MouseEvent) => e.stopPropagation()}>
         <header className="card__head">
           <div>
-            <h2>{gated ? 'Complete your profile first' : `Apply — ${job.title}`}</h2>
+            <h2>{gated ? 'Complete your profile first' : `Apply: ${job.title}`}</h2>
             <p>{gated ? 'Employers need a complete profile to consider you.' : job.company}</p>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><CloseIcon width={20} height={20} /></button>
@@ -201,7 +201,7 @@ function ApplyModal({ job, completion, onClose, onApplied }: { job: Job; complet
         {gated ? (
           <div className="job-gate">
             <div className="job-gate__meter" role="img" aria-label={`Profile ${completion}% complete`}><span style={{ width: `${completion}%` }} /></div>
-            <p>Your profile is <strong>{completion}%</strong> complete. Reach <strong>70%</strong> — add a headline, bio, a few skills, and your experience — to apply with one click.</p>
+            <p>Your profile is <strong>{completion}%</strong> complete. Reach <strong>70%</strong> to apply with one click: add a headline, bio, a few skills, and your experience.</p>
             <div className="modal__actions">
               <button className="btn btn--secondary" onClick={onClose}>Not now</button>
               <a className="btn btn--primary" href="/profile">Complete profile</a>
@@ -234,7 +234,7 @@ function ShareJobButton({ job }: { job: Job }) {
   const [copied, setCopied] = useState<'idle' | 'ok' | 'failed'>('idle');
   const ref = useRef<HTMLDivElement>(null);
   const url = `${location.origin}/jobs/${encodeURIComponent(job.id)}`;
-  const title = `${job.title} — ${job.company}`;
+  const title = `${job.title} at ${job.company}`;
   const text = `${title} on Huddle`;
 
   useEffect(() => {
@@ -439,7 +439,7 @@ function JobDetailPage({ job, fit, allJobs, saved, onToggleSave, onBack, onApply
         <span className="jobd__crumb-sep">/</span>
         <span>{catLabel(t, job.category)}</span>
         <span className="jobd__crumb-sep">/</span>
-        <span className="jobd__crumb-cur">{job.company} — {job.title}</span>
+        <span className="jobd__crumb-cur">{job.company} · {job.title}</span>
         <span className="jobd__crumb-id">{t('jobs.jobId')}: {job.id.slice(0, 8).toUpperCase()}</span>
       </div>
 

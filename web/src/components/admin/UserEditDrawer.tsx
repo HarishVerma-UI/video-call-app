@@ -55,7 +55,7 @@ export function UserEditDrawer({ user, onClose, onSaved }: { user: AdminUser; on
       const { user: updated } = await api.adminUpdateUser(user.id, { recruiterApplicationStatus: status });
       onSaved({ ...user, ...updated });
       setRole(normalizeRole(updated.role || 'member'));
-      setOk(status === 'approved' ? 'Approved — now a recruiter.' : 'Application rejected.');
+      setOk(status === 'approved' ? 'Approved. Now a recruiter.' : 'Application rejected.');
     } catch (e) { setErr(e instanceof Error ? e.message : 'Could not update the application.'); }
     finally { setBusy(false); }
   };
@@ -78,8 +78,8 @@ export function UserEditDrawer({ user, onClose, onSaved }: { user: AdminUser; on
             <section className="aa-card" style={{ borderColor: 'var(--aa-accent)', background: 'var(--aa-accent-soft)' }}>
               <div className="aa-card__head"><h3>Recruiter application · pending</h3></div>
               <dl className="aa-dlgrid">
-                <div className="aa-dl"><dt>Company</dt><dd>{app?.company || '—'}</dd></div>
-                <div className="aa-dl"><dt>Website</dt><dd>{app?.website ? <a href={app.website} target="_blank" rel="noreferrer">{app.website}</a> : '—'}</dd></div>
+                <div className="aa-dl"><dt>Company</dt><dd>{app?.company || '-'}</dd></div>
+                <div className="aa-dl"><dt>Website</dt><dd>{app?.website ? <a href={app.website} target="_blank" rel="noreferrer">{app.website}</a> : '-'}</dd></div>
               </dl>
               {app?.reason && <p className="aa-drawer__bio" style={{ marginTop: 8 }}>{app.reason}</p>}
               <div className="aa-form__actions" style={{ marginTop: 12 }}>

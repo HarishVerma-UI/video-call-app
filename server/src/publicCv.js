@@ -32,7 +32,7 @@ export function createPublicCv({ store, requireUser, trustProxy = false, log = (
       const pub = pathname.match(/^\/api\/public\/cv\/([0-9]{1,20})$/);
       if (pub && req.method === 'GET') {
         const lim = readLimiter.hit(clientIp(req, trustProxy));
-        if (!lim.ok) throw new HttpError(429, 'Too many requests — try again in a minute.', { retryAfterSec: lim.retryAfterSec });
+        if (!lim.ok) throw new HttpError(429, 'Too many requests, try again in a minute.', { retryAfterSec: lim.retryAfterSec });
         const doc = await store.get(pub[1]);
         if (!doc) throw new HttpError(404, 'No CV is published at this link.');
         sendJson(res, 200, { cv: cleanCv(doc.cv), template: doc.template, updatedAt: shape(doc).updatedAt }, { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
@@ -53,11 +53,11 @@ export function createPublicCv({ store, requireUser, trustProxy = false, log = (
       }
       if (req.method === 'PUT') {
         const lim = writeLimiter.hit(user.id);
-        if (!lim.ok) throw new HttpError(429, 'Too many updates — wait a moment.', { retryAfterSec: lim.retryAfterSec });
+        if (!lim.ok) throw new HttpError(429, 'Too many updates, wait a moment.', { retryAfterSec: lim.retryAfterSec });
         const b = await readJson(req, 128 * 1024);
         const cv = cleanCv(b.cv);
         const slug = phoneSlug(cv.phone);
-        if (!slug) throw new HttpError(400, 'Add a valid mobile number to your CV first — it becomes your link.');
+        if (!slug) throw new HttpError(400, 'Add a valid mobile number to your CV first, it becomes your link.');
         if (!cv.name) throw new HttpError(400, 'Add your name to the CV first.');
         const template = CV_TEMPLATES.includes(b.template) ? b.template : CV_TEMPLATES[0];
         const owner = await store.get(slug);

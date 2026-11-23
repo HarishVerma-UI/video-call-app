@@ -105,17 +105,17 @@ export function NetworkView({ openUser, openMessages }: { openUser: (id: string)
       <section className="network-stat-grid" aria-label="Network summary">
         <button type="button" className="network-stat-card" onClick={() => { setFilter('all'); scrollToSection('network-connections'); }}>
           <span className="network-stat-card__top"><span>Connections</span><i className="network-stat-card__icon network-stat-card__icon--green" aria-hidden="true">✓</i></span>
-          <strong>{connections === null ? '—' : connectionCount}</strong>
+          <strong>{connections === null ? '-' : connectionCount}</strong>
           <span className="network-stat-card__hint">View directory <span aria-hidden="true">→</span></span>
         </button>
         <button type="button" className="network-stat-card" onClick={() => scrollToSection('network-requests')}>
           <span className="network-stat-card__top"><span>Pending requests</span><i className="network-stat-card__icon network-stat-card__icon--amber" aria-hidden="true">!</i></span>
-          <strong>{requests === null ? '—' : requestCount}</strong>
+          <strong>{requests === null ? '-' : requestCount}</strong>
           <span className="network-stat-card__hint">{requestCount ? 'Review invitations' : 'All caught up'} <span aria-hidden="true">→</span></span>
         </button>
         <button type="button" className="network-stat-card" onClick={() => { setFilter('mentors'); scrollToSection('network-connections'); }}>
           <span className="network-stat-card__top"><span>Mentors</span><i className="network-stat-card__icon network-stat-card__icon--blue" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /></svg></i></span>
-          <strong>{connections === null ? '—' : mentorCount}</strong>
+          <strong>{connections === null ? '-' : mentorCount}</strong>
           <span className="network-stat-card__hint">Find mentors <span aria-hidden="true">→</span></span>
         </button>
       </section>

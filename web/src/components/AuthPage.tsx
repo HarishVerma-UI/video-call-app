@@ -16,13 +16,26 @@ type Fields = Partial<Record<'name' | 'email' | 'password' | 'cv' | 'recruiterCo
 type InfoPage = 'about' | 'privacy';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const CV_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+const CV_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
 
 class RegistrationUploadError extends Error {}
 
 function pathTab(): Tab {
   return location.pathname === '/register' ? 'register' : 'login';
 }
+
+/** Details carried over from the landing page, e.g. /register?role=recruiter&name=…&email=…&location=… */
+function landingParams() {
+  const q = new URLSearchParams(location.search);
+  return {
+    role: (q.get('role') === 'recruiter' ? 'recruiter' : 'jobSeeker') as RegistrationRole,
+    name: (q.get('name') ?? '').slice(0, 80),
+    email: (q.get('email') ?? '').slice(0, 200),
+    location: (q.get('location') ?? '').slice(0, 120),
+    loginAs: (q.get('as') === 'recruiter' ? 'recruiter' : 'user') as LoginMode,
+  };
+}
+const TAB_TITLES = { login: 'Sign in | Huddle', register: 'Create your free account | Huddle' } as const;
 
 function pathInfoPage(): InfoPage | null {
   if (location.pathname === '/about') return 'about';
@@ -83,13 +96,14 @@ export function AuthPage() {
   const [tab, setTabState] = useState<Tab>(pathTab);
   const infoPage = pathInfoPage();
   const [registrationStep, setRegistrationStep] = useState<RegistrationStep>(0);
-  const [registrationRole, setRegistrationRole] = useState<RegistrationRole>('jobSeeker');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [prefill] = useState(landingParams);
+  const [registrationRole, setRegistrationRole] = useState<RegistrationRole>(prefill.role);
+  const [name, setName] = useState(prefill.name);
+  const [email, setEmail] = useState(prefill.email);
   const [password, setPassword] = useState('');
-  const [loginMode, setLoginMode] = useState<LoginMode>('user');
+  const [loginMode, setLoginMode] = useState<LoginMode>(prefill.loginAs);
   const [headline, setHeadline] = useState('');
-  const [locationText, setLocationText] = useState('');
+  const [locationText, setLocationText] = useState(prefill.location);
   const [mobile, setMobile] = useState('');
   const [skills, setSkills] = useState('');
   const [experienceTitle, setExperienceTitle] = useState('');
@@ -112,6 +126,7 @@ export function AuthPage() {
   const registrationSteps = ['Account details', registrationRole === 'recruiter' ? 'Recruiter details' : 'Professional profile'];
 
   useEffect(() => setMessage((m) => m ?? notice), [notice]);
+  useEffect(() => { document.title = infoPage ? `${infoPage === 'about' ? 'About' : 'Privacy'} | Huddle` : TAB_TITLES[tab]; }, [tab, infoPage]);
   useEffect(() => {
     let cancelled = false;
     // Which social buttons to show is decided by the server's configuration.
@@ -251,10 +266,11 @@ export function AuthPage() {
             <a className="btn btn--primary btn--wide" href="/register">Create an account</a>
           </section>
         ) : <div className={`auth__card${tab === 'register' ? ' auth__card--wide' : ''}`}>
-          <div className="auth__brandmark" aria-label="Huddle">
+          <a className="auth__brandmark auth__brandmark--link" href="/" aria-label="Huddle home page">
             <Aperture open={0.42} className="mark" />
             <span>Huddle</span>
-          </div>
+          </a>
+          <a className="auth__back" href="/" data-testid="back-home">← Back to home</a>
           <div className="seg" role="tablist" aria-label="Account">
             <button role="tab" aria-selected={tab === 'login'} className={tab === 'login' ? 'is-on' : ''} onClick={() => setTab('login')} data-testid="tab-login">
               Sign in

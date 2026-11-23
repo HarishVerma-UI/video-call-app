@@ -93,7 +93,7 @@ const POSTS = [
   'Our team adopted pair programming and our code review cycle dropped from 2 days to 4 hours. Communication > process.',
   'Reflecting on 10 years in tech. The biggest lesson: the best code is the code you don\'t write. Simplicity always wins.',
   'Just gave my first conference talk! Terrifying but incredibly rewarding. If you\'re thinking about speaking, just do it.',
-  'The gap between a junior and senior developer isn\'t technical skill — it\'s knowing when NOT to use a shiny new technology.',
+  'The gap between a junior and senior developer isn\'t technical skill, it\'s knowing when NOT to use a shiny new technology.',
   'Spent today refactoring legacy code from 2018. No tests, no docs, variable names like "x" and "tmp2". We\'ve all been there. 😅',
   'Excited to announce I\'m joining a new company next month! Sometimes you need a change to grow. New adventures ahead!',
   'Built a side project this weekend: a CLI tool that generates git commit messages using AI. Already saving me 5 minutes daily.',

@@ -77,7 +77,7 @@ export function atsScore(cv: CvData, opts: { hasUploadedCV: boolean; role?: Role
 
   const parts: AtsPart[] = [
     { id: 'keywords', label: `${role.label} keywords`, got: keywordPts, max: 35, tip: missing.length ? `Add: ${missing.slice(0, 3).join(', ')}` : 'All key terms covered' },
-    { id: 'skills', label: 'Skills depth', got: skillPts, max: 15, tip: skillSet.size >= 8 ? `${skillSet.size} skills` : `${skillSet.size} skills — aim for 8+` },
+    { id: 'skills', label: 'Skills depth', got: skillPts, max: 15, tip: skillSet.size >= 8 ? `${skillSet.size} skills` : `${skillSet.size} skills, aim for 8+` },
     { id: 'summary', label: 'Professional summary', got: summaryPts, max: 15, tip: summaryPts === 15 ? 'Strong summary' : 'Write 2–3 lines on role, years and strengths' },
     { id: 'impact', label: 'Quantified impact', got: impactPts, max: 20, tip: bullets.length ? `${quantified} of ${bullets.length} bullets have real numbers` : 'Add experience bullets with results' },
     { id: 'structure', label: 'Structure & contact', got: structurePts, max: 10, tip: structurePts === 10 ? 'Contact, experience, education ✓' : 'Add contact, experience and education' },
