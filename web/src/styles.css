@@ -3521,7 +3521,13 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
   .messages__list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 240px; }
   .person-profile-grid { grid-template-columns: minmax(0, 1fr); }
   .person-vault { position: static; }
-  .logs-view__controls { flex-direction: column; }
+  /* Stack the log controls; the search must not flex-grow vertically (that made
+     it a giant empty box), so pin it to its natural height and full width. */
+  .logs-view__controls { flex-direction: column; align-items: stretch; }
+  .logs-view__search { flex: 0 0 auto; width: 100%; }
+  .logs-view__controls .btn { width: 100%; }
+  .logs-view__header { padding: 16px 16px 12px; }
+  .logs-view__body { padding-left: 16px; padding-right: 16px; }
 }
 @media (max-width: 560px) {
   .network-page { gap: 13px; padding: 18px 12px 30px; }
@@ -4100,3 +4106,18 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
 
 /* Sign-in card: the logo links back to the public home page. */
 .auth__brandmark--link { color: inherit; text-decoration: none; }
+
+/* ===== mobile QA: stop iOS auto-zoom on focus =====
+   iOS Safari zooms the page when a text control under 16px gets focus, which
+   makes editing (CV fields, auth, profile, jobs, the logs filter) feel broken.
+   Bump every editable control to 16px at phone widths. The :not() chains raise
+   specificity above the 13.5px component rules so these win regardless of order. */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea:not([disabled]) {
+    font-size: 16px;
+  }
+  select:not([multiple]):not([size]) {
+    font-size: 16px;
+  }
+}
