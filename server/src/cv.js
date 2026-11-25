@@ -14,7 +14,12 @@ import zlib from 'node:zlib';
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE = /(?:(?:\+|00)\d{1,3}[\s-]?)?(?:\(\d{1,4}\)[\s-]?)?\d(?:[\d\s-]{6,}\d)/;
 const YEAR_RE = /\b(?:19|20)\d{2}\b/;
-const SECTION_RE = /^(summary|objective|profile|skills|technical skills|core competencies|experience|work experience|professional experience|employment|education|academic|projects|certifications|achievements|interests|languages|references|contact)\b/i;
+const BULLET_RE = /^[•\-*·–—○▪●◦‣◆▶»]/;
+// All the headings a "skills" section goes by in the wild. Longest/most-specific
+// first so a line like "Core Technical Skills" matches that, not bare "skills".
+const SKILLS_HEAD = 'core technical skills|technical skills|core competencies|key skills|technical proficiencies|technical expertise|areas of expertise|core technologies|technologies|technology stack|tech stack|tools (?:&|and) technologies|skills (?:&|and) (?:tools|expertise|interests)|competencies|proficiencies|expertise|skills';
+const EXP_HEAD = 'experience|work experience|professional experience|employment|employment history|work history|career history';
+const SECTION_RE = new RegExp(`^(?:summary|objective|profile|${SKILLS_HEAD}|${EXP_HEAD}|education|academic|projects|certifications|achievements|interests|languages|references|contact)\\b`, 'i');
 
 function decodeEntities(s) {
   return s
@@ -118,9 +123,11 @@ export function extractText(buf, contentType = '') {
 // ---- resume heuristics ---------------------------------------------------
 function splitSkills(text) {
   return text
-    .split(/[,;•|·\n\t]|(?:\s{2,})/)
+    .split(/[,;•|·\n\t]|\s{2,}|\s\/\s/)
     .map((s) => s.replace(/^[-–•\s]+|[-–•\s]+$/g, '').trim())
-    .filter((s) => s && s.length <= 40 && /[A-Za-z]/.test(s) && !/^(and|or|etc\.?)$/i.test(s));
+    // drop a leading category label ("Frontend: Angular" → "Angular")
+    .map((s) => s.replace(/^[A-Za-z][\w .&+#-]{0,24}:\s*/, '').trim())
+    .filter((s) => s && s.length <= 40 && /[A-Za-z]/.test(s) && !/^(and|or|etc\.?|e\.?g\.?|including|such as)$/i.test(s));
 }
 
 /** Collect the lines that belong to a section, from its heading to the next heading. */
@@ -154,10 +161,19 @@ function extractSummary(lines) {
   return body.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
 }
 
+const SKILLS_HEAD_RE = new RegExp(`^(?:${SKILLS_HEAD})\\b`, 'i');
+const SKILLS_INLINE_RE = new RegExp(`^(?:${SKILLS_HEAD})\\s*[:\\-–]\\s*(.+)$`, 'i');
 function extractSkills(lines) {
-  const block = sectionLines(lines, /^(skills|technical skills|core competencies)\b/i)
-    .join('\n')
-    .trim();
+  // 1) a heading with the list on the SAME line: "Core Technologies: Angular, React"
+  for (const raw of lines) {
+    const m = raw.trim().match(SKILLS_INLINE_RE);
+    if (m && m[1]) {
+      const inline = dedupe(splitSkills(m[1])).slice(0, 40);
+      if (inline.length) return inline;
+    }
+  }
+  // 2) a heading with the list on the lines beneath it
+  const block = sectionLines(lines, SKILLS_HEAD_RE).join('\n').trim();
   if (block) return dedupe(splitSkills(block)).slice(0, 40);
   return [];
 }
@@ -174,25 +190,65 @@ function entryBlocks(lines) {
   return blocks;
 }
 
+/**
+ * Split an experience section into one block per role. Many exports (especially
+ * DOCX) have no blank line between jobs, so also start a new block at a dated
+ * header line once the current block already carries a date — this recovers
+ * multiple roles that would otherwise be merged into one.
+ */
+function experienceBlocks(lines) {
+  const blocks = [];
+  let cur = [];
+  const flush = () => { if (cur.length) { blocks.push(cur); cur = []; } };
+  const dated = (l) => YEAR_RE.test(l) || /\b(present|current)\b/i.test(l);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line === '') { flush(); continue; }
+    const nonBullet = !BULLET_RE.test(line) && !/^[a-z]/.test(line) && line.length <= 100;
+    const hasDate = cur.some(dated);
+    // Start a new role when: a dated header appears after we already have a date,
+    // OR a non-bullet line follows the previous role's bullet list.
+    const newDated = nonBullet && dated(line) && hasDate;
+    const afterBullets = nonBullet && hasDate && cur.length > 0 && BULLET_RE.test(cur[cur.length - 1]);
+    if (newDated || afterBullets) flush();
+    cur.push(line);
+  }
+  flush();
+  return blocks;
+}
+
 function extractExperience(lines) {
-  const block = sectionLines(lines, /^(experience|work experience|professional experience|employment)\b/i);
+  const block = sectionLines(lines, new RegExp(`^(?:${EXP_HEAD})\\b`, 'i'));
   const out = [];
-  for (const b of entryBlocks(block)) {
+  for (const b of experienceBlocks(block)) {
     if (!b.length) continue;
     const head = b[0];
-    const years = head.match(new RegExp(`${YEAR_RE.source}[^]*?(?:${YEAR_RE.source}|present)`, 'i'));
+    // The dates may sit on the title line or on the line just below it.
+    const dateLine = (YEAR_RE.test(head) || /present|current/i.test(head)) ? head
+      : (b[1] && (YEAR_RE.test(b[1]) || /present|current/i.test(b[1]))) ? b[1] : head;
+    const yrs = dateLine.match(new RegExp(YEAR_RE.source, 'g')) || [];
     const seg = head.split(/\s[-–|@]\s|,\s/).map((x) => x.trim()).filter(Boolean);
-    const title = seg[0] ?? head;
-    const company = seg[1] ?? (b[1] && !YEAR_RE.test(b[1]) ? b[1] : '');
-    const yrs = head.match(YEAR_RE) ? head.match(new RegExp(YEAR_RE.source, 'g')) : [];
+    const title = (seg[0] ?? head).slice(0, 120);
+    let company = seg[1] ?? '';
+    // If the dates live on line 2, that line isn't description.
+    let descStart = dateLine === b[1] ? 2 : 1;
+    if (!company && dateLine === b[1]) {
+      // title on line 1, "Company … dates" on line 2 → strip the date tail off line 2
+      company = b[1]
+        .replace(new RegExp(`[-–|,(]?\\s*(?:${YEAR_RE.source}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[^]*$`, 'i'), '')
+        .replace(/\b(present|current)\b.*$/i, '').replace(/[-–|,(]\s*$/, '').trim().slice(0, 120);
+    } else if (!company && b[1] && !YEAR_RE.test(b[1]) && !BULLET_RE.test(b[1])) {
+      company = b[1].slice(0, 120);
+      descStart = 2;
+    }
     out.push({
-      title: title.slice(0, 120),
+      title,
       company: company.slice(0, 120),
-      start: years && yrs && yrs[0] ? yrs[0] : '',
-      end: years && yrs && yrs[1] ? yrs[1] : /present/i.test(head) ? 'Present' : '',
-      description: b.slice(1).join(' ').slice(0, 1000),
+      start: yrs[0] ?? '',
+      end: yrs[1] ?? (/present|current/i.test(dateLine) ? 'Present' : ''),
+      description: b.slice(descStart).join(' ').slice(0, 1000),
     });
-    if (out.length >= 10) break;
+    if (out.length >= 12) break;
   }
   return out;
 }
