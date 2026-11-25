@@ -106,6 +106,38 @@ test('parseResume reads the summary section (heading or inline) as the bio', () 
   assert.equal(parseResume('Raj\nProfile: https://linkedin.com/in/raj-some-very-long-handle\nSkills\nSQL').summary, '');
 });
 
+test('parseResume reads skills under varied headings and category labels', () => {
+  // "Core Technical Skills" with "Label: a, b" lines (not the bare "Skills" heading)
+  const r = parseResume('Ravi K\nFront-End Developer\n\nCORE TECHNICAL SKILLS\nFrontend: Angular, React, TypeScript\nTools: Git, CI/CD, REST APIs\n\nExperience\nEngineer - Acme, 2021 - Present\nBuilt things.');
+  assert.ok(r.skills.includes('Angular'), 'Angular');
+  assert.ok(r.skills.includes('React') && r.skills.includes('TypeScript'));
+  assert.ok(r.skills.includes('CI/CD'), 'CI/CD kept intact, not split on the slash');
+  assert.ok(!r.skills.some((s) => /^Frontend:|^Tools:/.test(s)), 'category label stripped');
+  // inline "Technologies: a | b | c"
+  const inline = parseResume('Sara\nTechnologies: Java | Spring Boot | SQL\nExperience\nDev - X, 2020 - 2022\nWork.');
+  assert.ok(inline.skills.includes('Java') && inline.skills.includes('Spring Boot') && inline.skills.includes('SQL'));
+});
+
+test('parseResume splits multiple roles that have no blank line between them', () => {
+  const r = parseResume([
+    'Harish V', 'Front-End Developer', '',
+    'EXPERIENCE',
+    'UI / Front-End Developer',
+    'Eurofins Jun 2023 - Present',
+    '• Architected Angular frontends',
+    'UI Developer | Deloitte',
+    'Jun 2021 - 2023',
+    '• Built web apps',
+    '', 'EDUCATION', 'B.E. CS - Pune University, 2013',
+  ].join('\n'));
+  assert.equal(r.experience.length, 2);
+  assert.equal(r.experience[0].title, 'UI / Front-End Developer');
+  assert.equal(r.experience[0].end, 'Present');
+  assert.equal(r.experience[1].title, 'UI Developer');
+  assert.equal(r.experience[1].company, 'Deloitte');
+  assert.ok(!/Deloitte/.test(r.experience[0].description), 'next role does not leak into the previous description');
+});
+
 test('parseResume flags low confidence on junk', () => {
   const r = parseResume('....\n\n####');
   assert.equal(r.lowConfidence, true);

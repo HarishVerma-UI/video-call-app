@@ -19,6 +19,24 @@ type FeedCategory = 'Hiring & Referrals';
 type FeedTab = 'For You' | FeedCategory | 'Saved';
 const FEED_TABS: FeedTab[] = ['For You', 'Hiring & Referrals', 'Saved'];
 
+// Render post text with clickable links. Matches http(s):// and bare www. URLs;
+// everything else stays plain text. Links open in a new tab, no referrer.
+const URL_RE = /((?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;!?)'"])/gi;
+function Linkify({ text }: { text: string }) {
+  const parts = text.split(URL_RE);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 1) {
+          const href = /^https?:\/\//i.test(part) ? part : `https://${part}`;
+          return <a key={i} href={href} target="_blank" rel="noopener noreferrer nofollow" className="post__link">{part}</a>;
+        }
+        return part;
+      })}
+    </>
+  );
+}
+
 function postCategory(post: Post): FeedCategory | null {
   if (post.text.startsWith('Role: ')) return 'Hiring & Referrals';
   return null;
@@ -140,9 +158,9 @@ function PostCard({ post, api, me, isAdmin, onChange, onDelete, nav, saved, onTo
             <div className="post__role">
               <h3>{roleHeading?.replace(/^Role:\s*/, '')}</h3>
               {roleMeta && <span>{roleMeta}</span>}
-              {roleDescription.join('\n').trim() && <p className="post__text">{roleDescription.join('\n').trim()}</p>}
+              {roleDescription.join('\n').trim() && <p className="post__text"><Linkify text={roleDescription.join('\n').trim()} /></p>}
             </div>
-          ) : post.text ? <p className="post__text">{post.text}</p> : null}
+          ) : post.text ? <p className="post__text"><Linkify text={post.text} /></p> : null}
           {post.imageUrl && <img className="post__img" src={post.imageUrl} alt="" loading="lazy" />}
         </>
       )}
