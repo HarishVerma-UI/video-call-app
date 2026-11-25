@@ -440,6 +440,10 @@ export interface ApiClient {
   updateProfile(input: { name?: string; email?: string; currentPassword?: string }): Promise<AuthResponse>;
   /** Change password (or set a first one: no currentPassword). Returns a fresh token; other devices are signed out on a change. */
   changePassword(input: { currentPassword?: string; newPassword: string }): Promise<AuthResponse>;
+  /** Request a password reset. Always resolves the same way; `resetUrl` is only present in dev/demo without email. */
+  forgotPassword(input: { email: string }): Promise<{ ok: boolean; message: string; resetUrl?: string }>;
+  /** Finish a reset with the emailed token. Returns a fresh token (signs the member in). */
+  resetPassword(input: { token: string; password: string }): Promise<AuthResponse>;
   /** Which social sign-in providers are configured on the server. */
   providers(): Promise<{ providers: Providers }>;
 
@@ -598,6 +602,8 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     me: () => request('GET', '/api/auth/me'),
     updateProfile: (input) => request('PATCH', '/api/auth/me', input),
     changePassword: (input) => request('POST', '/api/auth/password', input),
+    forgotPassword: (input) => request('POST', '/api/auth/forgot', input),
+    resetPassword: (input) => request('POST', '/api/auth/reset', input),
     providers: () => request('GET', '/api/auth/providers'),
     adminListUsers: ({ page = 1, limit = 50, search = '', role = '' } = {}) => {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });

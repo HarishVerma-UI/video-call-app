@@ -25,6 +25,8 @@ interface AuthValue {
   updateProfile: (input: { name?: string; email?: string; currentPassword?: string }) => Promise<AuthUser>;
   /** Change password (currentPassword null = set a first one); this device stays signed in, other devices are signed out. */
   changePassword: (currentPassword: string | null, newPassword: string) => Promise<void>;
+  /** Finish a password reset with a token from the email link; signs this device in. */
+  resetPassword: (token: string, password: string) => Promise<void>;
   /** Re-read the user (e.g. after a change elsewhere). */
   refreshUser: () => Promise<void>;
   /** The signed-in user's profile photo URL (null if none). Shown in avatars app-wide. */
@@ -199,6 +201,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     changePassword: async (currentPassword, newPassword) => {
       accept(await api.changePassword(currentPassword === null ? { newPassword } : { currentPassword, newPassword }));
+    },
+    resetPassword: async (token, password) => {
+      accept(await api.resetPassword({ token, password }));
     },
     refreshUser: async () => {
       const { user } = await api.me();

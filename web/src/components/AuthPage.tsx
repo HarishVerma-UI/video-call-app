@@ -361,6 +361,9 @@ export function AuthPage() {
                   onChange={setPassword}
                   error={errors.password}
                 />
+                {tab === 'login' && (
+                  <a className="auth__forgot" href="/reset-password" data-testid="forgot-password">Forgot password?</a>
+                )}
                 {tab === 'register' && password && (
                   <div className={`meter meter--${strength.score}`} aria-live="polite">
                     <div className="meter__track">
