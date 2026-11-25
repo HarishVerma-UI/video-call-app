@@ -84,6 +84,7 @@ export function createMemoryUserStore() {
         provider,
         providerId,
         recruiterApplication,
+        passwordReset: null,
         tokenVersion: 0,
         createdAt: now,
         lastLoginAt: null,
@@ -142,8 +143,20 @@ export function createMemoryUserStore() {
       const u = byId.get(id);
       if (!u) return null;
       u.passwordHash = passwordHash;
+      u.passwordReset = null; // any pending reset token is now spent
       if (revokeSessions) u.tokenVersion = (u.tokenVersion ?? 0) + 1;
       return { ...u };
+    },
+    // Store (or clear with null) a one-time password-reset token on the account.
+    async setResetToken(id, reset) {
+      const u = byId.get(id);
+      if (!u) return null;
+      u.passwordReset = reset;
+      return { ...u };
+    },
+    async findByResetHash(tokenHash) {
+      for (const u of byId.values()) if (u.passwordReset?.tokenHash === tokenHash) return { ...u };
+      return null;
     },
     async setRole(id, role) {
       const u = byId.get(id);
@@ -197,6 +210,7 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       provider: doc.provider ?? null,
       providerId: doc.providerId ?? null,
       recruiterApplication: doc.recruiterApplication ?? null,
+      passwordReset: doc.passwordReset ?? null,
       tokenVersion: doc.tokenVersion ?? 0,
       createdAt: doc.createdAt,
       lastLoginAt: doc.lastLoginAt ?? null,
@@ -282,9 +296,18 @@ export function mongoUserStoreFromCollection(users, ObjectId, extra = {}) {
       if (!_id) return null;
       await users.updateOne(
         { _id },
-        { $set: { passwordHash, updatedAt: new Date() }, ...(revokeSessions ? { $inc: { tokenVersion: 1 } } : {}) },
+        { $set: { passwordHash, updatedAt: new Date() }, $unset: { passwordReset: '' }, ...(revokeSessions ? { $inc: { tokenVersion: 1 } } : {}) },
       );
       return toUser(await users.findOne({ _id }));
+    },
+    async setResetToken(id, reset) {
+      const _id = oid(id);
+      if (!_id) return null;
+      await users.updateOne({ _id }, reset ? { $set: { passwordReset: reset } } : { $unset: { passwordReset: '' } });
+      return toUser(await users.findOne({ _id }));
+    },
+    async findByResetHash(tokenHash) {
+      return toUser(await users.findOne({ 'passwordReset.tokenHash': tokenHash }));
     },
     async setRole(id, role) {
       const _id = oid(id);

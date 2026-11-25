@@ -1010,6 +1010,23 @@ svg {
   color: var(--muted);
   margin-top: -8px;
 }
+.auth__forgot {
+  align-self: flex-end;
+  margin-top: -6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent, #6366f1);
+  text-decoration: none;
+}
+.auth__forgot:hover { text-decoration: underline; }
+.auth__devlink {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--accent, #6366f1) 10%, var(--surface));
+  border: 1px dashed color-mix(in oklab, var(--accent, #6366f1) 40%, var(--surface));
+  font-size: 0.82rem;
+}
+.auth__devlink a { overflow-wrap: anywhere; color: var(--accent, #6366f1); }
 .auth__msg {
   padding: 10px 12px;
   border-radius: var(--r-sm);

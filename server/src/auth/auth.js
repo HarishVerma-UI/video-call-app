@@ -1,8 +1,10 @@
 // Accounts: register, log in, and "who am I", plus token checks used by the
 // WebSocket. Tokens are JWTs (HS256) carrying the user id in `sub`.
 
+import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, bearerToken, clientIp, readJson, sendJson } from '../http.js';
 import { DuplicateEmailError, publicUser } from '../db/userStore.js';
+import { createMailer, passwordResetEmail } from '../mailer.js';
 import { TokenError, signToken, verifyToken } from './jwt.js';
 import { dummyVerify, hashPassword, verifyPassword } from './password.js';
 import { createOAuth } from './oauth.js';
@@ -107,6 +109,15 @@ export function createAuth(opts) {
   const loginByIp = createRateLimiter({ limit: 50, windowMs: 15 * 60_000 });
   const loginByEmail = createRateLimiter({ limit: 10, windowMs: 15 * 60_000 });
   const registerByIp = createRateLimiter({ limit: opts.registerRateLimit ?? 20, windowMs: 60 * 60_000 });
+  const forgotByIp = createRateLimiter({ limit: 20, windowMs: 60 * 60_000 });
+  const forgotByEmail = createRateLimiter({ limit: 5, windowMs: 60 * 60_000 });
+  const resetByIp = createRateLimiter({ limit: 30, windowMs: 60 * 60_000 });
+  const mailer = opts.mailer ?? createMailer({ log: opts.log });
+  // In dev/demo (no mail provider) the reset link is returned to the caller so it
+  // can be shown on screen. Off in production so a link never leaks by email alone.
+  const exposeResetLink = opts.exposeResetLink ?? true;
+  const RESET_TTL_MS = 60 * 60_000; // 1 hour
+  const hashResetToken = (t) => createHash('sha256').update(t).digest('hex');
 
   const issue = (user) => {
     const token = signToken(
@@ -290,6 +301,69 @@ export function createAuth(opts) {
     sendJson(res, 200, issue(updated));
   }
 
+  /**
+   * POST /api/auth/forgot — begin a password reset. Always answers the same way
+   * whether or not the email has an account (no account enumeration). When a
+   * matching account exists we mint a one-time, 1-hour token, store only its
+   * hash, and email the link; in dev with no mail provider the link comes back in
+   * the response so it can be shown on screen.
+   */
+  async function forgotPassword(req, res) {
+    const ip = clientIp(req, opts.trustProxy);
+    const body = await readJson(req);
+    const email = cleanEmail(body.email);
+    if (emailError(email)) throw new HttpError(400, 'Enter a valid email address.', { fields: { email: 'Enter a valid email address.' } });
+
+    const a = forgotByIp.hit(ip);
+    const b = forgotByEmail.hit(email);
+    const generic = { ok: true, message: 'If an account exists for that email, a reset link is on its way.' };
+    // Rate limited: still answer generically so attackers learn nothing.
+    if (!a.ok || !b.ok) { sendJson(res, 200, generic); return; }
+
+    const user = await opts.store.findByEmail(email);
+    if (!user || !user.email) { sendJson(res, 200, generic); return; }
+
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+    await opts.store.setResetToken(user.id, { tokenHash: hashResetToken(token), expiresAt });
+
+    const base = (opts.appUrl || '').replace(/\/$/, '');
+    const resetUrl = `${base}/reset-password?token=${token}`;
+    const { delivered } = await mailer.send({ to: user.email, ...passwordResetEmail({ name: user.name, resetUrl }) });
+    opts.log?.(`auth   password reset requested ${email}${delivered ? ' (emailed)' : ' (link not emailed)'}`);
+    recordAudit({ ...actorOf(user), action: 'requested password reset', category: 'auth' });
+
+    // Show the link on screen only when it wasn't emailed and we're allowed to.
+    sendJson(res, 200, (!delivered && exposeResetLink) ? { ...generic, resetUrl } : generic);
+  }
+
+  /** POST /api/auth/reset — finish a reset with a valid token; signs the member in. */
+  async function resetPassword(req, res) {
+    const ip = clientIp(req, opts.trustProxy);
+    const limited = resetByIp.hit(ip);
+    if (!limited.ok) throw new HttpError(429, 'Too many attempts. Please wait a few minutes and try again.', { retryAfterSec: limited.retryAfterSec });
+
+    const body = await readJson(req);
+    const token = typeof body.token === 'string' ? body.token : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!token) throw new HttpError(400, 'This reset link is invalid or has expired.', { code: 'reset-invalid' });
+    const pwErr = passwordError(password);
+    if (pwErr) throw new HttpError(400, 'Please fix the highlighted fields.', { fields: { password: pwErr } });
+
+    const user = await opts.store.findByResetHash(hashResetToken(token));
+    const expiresAt = user?.passwordReset?.expiresAt;
+    if (!user || !expiresAt || Date.parse(expiresAt) < Date.now()) {
+      if (user) await opts.store.setResetToken(user.id, null); // clear an expired token
+      throw new HttpError(400, 'This reset link is invalid or has expired. Request a new one.', { code: 'reset-invalid' });
+    }
+
+    // setPassword bumps tokenVersion (ends every existing session) and clears the token (one-time use).
+    const updated = await opts.store.setPassword(user.id, await hashPassword(password));
+    opts.log?.(`auth   password reset completed ${updated.email}`);
+    recordAudit({ ...actorOf(updated), action: 'reset password', category: 'auth' });
+    sendJson(res, 200, issue(updated));
+  }
+
   const oauth = createOAuth({
     oauth: opts.oauth ?? {},
     appUrl: opts.appUrl ?? '',
@@ -312,6 +386,8 @@ export function createAuth(opts) {
     else if (route === 'GET /api/auth/me') await me(req, res);
     else if (route === 'PATCH /api/auth/me') await updateMe(req, res);
     else if (route === 'POST /api/auth/password') await changePassword(req, res);
+    else if (route === 'POST /api/auth/forgot') await forgotPassword(req, res);
+    else if (route === 'POST /api/auth/reset') await resetPassword(req, res);
     else if (route === 'GET /api/auth/providers') sendJson(res, 200, { providers: oauth.configuredProviders() });
     else throw new HttpError(404, 'Not found');
     return true;
@@ -325,6 +401,9 @@ export function createAuth(opts) {
       loginByIp.close();
       loginByEmail.close();
       registerByIp.close();
+      forgotByIp.close();
+      forgotByEmail.close();
+      resetByIp.close();
     },
   };
 }

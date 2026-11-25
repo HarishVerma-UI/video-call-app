@@ -113,6 +113,8 @@ export function createApp(
     jwtExpiresInSec: config.jwtExpiresInSec,
     trustProxy: config.trustProxy,
     registerRateLimit: config.registerRateLimit,
+    // Show the reset link on screen only outside production (override: AUTH_EXPOSE_RESET_LINK=0/1).
+    exposeResetLink: process.env.AUTH_EXPOSE_RESET_LINK ? process.env.AUTH_EXPOSE_RESET_LINK === '1' : process.env.NODE_ENV !== 'production',
     onRegister,
     log,
   });
