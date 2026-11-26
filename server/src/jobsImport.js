@@ -115,6 +115,29 @@ export function fromJobicy(j) {
   };
 }
 
+export function fromRemoteOK(j) {
+  const title = j.position ?? j.title ?? '';
+  return {
+    title,
+    company: j.company ?? '',
+    category: categorize(title, j.tags),
+    country: j.location || 'Remote',
+    type: classifyType(Array.isArray(j.tags) ? j.tags.join(' ') : ''),
+    experience: classifyExperience(title),
+    salaryMin: salaryNum(j.salary_min),
+    salaryMax: salaryNum(j.salary_max),
+    salaryCurrency: 'USD',
+    remote: true,
+    description: stripHtml(j.description),
+    requirements: [],
+    skills: cleanSkills(j.tags),
+    active: true,
+    applyUrl: j.url || (j.slug ? `https://remoteok.com/remote-jobs/${j.slug}` : (j.apply_url ?? '')),
+    source: 'RemoteOK',
+    _date: j.date ?? null,
+  };
+}
+
 // ---- pipeline -----------------------------------------------------------
 /** Keep only jobs published within the last `days` days (undated jobs are dropped). */
 export function filterRecent(jobs, days = 10) {
@@ -233,8 +256,12 @@ export function fromCsvRow(row) {
   };
 }
 
-/** Full pipeline over raw source arrays: { remotive, arbeitnow, jobicy } → JobInput[] */
-export function buildImport({ remotive = [], arbeitnow = [], jobicy = [] } = {}, { days = 10, limit = 100 } = {}) {
-  const all = [...remotive.map(fromRemotive), ...arbeitnow.map(fromArbeitnow), ...jobicy.map(fromJobicy)];
+/** Full pipeline over raw source arrays → JobInput[]. techOnly keeps only tech roles. */
+export function buildImport({ remotive = [], arbeitnow = [], jobicy = [], remoteok = [] } = {}, { days = 10, limit = 100, techOnly = false } = {}) {
+  let all = [
+    ...remotive.map(fromRemotive), ...arbeitnow.map(fromArbeitnow),
+    ...jobicy.map(fromJobicy), ...remoteok.map(fromRemoteOK),
+  ];
+  if (techOnly) all = all.filter((j) => j.category === 'tech');
   return finalize(dedupeJobs(filterRecent(all, days))).slice(0, limit);
 }
