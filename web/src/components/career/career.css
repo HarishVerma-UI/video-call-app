@@ -630,3 +630,22 @@
   .st-tools { grid-template-columns: minmax(0, 1fr); }
   .st-status { width: 100%; }
 }
+
+/* ---- mock interview ---- */
+.cp-type-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.cp-type-option { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 9px 11px; border: 1px solid var(--aa-border); border-radius: 10px; background: var(--aa-surface); color: var(--aa-text); cursor: pointer; }
+.cp-type-option strong { font-size: 12px; }
+.cp-type-option small { color: var(--aa-muted); font-size: 10px; }
+.cp-type-option:hover:not(.is-selected) { border-color: var(--aa-accent); }
+.cp-type-option.is-selected { border-color: var(--aa-accent); background: var(--aa-accent); color: var(--aa-accent-ink); }
+.cp-type-option.is-selected small { color: color-mix(in srgb, var(--aa-accent-ink) 72%, transparent); }
+.cp-sessions-list { display: flex; flex-direction: column; gap: 9px; }
+.cp-session-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 13px; border: 1px solid var(--aa-border); border-radius: 11px; background: var(--aa-surface-2); }
+.cp-session-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-session-main strong { font-size: 12.5px; color: var(--aa-text); }
+.cp-session-main span { font-size: 11px; color: var(--aa-text-2); }
+.cp-session-main small { font-size: 10px; color: var(--aa-muted); overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 520px) {
+  .cp-type-grid { grid-template-columns: 1fr; }
+  .cp-session-row { flex-direction: column; align-items: stretch; }
+}
