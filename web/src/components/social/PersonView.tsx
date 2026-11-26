@@ -1,6 +1,7 @@
 import { ApiError, type Post, type Profile } from '@vca/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { RichText } from './RichText';
 import { useCalling } from '../../calling';
 import { ago } from '../../format';
 import { ConnectButton, ProfileAvatar, roleBadges } from './common';
@@ -204,7 +205,7 @@ export function PersonView({ userId, openMessages, back }: { userId: string; ope
                       <ProfileAvatar profile={{ userId: post.authorId, name: post.authorName, photoUrl: post.authorPhotoUrl }} size={36} />
                       <div><strong>{post.authorName}</strong><span>{ago(post.createdAt)}</span></div>
                     </div>
-                    {post.text && <p className="post__text">{post.text}</p>}
+                    {post.text && <p className="post__text"><RichText text={post.text} /></p>}
                     {post.imageUrl && <img className="post__img" src={post.imageUrl} alt="" />}
                     <div className="person-post__meta"><span>{post.likeCount} likes</span><span>{post.comments.length} comments</span></div>
                   </article>

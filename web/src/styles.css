@@ -3042,6 +3042,8 @@ svg {
 .post__text { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .post__link { color: var(--accent, #6366f1); font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
 .post__link:hover { text-decoration: underline; }
+/* Hashtags get their own colour, distinct from links. */
+.post__tag { color: #0ea5e9; font-weight: 600; }
 .post__img { max-width: 100%; border-radius: var(--r); margin: 6px 0; }
 .post__actions { display: flex; gap: 16px; align-items: center; color: var(--muted); font-size: 0.88rem; padding: 8px 0; border-top: 1px solid var(--line); margin-top: 8px; }
 .post__like { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; }
