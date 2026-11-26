@@ -138,6 +138,25 @@ test('parseResume splits multiple roles that have no blank line between them', (
   assert.ok(!/Deloitte/.test(r.experience[0].description), 'next role does not leak into the previous description');
 });
 
+test('parseResume captures skills mentioned anywhere, not only under a heading', () => {
+  const r = parseResume('Ada Lane\nFront-End Engineer\nada@x.com\n\nBuilt large apps with Angular and TypeScript; used RxJS, Docker and CI/CD daily.\n\nExperience\nDev - Acme, 2021 - Present\nShipped React components with Jest tests.');
+  for (const s of ['Angular', 'TypeScript', 'RxJS', 'Docker', 'CI/CD', 'React', 'Jest']) {
+    assert.ok(r.skills.includes(s), `expected skill ${s}`);
+  }
+});
+
+test('parseResume fills a summary from the opening paragraph when there is no Summary heading', () => {
+  const r = parseResume('Ravi Kumar\nSenior Developer\nravi@x.com\n\nSeasoned engineer with a decade of experience delivering reliable, well-tested web products for global teams.\n\nExperience\nLead - Globex, 2019 - 2024\nDid the work.');
+  assert.ok(r.summary.length > 40, 'summary filled');
+  assert.match(r.summary, /Seasoned engineer/);
+});
+
+test('parseResume reads education under "Qualifications"', () => {
+  const r = parseResume('Sam Roy\nDesigner\nsam@x.com\n\nQualifications\nB.Des Visual Communication - NID, 2015');
+  assert.equal(r.education.length, 1);
+  assert.equal(r.education[0].year, '2015');
+});
+
 test('parseResume flags low confidence on junk', () => {
   const r = parseResume('....\n\n####');
   assert.equal(r.lowConfidence, true);
