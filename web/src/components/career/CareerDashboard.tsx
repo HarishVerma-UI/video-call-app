@@ -6,7 +6,7 @@ import { cvErrorText } from '../../profile/ProfileContext';
 import { ROLES, atsTone } from './ats';
 import { PERSONAS, READY_GATE, SCAN_STAGES, useMasterCv } from './MasterCv';
 
-export type StudioSection = 'dashboard' | 'cv' | 'role' | 'expert' | 'experts' | 'sync';
+export type StudioSection = 'dashboard' | 'cv' | 'role' | 'expert' | 'experts' | 'mock' | 'sync';
 
 const P = {
   upload: 'M12 16V4|M7 9l5-5 5 5|M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3',
@@ -18,6 +18,7 @@ const P = {
   cv: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6M9 13h6M9 17h4',
   wand: 'M15 4V2M15 10V8M12.5 6.5h-2M19.5 6.5h-2|M5 19l9-9|M17 13l4 4-2 2-4-4z',
   expert: 'M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8|M20 8v6M23 11h-6',
+  mic: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z|M5 11a7 7 0 0 0 14 0M12 18v4',
   sync: 'M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5|M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5',
 };
 const I = ({ d, size = 16 }: { d: string; size?: number }) => (
@@ -292,6 +293,7 @@ export function StudioDashboard({ go }: { go: (s: StudioSection) => void }) {
     { id: 'cv', icon: P.cv, title: 'CV Generator', desc: '10 templates, live edit, PDF / CSV / public link' },
     { id: 'role', icon: P.wand, title: 'AI CV Builder', desc: 'Answer 3 questions, AI writes your CV' },
     { id: 'expert', icon: P.expert, title: 'Expert CV Review', desc: '30-minute session with a specialist' },
+    { id: 'mock', icon: P.mic, title: 'Mock Interview', desc: '1:1 practice with instant feedback' },
     { id: 'sync', icon: P.sync, title: 'My Profile & Sync', desc: 'Edit details and sync everywhere' },
   ];
   return (

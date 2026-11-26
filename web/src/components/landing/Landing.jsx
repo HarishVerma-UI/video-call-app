@@ -127,6 +127,13 @@ const ShieldCheck = createIcon(
     <path d="m9 12 2 2 4-4" />
   </>
 );
+const MicIcon = createIcon(
+  <>
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+    <path d="M5 11a7 7 0 0 0 14 0" />
+    <line x1="12" x2="12" y1="18" y2="22" />
+  </>
+);
 const Lock = createIcon(
   <>
     <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
@@ -2932,9 +2939,9 @@ export default function HuddleLandingPage({ initialPath = '/' }) {
               {/* Expert CV Review (Preview) Card (6 Cols) */}
               <div className={`lg:col-span-6 border rounded-2xl p-6 space-y-4 ${cardSurface}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EEF2FF] border border-[#C7D2FE] text-[#4F46E5] text-xs font-bold">
                     <CalendarIcon className="w-3.5 h-3.5" />
-                    <span>Preview • Expert CV review</span>
+                    <span>Expert CV review</span>
                   </span>
                   <span className="text-xs font-bold text-[#4F46E5]">30 minutes</span>
                 </div>
@@ -2960,6 +2967,32 @@ export default function HuddleLandingPage({ initialPath = '/' }) {
                     <span className="font-bold text-[#4F46E5]">27–30 min:</span>{' '}
                     Action plan
                   </div>
+                </div>
+              </div>
+
+              {/* Mock Interview highlight (full width) */}
+              <div className={`lg:col-span-12 border rounded-2xl p-6 ${cardSurface}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EEF2FF] border border-[#C7D2FE] text-[#4F46E5] text-xs font-bold">
+                      <MicIcon className="w-3.5 h-3.5" />
+                      <span>New · Mock Interview</span>
+                    </div>
+                    <h3 className="text-xl font-extrabold tracking-tight">
+                      Practise a 1:1 mock interview, then walk in ready.
+                    </h3>
+                    <p className={`text-sm leading-relaxed ${mutedText}`}>
+                      Book a focused 30-minute mock interview with a specialist — behavioral, technical, system design or HR screen — with your CV attached so every question is tailored to you, plus instant feedback.
+                    </p>
+                  </div>
+                  <a
+                    href={pathForRoute('job-seekers')}
+                    onClick={(e) => { e.preventDefault(); navigateTo('job-seekers'); }}
+                    className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#4F46E5] hover:bg-[#5B46E8] text-white text-sm font-bold cursor-pointer"
+                  >
+                    <span>Try a mock interview</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
                 </div>
               </div>
             </div>

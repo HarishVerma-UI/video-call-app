@@ -78,6 +78,7 @@ const ICON = {
   target: 'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0|M12 12m-5 0a5 5 0 1 0 10 0 5 5 0 1 0-10 0|M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
   expert: 'M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8|M20 8v6M23 11h-6',
   clock: 'M12 8v4l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
+  mic: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z|M5 11a7 7 0 0 0 14 0M12 18v4',
   calendar: 'M8 2v4M16 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2z',
   shield: 'M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z|M9 12l2 2 4-4',
   search: 'm21 21-4.3-4.3|M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z',
@@ -667,6 +668,127 @@ function ExpertBookingModal({ expertId, setExpertId, mode, bookings, onClose, on
   );
 }
 
+/* ================= MOCK INTERVIEW (1:1 practice, demo booking) ================= */
+interface MockInterviewer { id: string; name: string; role: string; initials: string; color: 'indigo' | 'emerald' | 'amber'; focus: string; rating: number; }
+const MOCK_PANEL: MockInterviewer[] = [
+  { id: 'nisha', name: 'Nisha Rao', role: 'Engineering Manager · Front-end', initials: 'NR', color: 'indigo', focus: 'Behavioral & leadership', rating: 4.9 },
+  { id: 'arjun', name: 'Arjun Mehta', role: 'Staff Engineer · Angular/React', initials: 'AM', color: 'emerald', focus: 'Technical & coding', rating: 4.8 },
+  { id: 'priya', name: 'Priya Nair', role: 'Principal · System Design', initials: 'PN', color: 'amber', focus: 'System design & architecture', rating: 4.9 },
+];
+const INTERVIEW_TYPES: { id: string; label: string; blurb: string }[] = [
+  { id: 'behavioral', label: 'Behavioral (STAR)', blurb: 'Competency & leadership stories' },
+  { id: 'technical', label: 'Technical / Coding', blurb: 'Live coding & fundamentals' },
+  { id: 'system', label: 'System Design', blurb: 'Architecture & trade-offs' },
+  { id: 'hr', label: 'HR / Screening', blurb: 'Role fit & expectations' },
+];
+interface MockSession {
+  id: string; panelId: string; dateId: string; panelName: string; panelRole: string;
+  typeLabel: string; date: string; slot: string; time: string; focus: string; cvIncluded: boolean;
+}
+
+function MockInterviewPage() {
+  const { cv, meta, readiness } = useMasterCv();
+  const [panelId, setPanelId] = useState(MOCK_PANEL[0].id);
+  const [typeId, setTypeId] = useState(INTERVIEW_TYPES[0].id);
+  const [dateId, setDateId] = useState(BOOKING_DATES[0].id);
+  const [slot, setSlot] = useState('04:30 PM');
+  const [focus, setFocus] = useState('');
+  const [attachCv, setAttachCv] = useState(true);
+  const [sessions, setSessions] = useState<MockSession[]>([]);
+  const [notice, setNotice] = useState('');
+
+  const panel = MOCK_PANEL.find((p) => p.id === panelId) ?? MOCK_PANEL[0];
+  const type = INTERVIEW_TYPES.find((x) => x.id === typeId) ?? INTERVIEW_TYPES[0];
+  const date = BOOKING_DATES.find((d) => d.id === dateId) ?? BOOKING_DATES[0];
+  const slotIsBooked = (time: string) => sessions.some((s) => s.panelId === panel.id && s.dateId === date.id && s.slot === time);
+
+  const book = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!slot || slotIsBooked(slot)) return;
+    setSessions((cur) => [{
+      id: String(Date.now()), panelId: panel.id, dateId: date.id,
+      panelName: panel.name, panelRole: panel.role, typeLabel: type.label,
+      date: `${date.label}, ${date.date}`, slot, time: `${slot} – ${getSessionEndTime(slot)}`,
+      focus: focus.trim() || cv.title || 'General interview practice', cvIncluded: attachCv,
+    }, ...cur]);
+    setNotice('Demo only: this mock interview is saved on this page; no interviewer has been contacted and no payment was taken.');
+  };
+  const cancel = (id: string) => { setSessions((cur) => cur.filter((s) => s.id !== id)); setNotice('Mock interview removed.'); };
+
+  return (
+    <div className="cp-expert-page">
+      <div className="aa-card cp-card">
+        <div className="cp-section-heading">
+          <div><h3>Practise a real interview, 1:1</h3><p>Book a focused 30-minute mock interview with a specialist, pick the format, and bring your synced CV so the session is tailored to you.</p></div>
+          <small>30 minutes</small>
+        </div>
+        <form className="cp-modal-form" onSubmit={book}>
+          <Field label="Choose an interviewer">
+            <select value={panelId} onChange={(e) => setPanelId(e.target.value)} aria-label="Choose an interviewer">
+              {MOCK_PANEL.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.focus}</option>)}
+            </select>
+          </Field>
+          <div className="cp-modal-expert">
+            <span className={`cp-expert-avatar cp-expert-avatar--${panel.color}`}>{panel.initials}</span>
+            <div><strong>{panel.name}</strong><span>{panel.role} · ★ {panel.rating}</span></div>
+          </div>
+
+          <div className="cp-booking-field">
+            <span className="cp-booking-label">Interview format</span>
+            <div className="cp-type-grid">
+              {INTERVIEW_TYPES.map((x) => (
+                <button type="button" key={x.id} className={`cp-type-option${typeId === x.id ? ' is-selected' : ''}`} onClick={() => setTypeId(x.id)} aria-pressed={typeId === x.id}>
+                  <strong>{x.label}</strong><small>{x.blurb}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="cp-booking-field">
+            <span className="cp-booking-label">Select date</span>
+            <div className="cp-date-grid">{BOOKING_DATES.map((item) => <button type="button" key={item.id} className={`cp-date-option${dateId === item.id ? ' is-selected' : ''}`} onClick={() => setDateId(item.id)} aria-pressed={dateId === item.id}><small>{item.label}</small><strong>{item.date}</strong></button>)}</div>
+          </div>
+          <div className="cp-booking-field">
+            <div className="cp-booking-slots__heading"><span className="cp-booking-label">Available 30-minute slots</span><span>{slot ? `${slot} – ${getSessionEndTime(slot)}` : 'Choose a time'}</span></div>
+            <div className="cp-slot-grid">{BOOKING_SLOTS.map((item) => {
+              const unavailable = !item.available || slotIsBooked(item.time);
+              return <button type="button" key={item.time} disabled={unavailable} className={`cp-slot-option${slot === item.time ? ' is-selected' : ''}`} onClick={() => setSlot(item.time)}>{item.time}</button>;
+            })}</div>
+          </div>
+          <Field label="What do you want to focus on?" wide><textarea rows={3} value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="e.g. Angular performance questions, leadership stories, a specific company's loop" /></Field>
+          <label className="cp-attach-cv" data-testid="mock-cv"><span className="cp-attach-cv__copy"><Ic d={ICON.cv} size={15} /><span>Attach my synced CV<small>{meta.fileName || cv.title || cv.name || 'No CV details yet'}{meta.dirty ? ' (latest unsaved edits)' : ''} · Readiness {readiness}%</small></span></span><input type="checkbox" checked={attachCv} onChange={(e) => setAttachCv(e.target.checked)} /></label>
+          <button className="aa-btn aa-btn--primary cp-book-button" type="submit" disabled={!slot || slotIsBooked(slot)}><Ic d={ICON.mic} size={15} /> Book mock interview</button>
+          <p className="cp-demo-note">Demo only: booking and payment are not connected.</p>
+        </form>
+      </div>
+
+      {notice && <p className="aa-msg aa-msg--ok" role="status">{notice}</p>}
+
+      <div className="aa-card cp-sessions-card">
+        <div className="cp-section-heading">
+          <div><h3>Upcoming mock interviews <span className="cp-session-count">{sessions.length}</span></h3><p>Demo requests are stored only for this page session.</p></div>
+        </div>
+        {sessions.length === 0 ? (
+          <div className="cp-sessions-empty"><Ic d={ICON.mic} size={22} /><strong>No mock interviews booked yet</strong><span>Pick an interviewer, format and slot above.</span></div>
+        ) : (
+          <div className="cp-sessions-list">
+            {sessions.map((s) => (
+              <div className="cp-session-row" key={s.id}>
+                <div className="cp-session-main">
+                  <strong>{s.typeLabel} · {s.panelName}</strong>
+                  <span>{s.date} · {s.time}</span>
+                  <small>{s.panelRole} · Focus: {s.focus}{s.cvIncluded ? ' · CV attached' : ''}</small>
+                </div>
+                <button type="button" className="aa-btn aa-btn--sm aa-btn--danger" onClick={() => cancel(s.id)}><Ic d={ICON.trash} size={13} /> Cancel</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ================= SHELL ================= */
 type Section = StudioSection;
 const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = [
@@ -674,6 +796,7 @@ const SECTIONS: { id: Section; label: string; icon: string; group: string }[] = 
   { id: 'cv', label: 'CV Generator', icon: ICON.cv, group: 'Build' },
   { id: 'role', label: 'AI CV Builder', icon: ICON.wand, group: 'Build' },
   { id: 'expert', label: 'Expert CV Review', icon: ICON.expert, group: 'Prepare' },
+  { id: 'mock', label: 'Mock Interview', icon: ICON.mic, group: 'Prepare' },
   { id: 'experts', label: 'Experts Directory', icon: ICON.target, group: 'Prepare' },
   { id: 'sync', label: 'My Profile & Sync', icon: ICON.sync, group: 'Settings' },
 ];
@@ -682,6 +805,7 @@ const TITLES: Record<Section, [string, string]> = {
   cv: ['CV Generator', 'Pick a template, edit live, export'],
   role: ['AI CV Builder', 'Chat with AI, your CV builds itself as you answer'],
   expert: ['Expert CV Review', 'Co-build or refine your CV in a focused 30-minute session'],
+  mock: ['Mock Interview', 'Practise a 1:1 mock interview with a specialist and get feedback'],
   experts: ['Experts Directory', 'Explore career specialists across industries'],
   sync: ['My Profile & Sync', 'Edit your details once, save to sync everywhere'],
 };
@@ -756,6 +880,7 @@ function CareerStudio({ exit }: { exit: () => void }) {
         onCancelBooking={cancelExpertBooking}
       />;
       case 'experts': return <ExpertsDirectoryPage onBook={openExpertBooking} />;
+      case 'mock': return <MockInterviewPage />;
       case 'sync': return <ProfileSyncPage go={go} />;
       default: return <StudioDashboard go={go} />;
     }
