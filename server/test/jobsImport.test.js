@@ -1,7 +1,7 @@
 // Pure job-import helpers: HTML stripping, classification, and the build pipeline.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildImport, categorize, classifyExperience, classifyType, dedupeJobs, expFromRange, filterRecent, fromCsvRow, fromRemotive, parseCsv, parseSalaryRange, stripHtml } from '../src/jobsImport.js';
+import { buildImport, categorize, classifyExperience, classifyType, dedupeJobs, expFromRange, filterRecent, fromCsvRow, fromRemoteOK, fromRemotive, parseCsv, parseSalaryRange, stripHtml } from '../src/jobsImport.js';
 
 const iso = (daysAgo) => new Date(Date.now() - daysAgo * 86400000).toISOString();
 
@@ -137,4 +137,29 @@ test('buildImport produces capped, finalized JobInput objects', () => {
   assert.ok(!('_date' in jobs[0]));
   assert.equal(jobs[0].source, 'Remotive');
   assert.ok(jobs[0].applyUrl.startsWith('https://'));
+});
+
+test('fromRemoteOK maps position/company/date and builds an apply URL from slug', () => {
+  const j = fromRemoteOK({ position: 'Senior React Developer', company: 'Globex', slug: 'globex-senior-react', date: new Date().toISOString(), tags: ['React', 'TypeScript'] });
+  assert.equal(j.title, 'Senior React Developer');
+  assert.equal(j.company, 'Globex');
+  assert.equal(j.source, 'RemoteOK');
+  assert.equal(j.category, 'tech');
+  assert.equal(j.experience, 'senior');
+  assert.ok(j.applyUrl.includes('globex-senior-react'));
+  assert.ok(j.skills.includes('React'));
+});
+
+test('buildImport techOnly keeps only tech roles and honours days + limit', () => {
+  const recent = new Date(Date.now() - 2 * 86400000).toISOString();
+  const old = new Date(Date.now() - 40 * 86400000).toISOString();
+  const out = buildImport({
+    remotive: [
+      { title: 'Angular Developer', company_name: 'A', url: 'http://a/1', publication_date: recent, tags: ['Angular'] },
+      { title: 'Content Marketer', company_name: 'A', url: 'http://a/2', publication_date: recent, tags: ['SEO'] },
+    ],
+    remoteok: [{ position: '.NET Developer', company: 'B', url: 'http://b/1', date: old, tags: ['C#'] }],
+  }, { days: 15, limit: 50, techOnly: true });
+  assert.equal(out.length, 1, 'non-tech and >15d dropped');
+  assert.equal(out[0].title, 'Angular Developer');
 });
