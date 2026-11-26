@@ -507,6 +507,8 @@ export interface ApiClient {
   unpublishCv(): Promise<{ published: null }>;
   /** Anyone (no sign-in): the CV published at this number. */
   publicCv(slug: string): Promise<PublicCv>;
+  /** A shared job, viewable without an account. */
+  publicJob(id: string): Promise<{ job: Job }>;
   getProfile(userId: string): Promise<{ profile: Profile; posts: Post[] }>;
   searchPeople(opts?: { q?: string; role?: string }): Promise<{ people: Profile[] }>;
   uploadUrl(input: { kind: 'photo' | 'cv' | 'post'; contentType: string }): Promise<{ uploadUrl: string; key: string }>;
@@ -709,6 +711,7 @@ export function createApi(baseUrl: string, getToken: () => string | null, onUnau
     publishCv: (input) => request('PUT', '/api/career/public-cv', input),
     unpublishCv: () => request('DELETE', '/api/career/public-cv'),
     publicCv: (slug) => request('GET', `/api/public/cv/${encodeURIComponent(slug)}`),
+    publicJob: (id) => request('GET', `/api/public/jobs/${encodeURIComponent(id)}`),
     requestConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/request`, {}),
     acceptConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/accept`, {}),
     declineConnect: (userId) => request('POST', `/api/connections/${encodeURIComponent(userId)}/decline`, {}),
