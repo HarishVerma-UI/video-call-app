@@ -4123,3 +4123,26 @@ a.sidebar-ads__link:hover .sidebar-ads__title { color: var(--accent); }
     font-size: 16px;
   }
 }
+
+/* ===== public shared job page (signed-out) ===== */
+.pubjob { min-height: 100%; background: var(--bg, var(--surface)); color: var(--fg, var(--text)); padding: max(16px, env(safe-area-inset-left)) 16px 48px; }
+.pubjob__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 760px; margin: 0 auto; padding: 16px 0; }
+.pubjob__brand { font-weight: 800; font-size: 1.2rem; color: var(--accent, #6366f1); text-decoration: none; letter-spacing: -0.01em; }
+.pubjob__card { max-width: 760px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 16px); padding: clamp(20px, 4vw, 34px); }
+.pubjob__empty { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.pubjob__eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent, #6366f1); }
+.pubjob__title { font-size: clamp(1.4rem, 5vw, 2rem); font-weight: 800; margin: 6px 0 4px; line-height: 1.15; }
+.pubjob__company { color: var(--muted); font-weight: 600; }
+.pubjob__tags { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0; }
+.pubjob__tag { font-size: 0.78rem; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface-2, rgba(128,128,128,.1)); color: var(--text-2, var(--fg)); border: 1px solid var(--line); }
+.pubjob__tag--good { color: #047857; background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.3); }
+.pubjob__tag--pay { color: var(--accent, #6366f1); background: color-mix(in oklab, var(--accent, #6366f1) 12%, transparent); border-color: color-mix(in oklab, var(--accent, #6366f1) 30%, transparent); }
+.pubjob__sec { margin-top: 22px; }
+.pubjob__sec h2 { font-size: 0.95rem; font-weight: 700; margin: 0 0 8px; }
+.pubjob__desc { color: var(--text-2, var(--fg)); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pubjob__list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; color: var(--text-2, var(--fg)); line-height: 1.5; }
+.pubjob__chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.pubjob__chip { font-size: 0.8rem; padding: 4px 10px; border-radius: 8px; background: color-mix(in oklab, var(--accent, #6366f1) 10%, transparent); color: var(--accent, #6366f1); font-weight: 500; }
+.pubjob__cta { margin-top: 28px; padding: 18px; border-radius: var(--r-md, 12px); background: var(--surface-2, rgba(128,128,128,.07)); border: 1px solid var(--line); }
+.pubjob__cta p { margin: 0 0 12px; color: var(--muted); }
+.pubjob__cta-row { display: flex; flex-wrap: wrap; gap: 10px; }

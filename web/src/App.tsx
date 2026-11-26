@@ -6,6 +6,7 @@ import { AdminApp } from './components/admin/AdminApp';
 import { RecruiterApp } from './components/admin/RecruiterApp';
 import { CareerApp } from './components/career/CareerApp';
 import { PublicCvPage, publicCvSlug } from './components/career/PublicCvPage';
+import { PublicJobPage, publicJobId } from './components/jobs/PublicJobPage';
 import Landing from './components/landing/Landing.jsx';
 import { isLandingPath } from './components/landing/routes.js';
 import { ProfileProvider } from './profile/ProfileContext';
@@ -34,9 +35,13 @@ export function App() {
       </div>
     );
   }
-  // An invite link like /r/swift-comet-482 survives sign-in: the room is read
-  // from the URL again once you're signed in.
-  if (status === 'signed-out') return <AuthPage />;
+  // A shared job link opens for signed-out visitors as a public posting; applying
+  // sends them to sign in / sign up. (Signed-in users fall through to the app.)
+  if (status === 'signed-out') {
+    const jobId = publicJobId(path);
+    if (jobId) return <PublicJobPage jobId={jobId} />;
+    return <AuthPage />;
+  }
   return (
     <PresenceProvider>
       <SignedInApp />

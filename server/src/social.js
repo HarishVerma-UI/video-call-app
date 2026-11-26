@@ -181,6 +181,15 @@ export function createSocial(deps) {
     sendJson(res, 200, { job: { ...publicJob(job), ...scoreJob(job, myProf?.skills ?? []), appliedByMe: applied } });
   }
 
+  // Public, no-auth view of a single job so a shared link works for anyone. No
+  // personalised fields (match score, appliedByMe) — those need an account.
+  async function getPublicJob(req, res, id) {
+    if (!jobs) throw new HttpError(404, 'Job not found.');
+    const job = await jobs.byId(id);
+    if (!job || job.active === false) throw new HttpError(404, 'Job not found.');
+    sendJson(res, 200, { job: publicJob(job) });
+  }
+
   async function applyJob(req, res, id) {
     const me = await requireUser(req);
     if (!jobs) throw new HttpError(503, 'Jobs are not available.');
@@ -623,6 +632,7 @@ export function createSocial(deps) {
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'GET') return (await dmThread(req, res, decodeURIComponent(mm[1]), url), true);
     if ((mm = pathname.match(/^\/api\/dm\/([^/]+)$/)) && m === 'POST') return (await dmSend(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/call\/([^/]+)\/invite$/)) && m === 'POST') return (await startCall(req, res, decodeURIComponent(mm[1])), true);
+    if ((mm = pathname.match(/^\/api\/public\/jobs\/([^/]+)$/)) && m === 'GET') return (await getPublicJob(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/jobs\/([^/]+)\/apply$/)) && m === 'POST') return (await applyJob(req, res, decodeURIComponent(mm[1])), true);
     if ((mm = pathname.match(/^\/api\/jobs\/([^/]+)$/)) && m === 'GET') return (await getJob(req, res, decodeURIComponent(mm[1])), true);
 

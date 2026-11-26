@@ -204,3 +204,23 @@ test('import rejects non-admins', async () => {
   const res = await api(t.base, 'POST', '/api/admin/jobs/import', { jobs: [{ title: 'x', company: 'y' }] }, u.token);
   assert.equal(res.status, 403);
 });
+
+test('public job endpoint is viewable without an account', async () => {
+  const created = await makeJob({ title: 'Shared Role' });
+  const jobId = created.body.job.id;
+
+  // No token at all — a shared link must still show the job.
+  const pub = await api(t.base, 'GET', `/api/public/jobs/${jobId}`, null, null);
+  assert.equal(pub.status, 200);
+  assert.equal(pub.body.job.title, 'Shared Role');
+  assert.equal(pub.body.job.company, 'Huddle Labs');
+  // No personalised fields leak to anonymous viewers.
+  assert.equal(pub.body.job.matchScore, undefined);
+  assert.equal(pub.body.job.appliedByMe, undefined);
+
+  // Missing or inactive jobs 404.
+  assert.equal((await api(t.base, 'GET', '/api/public/jobs/does-not-exist', null, null)).status, 404);
+
+  // Applying still requires auth.
+  assert.equal((await api(t.base, 'POST', `/api/jobs/${jobId}/apply`, { note: 'hi' }, null)).status, 401);
+});
