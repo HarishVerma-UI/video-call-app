@@ -19,7 +19,8 @@ const BULLET_RE = /^[•\-*·–—○▪●◦‣◆▶»]/;
 // first so a line like "Core Technical Skills" matches that, not bare "skills".
 const SKILLS_HEAD = 'core technical skills|technical skills|core competencies|key skills|technical proficiencies|technical expertise|areas of expertise|core technologies|technologies|technology stack|tech stack|tools (?:&|and) technologies|skills (?:&|and) (?:tools|expertise|interests)|competencies|proficiencies|expertise|skills';
 const EXP_HEAD = 'experience|work experience|professional experience|employment|employment history|work history|career history';
-const SECTION_RE = new RegExp(`^(?:summary|objective|profile|${SKILLS_HEAD}|${EXP_HEAD}|education|academic|projects|certifications|achievements|interests|languages|references|contact)\\b`, 'i');
+const EDU_HEAD = 'education|academic|academics|academic background|educational background|educational qualifications|qualifications|education (?:&|and) (?:training|certifications)';
+const SECTION_RE = new RegExp(`^(?:summary|objective|profile|${SKILLS_HEAD}|${EXP_HEAD}|${EDU_HEAD}|projects|certifications|achievements|interests|languages|references|contact)\\b`, 'i');
 
 function decodeEntities(s) {
   return s
@@ -161,8 +162,64 @@ function extractSummary(lines) {
   return body.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
 }
 
+/**
+ * Fallback summary: the first substantial paragraph at the top of the CV, before
+ * any section heading — many resumes open with a profile blurb and no "Summary"
+ * label. Skips the name, headline, and contact lines.
+ */
+function firstParagraphSummary(nonEmpty, name, headline) {
+  const out = [];
+  for (const l of nonEmpty.slice(0, 25)) {
+    if (SECTION_RE.test(l)) break; // reached a real section — stop
+    if (l === name || l === headline) continue;
+    if (EMAIL_RE.test(l) || PHONE_RE.test(l)) continue;
+    if (/^https?:\/\//i.test(l) || /linkedin\.com|github\.com/i.test(l)) continue;
+    if (out.length === 0 && l.length < 40) continue; // skip short label/location lines before the blurb
+    out.push(l);
+    if (out.join(' ').length > 400) break;
+  }
+  const text = out.join(' ').replace(/\s+/g, ' ').trim();
+  return text.length >= 60 ? text.slice(0, 1200) : '';
+}
+
 const SKILLS_HEAD_RE = new RegExp(`^(?:${SKILLS_HEAD})\\b`, 'i');
 const SKILLS_INLINE_RE = new RegExp(`^(?:${SKILLS_HEAD})\\s*[:\\-–]\\s*(.+)$`, 'i');
+// A broad list of well-known skills/tools so that skills mentioned ANYWHERE in
+// the CV (a summary line, an experience bullet) are still picked up, not only the
+// ones under a "Skills" heading. Canonical spellings; matched case-insensitively.
+const KNOWN_SKILLS = [
+  'JavaScript', 'TypeScript', 'Angular', 'AngularJS', 'React', 'React Native', 'Vue', 'Vue.js', 'Svelte', 'Next.js', 'Nuxt', 'Node.js', 'Express', 'NestJS', 'Deno',
+  'RxJS', 'NgRx', 'Redux', 'MobX', 'Zustand', 'jQuery', 'HTML5', 'HTML', 'CSS3', 'CSS', 'SCSS', 'SASS', 'LESS', 'Tailwind', 'Tailwind CSS', 'Bootstrap', 'Material UI', 'Styled Components',
+  'Webpack', 'Vite', 'Rollup', 'Babel', 'ESLint', 'Prettier', 'Storybook', 'Nx',
+  'Jest', 'Vitest', 'Cypress', 'Playwright', 'Mocha', 'Chai', 'Jasmine', 'Karma', 'Testing Library', 'TDD', 'BDD', 'Unit Testing',
+  'Git', 'GitHub', 'GitLab', 'Bitbucket', 'CI/CD', 'Jenkins', 'GitHub Actions', 'Docker', 'Kubernetes', 'Terraform', 'Nginx',
+  'AWS', 'Azure', 'GCP', 'Firebase', 'Vercel', 'Netlify', 'Serverless',
+  'REST', 'REST APIs', 'RESTful APIs', 'GraphQL', 'gRPC', 'WebSocket', 'WebSockets', 'WebRTC', 'JSON', 'XML', 'OAuth', 'JWT',
+  'Java', 'Spring', 'Spring Boot', 'Hibernate', 'Kotlin', 'Python', 'Django', 'Flask', 'FastAPI', 'C#', '.NET', 'ASP.NET', 'PHP', 'Laravel', 'Ruby', 'Rails', 'Go', 'Golang', 'Rust', 'Scala', 'Swift', 'Objective-C', 'C++', 'C',
+  'SQL', 'MySQL', 'PostgreSQL', 'SQLite', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Oracle', 'Cassandra',
+  'Figma', 'Sketch', 'Adobe XD', 'Jira', 'Confluence', 'Trello', 'Agile', 'Scrum', 'Kanban',
+  'Accessibility', 'WCAG', 'Responsive Design', 'Micro Frontends', 'PWA', 'SEO', 'Performance Optimization', 'SSR', 'Web Components', 'Design Systems', 'i18n',
+];
+const SKILL_SCANNERS = KNOWN_SKILLS.map((s) => [s, new RegExp(`(?<![\\w])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'i')]);
+
+/** Find well-known skills mentioned anywhere in the raw CV text. */
+function scanKnownSkills(text) {
+  const out = [];
+  for (const [skill, re] of SKILL_SCANNERS) if (re.test(text)) out.push(skill);
+  return out;
+}
+
+/** Merge extracted + scanned skills, case-insensitively, keeping the first spelling. */
+function mergeSkills(primary, extra) {
+  const seen = new Set(primary.map((s) => s.toLowerCase()));
+  const out = [...primary];
+  for (const s of extra) {
+    const k = s.toLowerCase();
+    if (!seen.has(k)) { seen.add(k); out.push(s); }
+  }
+  return out.slice(0, 40);
+}
+
 function extractSkills(lines) {
   // 1) a heading with the list on the SAME line: "Core Technologies: Angular, React"
   for (const raw of lines) {
@@ -254,7 +311,7 @@ function extractExperience(lines) {
 }
 
 function extractEducation(lines) {
-  const block = sectionLines(lines, /^(education|academic)\b/i);
+  const block = sectionLines(lines, new RegExp(`^(?:${EDU_HEAD})\\b`, 'i'));
   const out = [];
   for (const b of entryBlocks(block)) {
     if (!b.length) continue;
@@ -315,8 +372,13 @@ export function parseResume(text) {
     if (mm && l.length <= 50) { location = l; break; }
   }
 
-  const skills = extractSkills(lines);
-  const summary = extractSummary(lines);
+  // Skills from a dedicated section, PLUS any well-known skills mentioned anywhere
+  // in the CV, so nothing listed in the summary or a bullet is missed.
+  const skills = mergeSkills(extractSkills(lines), scanKnownSkills(clean));
+  let summary = extractSummary(lines);
+  // Fallback: no "Summary" heading, but a substantial paragraph sits up top before
+  // the first section — treat that as the summary so the section still renders.
+  if (!summary) summary = firstParagraphSummary(nonEmpty, name, headline);
   const experience = extractExperience(lines);
   const education = extractEducation(lines);
 
