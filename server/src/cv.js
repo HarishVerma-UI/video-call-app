@@ -184,29 +184,125 @@ function firstParagraphSummary(nonEmpty, name, headline) {
 
 const SKILLS_HEAD_RE = new RegExp(`^(?:${SKILLS_HEAD})\\b`, 'i');
 const SKILLS_INLINE_RE = new RegExp(`^(?:${SKILLS_HEAD})\\s*[:\\-–]\\s*(.+)$`, 'i');
-// A broad list of well-known skills/tools so that skills mentioned ANYWHERE in
-// the CV (a summary line, an experience bullet) are still picked up, not only the
-// ones under a "Skills" heading. Canonical spellings; matched case-insensitively.
-const KNOWN_SKILLS = [
-  'JavaScript', 'TypeScript', 'Angular', 'AngularJS', 'React', 'React Native', 'Vue', 'Vue.js', 'Svelte', 'Next.js', 'Nuxt', 'Node.js', 'Express', 'NestJS', 'Deno',
-  'RxJS', 'NgRx', 'Redux', 'MobX', 'Zustand', 'jQuery', 'HTML5', 'HTML', 'CSS3', 'CSS', 'SCSS', 'SASS', 'LESS', 'Tailwind', 'Tailwind CSS', 'Bootstrap', 'Material UI', 'Styled Components',
-  'Webpack', 'Vite', 'Rollup', 'Babel', 'ESLint', 'Prettier', 'Storybook', 'Nx',
-  'Jest', 'Vitest', 'Cypress', 'Playwright', 'Mocha', 'Chai', 'Jasmine', 'Karma', 'Testing Library', 'TDD', 'BDD', 'Unit Testing',
-  'Git', 'GitHub', 'GitLab', 'Bitbucket', 'CI/CD', 'Jenkins', 'GitHub Actions', 'Docker', 'Kubernetes', 'Terraform', 'Nginx',
-  'AWS', 'Azure', 'GCP', 'Firebase', 'Vercel', 'Netlify', 'Serverless',
-  'REST', 'REST APIs', 'RESTful APIs', 'GraphQL', 'gRPC', 'WebSocket', 'WebSockets', 'WebRTC', 'JSON', 'XML', 'OAuth', 'JWT',
-  'Java', 'Spring', 'Spring Boot', 'Hibernate', 'Kotlin', 'Python', 'Django', 'Flask', 'FastAPI', 'C#', '.NET', 'ASP.NET', 'PHP', 'Laravel', 'Ruby', 'Rails', 'Go', 'Golang', 'Rust', 'Scala', 'Swift', 'Objective-C', 'C++', 'C',
-  'SQL', 'MySQL', 'PostgreSQL', 'SQLite', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Oracle', 'Cassandra',
-  'Figma', 'Sketch', 'Adobe XD', 'Jira', 'Confluence', 'Trello', 'Agile', 'Scrum', 'Kanban',
-  'Accessibility', 'WCAG', 'Responsive Design', 'Micro Frontends', 'PWA', 'SEO', 'Performance Optimization', 'SSR', 'Web Components', 'Design Systems', 'i18n',
-];
-const SKILL_SCANNERS = KNOWN_SKILLS.map((s) => [s, new RegExp(`(?<![\\w])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'i')]);
+// Well-known skills/tools grouped by professional domain, so that skills
+// mentioned ANYWHERE in the CV (a summary line, an experience bullet) are picked
+// up, not only the ones under a "Skills" heading — AND so a CV can be classified
+// into a domain instead of everything being treated as technical. Canonical
+// spellings; matched case-insensitively. Overlap between domains is fine (Excel
+// is both data and finance); the classifier weighs the totals.
+const SKILL_DOMAINS = {
+  tech: [
+    'JavaScript', 'TypeScript', 'Angular', 'AngularJS', 'React', 'React Native', 'Vue', 'Vue.js', 'Svelte', 'Next.js', 'Nuxt', 'Node.js', 'Express', 'NestJS', 'Deno',
+    'RxJS', 'NgRx', 'Redux', 'MobX', 'Zustand', 'jQuery', 'HTML5', 'HTML', 'CSS3', 'CSS', 'SCSS', 'SASS', 'LESS', 'Tailwind', 'Tailwind CSS', 'Bootstrap', 'Material UI', 'Styled Components',
+    'Webpack', 'Vite', 'Rollup', 'Babel', 'ESLint', 'Prettier', 'Storybook', 'Nx',
+    'Jest', 'Vitest', 'Cypress', 'Playwright', 'Mocha', 'Chai', 'Jasmine', 'Karma', 'Testing Library', 'TDD', 'BDD', 'Unit Testing', 'Selenium', 'Appium',
+    'Git', 'GitHub', 'GitLab', 'Bitbucket', 'CI/CD', 'Jenkins', 'GitHub Actions', 'Docker', 'Kubernetes', 'Terraform', 'Nginx', 'Ansible',
+    'AWS', 'Azure', 'GCP', 'Firebase', 'Vercel', 'Netlify', 'Serverless',
+    'REST', 'REST APIs', 'RESTful APIs', 'GraphQL', 'gRPC', 'WebSocket', 'WebSockets', 'WebRTC', 'JSON', 'XML', 'OAuth', 'JWT',
+    'Java', 'Spring', 'Spring Boot', 'Hibernate', 'Kotlin', 'Python', 'Django', 'Flask', 'FastAPI', 'C#', '.NET', 'ASP.NET', 'PHP', 'Laravel', 'Ruby', 'Rails', 'Go', 'Golang', 'Rust', 'Scala', 'Swift', 'Objective-C', 'C++', 'C',
+    'Accessibility', 'WCAG', 'Responsive Design', 'Micro Frontends', 'PWA', 'Performance Optimization', 'SSR', 'Web Components', 'i18n',
+  ],
+  data: [
+    'SQL', 'MySQL', 'PostgreSQL', 'SQLite', 'MongoDB', 'Redis', 'Elasticsearch', 'DynamoDB', 'Oracle', 'Cassandra', 'Snowflake', 'BigQuery', 'Redshift',
+    'Python', 'R', 'Pandas', 'NumPy', 'Spark', 'Hadoop', 'Airflow', 'dbt', 'ETL', 'Data Warehousing',
+    'Tableau', 'Power BI', 'Looker', 'Excel', 'Data Analysis', 'Data Visualization', 'Statistics', 'A/B Testing',
+    'Machine Learning', 'Deep Learning', 'TensorFlow', 'PyTorch', 'scikit-learn', 'NLP', 'Data Modeling',
+  ],
+  design: [
+    'Figma', 'Sketch', 'Adobe XD', 'Photoshop', 'Illustrator', 'InDesign', 'After Effects', 'Framer', 'InVision', 'Zeplin',
+    'UI Design', 'UX Design', 'UI/UX', 'Wireframing', 'Prototyping', 'User Research', 'Usability Testing', 'Design Systems',
+    'Typography', 'Interaction Design', 'Visual Design', 'Motion Design', 'Branding', 'Accessibility',
+  ],
+  product: [
+    'Product Management', 'Product Strategy', 'Roadmap', 'Roadmapping', 'Agile', 'Scrum', 'Kanban', 'Scrum Master',
+    'Jira', 'Confluence', 'Trello', 'Asana', 'Monday.com', 'Notion', 'Stakeholder Management', 'User Stories', 'Backlog',
+    'Prioritization', 'Project Management', 'PMP', 'Risk Management', 'Go-to-Market', 'PRD', 'Product Analytics',
+  ],
+  sales: [
+    'Lead Generation', 'Prospecting', 'Cold Calling', 'Cold Outreach', 'CRM', 'Salesforce', 'HubSpot', 'Pipeline Management',
+    'Account Management', 'Key Account Management', 'Negotiation', 'Closing', 'Upselling', 'Cross-selling', 'B2B', 'B2C',
+    'Business Development', 'Territory Management', 'Quota Attainment', 'Revenue Growth', 'Client Relationship Management', 'Lead Qualification', 'Solution Selling',
+  ],
+  marketing: [
+    'Digital Marketing', 'SEO', 'SEM', 'Google Ads', 'Google Analytics', 'Content Marketing', 'Content Strategy', 'Email Marketing',
+    'Social Media Marketing', 'Social Media', 'Campaign Management', 'Brand Management', 'Copywriting', 'Market Research', 'PPC',
+    'Marketing Automation', 'Mailchimp', 'Marketo', 'HubSpot', 'Canva', 'Influencer Marketing', 'Growth Marketing', 'Public Relations',
+  ],
+  hr: [
+    'Recruitment', 'Recruiting', 'Talent Acquisition', 'Sourcing', 'Onboarding', 'Employee Relations', 'Employee Engagement',
+    'HRIS', 'Payroll', 'Performance Management', 'Benefits Administration', 'Workday', 'SuccessFactors', 'BambooHR',
+    'Compensation', 'HR Operations', 'Training & Development', 'Learning & Development', 'Succession Planning', 'Workforce Planning', 'Grievance Handling',
+  ],
+  finance: [
+    'Accounting', 'Bookkeeping', 'Financial Analysis', 'Financial Reporting', 'Budgeting', 'Forecasting', 'GAAP', 'IFRS',
+    'Reconciliation', 'Accounts Payable', 'Accounts Receivable', 'Auditing', 'Internal Audit', 'Taxation', 'Tax Planning',
+    'QuickBooks', 'Tally', 'SAP FICO', 'Financial Modeling', 'Variance Analysis', 'Cost Accounting', 'Treasury', 'Invoicing',
+  ],
+  operations: [
+    'Operations Management', 'Supply Chain', 'Logistics', 'Inventory Management', 'Procurement', 'Vendor Management',
+    'Process Improvement', 'Six Sigma', 'Lean', 'Warehouse Management', 'Fulfillment', 'Demand Planning', 'SOP',
+    'Operational Excellence', 'ERP', 'Scheduling', 'Continuous Improvement',
+  ],
+  support: [
+    'Customer Support', 'Customer Service', 'Customer Success', 'Technical Support', 'Help Desk', 'Zendesk', 'Freshdesk',
+    'Intercom', 'Ticketing', 'SLA Management', 'Escalation Management', 'Customer Retention', 'Call Center', 'Live Chat', 'Troubleshooting',
+  ],
+};
 
-/** Find well-known skills mentioned anywhere in the raw CV text. */
-function scanKnownSkills(text) {
-  const out = [];
-  for (const [skill, re] of SKILL_SCANNERS) if (re.test(text)) out.push(skill);
-  return out;
+// Role/title words that hint at a domain, weighted more heavily than a lone skill
+// mention because a job title is a strong signal of what someone actually does.
+const DOMAIN_KEYWORDS = {
+  tech: ['developer', 'engineer', 'programmer', 'software', 'sde', 'full stack', 'full-stack', 'frontend', 'front-end', 'backend', 'back-end', 'devops', 'architect', 'web', 'mobile', 'qa', 'sdet'],
+  data: ['data analyst', 'data scientist', 'data engineer', 'analytics', 'business intelligence', 'bi developer', 'machine learning', 'ml engineer'],
+  design: ['designer', 'ux', 'ui', 'product designer', 'graphic', 'visual designer', 'creative'],
+  product: ['product manager', 'product owner', 'scrum master', 'project manager', 'program manager', 'delivery manager', 'product lead'],
+  sales: ['sales', 'account executive', 'business development', 'bdm', 'inside sales', 'sales executive', 'relationship manager', 'account manager'],
+  marketing: ['marketing', 'growth', 'brand manager', 'content', 'social media', 'seo specialist', 'digital marketer'],
+  hr: ['hr', 'human resources', 'recruiter', 'talent', 'people operations', 'hrbp', 'hr manager'],
+  finance: ['finance', 'accountant', 'accounting', 'financial', 'auditor', 'tax', 'bookkeeper', 'controller', 'analyst'],
+  operations: ['operations', 'supply chain', 'logistics', 'procurement', 'warehouse', 'ops manager'],
+  support: ['customer support', 'customer success', 'customer service', 'help desk', 'service desk', 'support engineer', 'support specialist'],
+};
+
+const DOMAIN_SCANNERS = Object.fromEntries(
+  Object.entries(SKILL_DOMAINS).map(([domain, skills]) => [
+    domain,
+    skills.map((s) => [s, new RegExp(`(?<![\\w])${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'i')]),
+  ]),
+);
+
+/**
+ * Classify the CV into a domain and return the skills to inject from the text.
+ * Scoring: one point per distinct skill a domain matches anywhere, plus two per
+ * role-keyword hit in the headline/titles (a strong signal). The top domain is
+ * the category; scanned skills are injected ONLY from domains that are clearly
+ * present, so a sales or HR CV is never tagged with developer skills just because
+ * it mentions a tool in passing.
+ */
+function classifyCv(fullText, roleText) {
+  const matched = {};   // domain -> [skills found in the whole text]
+  const score = {};     // domain -> weighted score
+  for (const [domain, scanners] of Object.entries(DOMAIN_SCANNERS)) {
+    const found = [];
+    for (const [skill, re] of scanners) if (re.test(fullText)) found.push(skill);
+    matched[domain] = found;
+    score[domain] = found.length;
+  }
+  const role = String(roleText || '').toLowerCase();
+  for (const [domain, words] of Object.entries(DOMAIN_KEYWORDS)) {
+    for (const w of words) if (role.includes(w)) score[domain] += 2;
+  }
+  const ranked = Object.keys(SKILL_DOMAINS).sort((a, b) => score[b] - score[a]);
+  const top = ranked[0];
+  const topScore = score[top] || 0;
+  if (topScore === 0) return { category: '', skills: [] };
+  // Domains that are genuinely present: at least 2 points and at least half the
+  // leader. Inject scanned skills only from those.
+  const threshold = Math.max(2, Math.ceil(topScore / 2));
+  const active = ranked.filter((d) => score[d] >= threshold);
+  const skills = [];
+  for (const d of active) for (const s of matched[d]) skills.push(s);
+  return { category: top, skills };
 }
 
 /** Merge extracted + scanned skills, case-insensitively, keeping the first spelling. */
@@ -372,9 +468,6 @@ export function parseResume(text) {
     if (mm && l.length <= 50) { location = l; break; }
   }
 
-  // Skills from a dedicated section, PLUS any well-known skills mentioned anywhere
-  // in the CV, so nothing listed in the summary or a bullet is missed.
-  const skills = mergeSkills(extractSkills(lines), scanKnownSkills(clean));
   let summary = extractSummary(lines);
   // Fallback: no "Summary" heading, but a substantial paragraph sits up top before
   // the first section — treat that as the summary so the section still renders.
@@ -382,10 +475,18 @@ export function parseResume(text) {
   const experience = extractExperience(lines);
   const education = extractEducation(lines);
 
+  // Classify the CV's domain from the headline, role titles and full text, then
+  // take skills from a dedicated section PLUS any well-known skills mentioned
+  // anywhere — but only from the detected domain(s), so a sales/HR/finance CV is
+  // never force-fitted with developer skills.
+  const roleText = [headline, ...experience.map((e) => e.title)].join(' ');
+  const { category, skills: scanned } = classifyCv(clean, roleText);
+  const skills = mergeSkills(extractSkills(lines), scanned);
+
   const textFound = nonEmpty.length > 2;
   const lowConfidence = !textFound || (!email && !name && skills.length === 0);
 
-  return { name, email, phone, location, headline, summary, skills, experience, education, lowConfidence };
+  return { name, email, phone, location, headline, summary, skills, experience, education, category, lowConfidence };
 }
 
 /** Convenience: bytes → parsed resume fields. */

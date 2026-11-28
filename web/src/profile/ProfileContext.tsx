@@ -36,7 +36,14 @@ export function toInput(p: Partial<Profile> | null | undefined): ProfileInput {
   };
 }
 
-/** Fill empty fields from a parsed CV. Skills are merged (union); nothing typed is overwritten. */
+/**
+ * Merge a parsed CV into the profile. Single-value fields (headline, bio, …) fill
+ * only when empty, so nothing the member typed is overwritten. Skills, experience
+ * and education are UNION-merged: the CV's entries are added alongside whatever is
+ * already there, de-duplicated. This is what makes every section of an uploaded CV
+ * actually show up — even on a re-upload or when the profile already has a row or
+ * two — without ever discarding the member's own edits.
+ */
 export function mergeCv(base: ProfileInput, parsed: ParsedCv | undefined): { next: ProfileInput; filled: CvField[] } {
   const next = { ...base };
   const filled: CvField[] = [];
@@ -52,8 +59,22 @@ export function mergeCv(base: ProfileInput, parsed: ParsedCv | undefined): { nex
     const added = parsed.skills.filter((s) => !seen.has(s.toLowerCase()));
     if (added.length) { next.skills = [...have, ...added]; filled.push('skills'); }
   }
-  if (parsed.experience?.length && !next.experience?.length) { next.experience = parsed.experience; filled.push('experience'); }
-  if (parsed.education?.length && !next.education?.length) { next.education = parsed.education; filled.push('education'); }
+  // Union-merge experience by title+company, education by school+degree, so the
+  // CV's rows load in even when the profile already holds some, without dupes.
+  if (parsed.experience?.length) {
+    const have = (next.experience ?? []).filter((x) => x.title || x.company);
+    const key = (x: { title?: string; company?: string }) => `${(x.title ?? '').trim().toLowerCase()}|${(x.company ?? '').trim().toLowerCase()}`;
+    const seen = new Set(have.map(key));
+    const added = parsed.experience.filter((x) => (x.title || x.company) && !seen.has(key(x)));
+    if (added.length) { next.experience = [...have, ...added]; filled.push('experience'); }
+  }
+  if (parsed.education?.length) {
+    const have = (next.education ?? []).filter((x) => x.school || x.degree);
+    const key = (x: { school?: string; degree?: string }) => `${(x.school ?? '').trim().toLowerCase()}|${(x.degree ?? '').trim().toLowerCase()}`;
+    const seen = new Set(have.map(key));
+    const added = parsed.education.filter((x) => (x.school || x.degree) && !seen.has(key(x)));
+    if (added.length) { next.education = [...have, ...added]; filled.push('education'); }
+  }
   return { next, filled };
 }
 

@@ -6,7 +6,9 @@ const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 const list40 = (v, max) => (Array.isArray(v) ? v.slice(0, 40).map((x) => str(x, max)).filter(Boolean) : []);
 
-export const JOB_CATS = ['tech', 'non-tech'];
+// Keep in sync with JOB_CATEGORIES in shared/src/api.ts. 'non-tech' is the
+// legacy catch-all ("Other"); the rest are specific professional domains.
+export const JOB_CATS = ['tech', 'data', 'design', 'product', 'sales', 'marketing', 'hr', 'finance', 'operations', 'support', 'non-tech'];
 export const JOB_TYPES = ['full-time', 'part-time', 'contract', 'internship'];
 export const JOB_EXPS = ['entry', 'mid', 'senior', 'lead'];
 export const APPLICATION_STATUSES = ['applied', 'shortlisted', 'rejected'];

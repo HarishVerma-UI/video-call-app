@@ -2,6 +2,8 @@ import {
   ApiError,
   analyzeJobFit,
   canonicalSkill,
+  jobCategoryLabel,
+  JOB_CATEGORIES,
   profileCompletion,
   type JobFit,
   type Job,
@@ -26,7 +28,7 @@ import {
   type CardScan, type Readiness,
 } from './jobs/Readiness';
 
-const catLabel = (t: TFunction, c: JobCategory) => (c === 'tech' ? t('jobs.cat.tech') : t('jobs.cat.nonTech'));
+const catLabel = (_t: TFunction, c: JobCategory) => jobCategoryLabel(c);
 const JOB_TYPES: JobType[] = ['full-time', 'part-time', 'contract', 'internship'];
 const typeLabel = (t: TFunction, v: JobType) => ({ 'full-time': t('jobs.type.fullTime'), 'part-time': t('jobs.type.partTime'), contract: t('jobs.type.contract'), internship: t('jobs.type.internship') })[v];
 const EXPERIENCES: JobExperience[] = ['entry', 'mid', 'senior', 'lead'];
@@ -804,11 +806,20 @@ export function JobsView({ openUser, jobId, onJobChange, openCvExperts, openProf
     (scoredJobs ?? []).filter((j) => matchesFilters(j, { ...filters, [k]: v }, undefined)).length;
   const strongCount = useMemo(() => (scoredJobs ?? []).filter((j) => (j.matchScore ?? 0) >= 60).length, [scoredJobs]);
 
-  // Quick-filter chips: one-tap toggles over the main filters.
+  // Quick-filter chips: one-tap toggles over the main filters. The category chips
+  // are the domains that actually have jobs (top 3 by count), so the row stays
+  // compact while the full taxonomy lives in the category dropdown below.
+  const topCats = JOB_CATEGORIES
+    .map((c) => ({ c, count: countFor('category', c.value) }))
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
   const chips: { label: string; on: boolean; count: number; toggle: () => void }[] = [
     { label: t('jobs.remote'), on: !!filters.remote, count: countFor('remote', true), toggle: () => set('remote', !filters.remote) },
-    { label: t('jobs.cat.tech'), on: filters.category === 'tech', count: countFor('category', 'tech'), toggle: () => set('category', filters.category === 'tech' ? '' : 'tech') },
-    { label: t('jobs.cat.nonTech'), on: filters.category === 'non-tech', count: countFor('category', 'non-tech'), toggle: () => set('category', filters.category === 'non-tech' ? '' : 'non-tech') },
+    ...topCats.map(({ c, count }) => ({
+      label: c.label, on: filters.category === c.value, count,
+      toggle: () => set('category', filters.category === c.value ? '' : c.value),
+    })),
     { label: t('jobs.type.fullTime'), on: filters.type === 'full-time', count: countFor('type', 'full-time'), toggle: () => set('type', filters.type === 'full-time' ? '' : 'full-time') },
     { label: t('jobs.exp.senior'), on: filters.experience === 'senior', count: countFor('experience', 'senior'), toggle: () => set('experience', filters.experience === 'senior' ? '' : 'senior') },
     { label: t('jobs.exp.entry'), on: filters.experience === 'entry', count: countFor('experience', 'entry'), toggle: () => set('experience', filters.experience === 'entry' ? '' : 'entry') },
@@ -953,7 +964,11 @@ export function JobsView({ openUser, jobId, onJobChange, openCvExperts, openProf
           </div>
           <label className="jobs__filter"><span>{t('jobs.category')}</span>
             <select value={filters.category} onChange={(e) => set('category', e.target.value as JobCategory | '')}>
-              <option value="">{t('jobs.all')}</option><option value="tech">{t('jobs.cat.tech')} ({countFor('category', 'tech')})</option><option value="non-tech">{t('jobs.cat.nonTech')} ({countFor('category', 'non-tech')})</option>
+              <option value="">{t('jobs.all')}</option>
+              {JOB_CATEGORIES.map((c) => {
+                const n = countFor('category', c.value);
+                return <option key={c.value} value={c.value}>{c.label} ({n})</option>;
+              })}
             </select>
           </label>
           <label className="jobs__filter"><span>{t('jobs.jobType')}</span>

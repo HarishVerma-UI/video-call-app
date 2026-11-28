@@ -4,7 +4,7 @@
 // every management table with checkbox selection and CRUD / bulk actions.
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  ROLE_LABEL, normalizeRole,
+  ROLE_LABEL, normalizeRole, jobCategoryLabel, JOB_CATEGORIES,
   type AdminApplication, type AdminComment, type AdminConnection, type AdminPost,
   type AdminStats, type AdminUser, type ApiClient, type AuditEvent, type AuditCategory, type CvPromptSettings,
   type Job, type JobCategory, type JobExperience, type JobInput, type JobType, type UserRole,
@@ -179,7 +179,10 @@ function DashboardPage() {
     { label: 'Applications', val: stats.applicationsTotal, icon: ICON.apps, c: '--aa-s6' },
     { label: 'New signups (7d)', val: stats.recentSignups, icon: ICON.users, c: '--aa-accent' },
   ];
-  const catColors: Record<string, string> = { tech: 'var(--aa-s1)', 'non-tech': 'var(--aa-s2)' };
+  const catPalette = ['--aa-s1', '--aa-s2', '--aa-s3', '--aa-s4', '--aa-s5', '--aa-s6', '--aa-s7', '--aa-accent'];
+  const catSegments = JOB_CATEGORIES
+    .map((c, i) => ({ name: c.label, value: stats.jobsByCategory[c.value] ?? 0, color: `var(${catPalette[i % catPalette.length]})` }))
+    .filter((s) => s.value > 0);
 
   return (
     <>
@@ -201,10 +204,7 @@ function DashboardPage() {
         </div>
         <div className="aa-card">
           <div className="aa-card__head"><h3>Jobs by domain</h3><span className="aa-sub">{stats.jobsTotal} total</span></div>
-          <Donut segments={[
-            { name: 'Tech', value: stats.jobsByCategory.tech, color: catColors.tech },
-            { name: 'Non-tech', value: stats.jobsByCategory['non-tech'], color: catColors['non-tech'] },
-          ]} />
+          <Donut segments={catSegments} />
         </div>
       </div>
 
@@ -477,7 +477,7 @@ function JobsPage() {
     setBusy(true);
     try { await api.adminBulkDeleteJobs(ids); clear(); reload(); } finally { setBusy(false); }
   };
-  const catPill = (c: string) => (c === 'non-tech' ? 'muted' : c === 'tech' ? 'recruiter' : 'muted');
+  const catPill = (c: string) => (c === 'tech' ? 'recruiter' : 'muted');
   return (
     <>
       <div className="aa-toolbar">
@@ -485,7 +485,7 @@ function JobsPage() {
         <FilterSelect value={filters.status} onChange={(v) => setFilter('status', v)} label="Filter by status"
           options={[['', 'All jobs'], ['live', 'Live'], ['closed', 'Closed']]} />
         <FilterSelect value={filters.category} onChange={(v) => setFilter('category', v)} label="Filter by category"
-          options={[['', 'All domains'], ['tech', 'Tech'], ['non-tech', 'Non-tech']]} />
+          options={[['', 'All domains'], ...JOB_CATEGORIES.map((c) => [c.value, c.label] as [string, string])]} />
       </div>
       <div className="aa-card">
         <BulkBar n={sel.size} onClear={clear}>
@@ -501,7 +501,7 @@ function JobsPage() {
                 <tr key={j.id} className={sel.has(j.id) ? 'is-sel' : ''}>
                   <td><input type="checkbox" className="aa-check" checked={sel.has(j.id)} onChange={() => toggle(j.id)} aria-label="Select job" /></td>
                   <td><div className="aa-u__name">{j.title}</div><div className="aa-u__mail">{j.company}</div></td>
-                  <td><span className={`aa-pill aa-pill--${catPill(j.category)}`}>{j.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span></td>
+                  <td><span className={`aa-pill aa-pill--${catPill(j.category)}`}>{jobCategoryLabel(j.category)}</span></td>
                   <td style={{ color: 'var(--aa-text-2)' }}>{j.type}</td>
                   <td>{j.postedByName || '-'}</td>
                   <td className="aa-tnum"><b>{j.applicantCount ?? 0}</b></td>
@@ -611,7 +611,7 @@ function LogsPage() {
 }
 
 /* ================= CREATE JOB (form + JSON import) ================= */
-const CATS: [string, string][] = [['tech', 'Tech'], ['non-tech', 'Non-tech']];
+const CATS: [string, string][] = JOB_CATEGORIES.map((c) => [c.value, c.label]);
 const JTYPES: [string, string][] = [['full-time', 'Full-time'], ['part-time', 'Part-time'], ['contract', 'Contract'], ['internship', 'Internship']];
 const EXPS: [string, string][] = [['entry', 'Entry'], ['mid', 'Mid'], ['senior', 'Senior'], ['lead', 'Lead']];
 

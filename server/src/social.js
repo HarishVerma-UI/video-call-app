@@ -247,7 +247,7 @@ export function createSocial(deps) {
       parsed = parseCv(buf, contentType);
     } catch (err) {
       log('cv parse failed', err);
-      parsed = { name: '', email: '', phone: '', location: '', headline: '', summary: '', skills: [], experience: [], education: [], lowConfidence: true };
+      parsed = { name: '', email: '', phone: '', location: '', headline: '', summary: '', skills: [], experience: [], education: [], category: '', lowConfidence: true };
     }
     sendJson(res, 200, { parsed });
   }

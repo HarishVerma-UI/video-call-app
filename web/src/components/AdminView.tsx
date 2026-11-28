@@ -1,4 +1,4 @@
-import { ApiError, ROLE_LABEL, type ActiveRoom, type Ad, type AdminStats, type AdminUser, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
+import { ApiError, ROLE_LABEL, JOB_CATEGORIES, type ActiveRoom, type Ad, type AdminStats, type AdminUser, type ApplicationStatus, type AuthUser, type Job, type JobApplication, type JobInput, type RecruiterSummary, type UserRole } from '@vca/shared';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, ShieldIcon, TrashIcon, VideoIcon, PeopleIcon, UserIcon } from './Icons';
@@ -410,9 +410,10 @@ function AdsManager() {
 
 function JobsByDomain({ stats }: { stats: AdminStats | null }) {
   if (!stats) return <div className="card admin-domain"><div className="skeleton-list" aria-hidden="true"><i /></div></div>;
-  const t = stats.jobsByCategory.tech;
-  const nt = stats.jobsByCategory['non-tech'];
-  const total = Math.max(1, t + nt);
+  const cats = JOB_CATEGORIES
+    .map((c) => ({ label: c.label, value: c.value, n: stats.jobsByCategory[c.value] ?? 0 }))
+    .filter((c) => c.n > 0);
+  const total = Math.max(1, cats.reduce((sum, c) => sum + c.n, 0));
   const s = stats.applicationsByStatus;
   const bar = (label: string, n: number, cls: string) => (
     <div className="admin-domain__row">
@@ -424,8 +425,7 @@ function JobsByDomain({ stats }: { stats: AdminStats | null }) {
     <div className="card admin-domain">
       <header className="card__head"><h2>Jobs by domain &amp; moderation</h2></header>
       <div className="admin-domain__bars">
-        {bar('Tech', t, 'tech')}
-        {bar('Non-Tech', nt, 'nontech')}
+        {cats.map((c) => bar(c.label, c.n, c.value === 'tech' ? 'tech' : 'nontech'))}
       </div>
       <div className="admin-domain__mod">
         <span><b>{s.applied}</b> applied</span>
@@ -548,7 +548,7 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
         <div className="job-form__row">
           <label className="admin__field"><span>Category</span>
             <select className="admin__select" value={f.category} onChange={(e) => upd('category', e.target.value as Job['category'])}>
-              <option value="tech">Tech</option><option value="non-tech">Non-Tech</option>
+              {JOB_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </label>
           <label className="admin__field"><span>Type</span>
@@ -722,7 +722,7 @@ function JsonImportModal({ onClose, onDone }: { onClose: () => void; onDone: (cr
         if (typeof j.title !== 'string' || !j.title.trim()) errs.push('missing "title"');
         if (typeof j.company !== 'string' || !j.company.trim()) errs.push('missing "company"');
         if (j.applyUrl && !/^https?:\/\//i.test(String(j.applyUrl))) errs.push('"applyUrl" must start with http(s)://');
-        if (j.category && j.category !== 'tech' && j.category !== 'non-tech') errs.push('"category" must be "tech" or "non-tech"');
+        if (j.category && !JOB_CATEGORIES.some((c) => c.value === j.category)) errs.push(`"category" must be one of: ${JOB_CATEGORIES.map((c) => c.value).join(', ')}`);
       }
       if (errs.length) problems.push({ index: i, errs });
       else valid.push(j as unknown as JobInput);

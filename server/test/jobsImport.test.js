@@ -14,7 +14,10 @@ test('stripHtml turns markup into readable text', () => {
 
 test('categorize / classifyType / classifyExperience', () => {
   assert.equal(categorize('Senior React Developer', ['frontend']), 'tech');
-  assert.equal(categorize('Marketing Manager', ['sales']), 'non-tech');
+  assert.equal(categorize('Data Analyst', ['analytics']), 'data');
+  assert.equal(categorize('Sales Executive', []), 'sales');
+  assert.equal(categorize('HR Business Partner', []), 'hr');
+  assert.equal(categorize('Office Coordinator', []), 'non-tech');
   assert.equal(classifyType('Part Time'), 'part-time');
   assert.equal(classifyType('Contract'), 'contract');
   assert.equal(classifyType('Full Time'), 'full-time');
