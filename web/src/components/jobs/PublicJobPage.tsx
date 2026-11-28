@@ -1,6 +1,6 @@
 // Public job view at /jobs/<id> — shown to signed-out visitors who open a shared
 // job link. Anyone can read the posting; applying sends them to sign in / sign up.
-import { createApi, type Job } from '@vca/shared';
+import { createApi, jobCategoryLabel, type Job } from '@vca/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { API_BASE } from '../../config';
 
@@ -62,7 +62,7 @@ export function PublicJobPage({ jobId }: { jobId: string }) {
           <span className="pubjob__tag">{job.type}</span>
           <span className="pubjob__tag">{job.experience}</span>
           {job.remote && <span className="pubjob__tag pubjob__tag--good">Remote</span>}
-          {job.category && <span className="pubjob__tag">{job.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span>}
+          {job.category && <span className="pubjob__tag">{jobCategoryLabel(job.category)}</span>}
           {salary && <span className="pubjob__tag pubjob__tag--pay">{salary}</span>}
         </div>
 

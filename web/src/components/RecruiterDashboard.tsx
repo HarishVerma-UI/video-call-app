@@ -1,4 +1,4 @@
-import { ApiError, type ApplicationStatus, type Job, type JobApplication, type JobInput, type RecruiterDashboard as Dash } from '@vca/shared';
+import { ApiError, JOB_CATEGORIES, type ApplicationStatus, type Job, type JobApplication, type JobInput, type RecruiterDashboard as Dash } from '@vca/shared';
 import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { BriefcaseIcon, CloseIcon, PencilIcon, PlusIcon, TrashIcon } from './Icons';
@@ -70,7 +70,7 @@ function JobForm({ editing, onClose, onSaved }: { editing: Job | null; onClose: 
         </div>
         <div className="job-form__row">
           <label className="admin__field"><span>Category</span>
-            <select className="admin__select" value={f.category} onChange={(e) => upd('category', e.target.value as Job['category'])}><option value="tech">Tech</option><option value="non-tech">Non-Tech</option></select>
+            <select className="admin__select" value={f.category} onChange={(e) => upd('category', e.target.value as Job['category'])}>{JOB_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select>
           </label>
           <label className="admin__field"><span>Type</span>
             <select className="admin__select" value={f.type} onChange={(e) => upd('type', e.target.value as Job['type'])}>

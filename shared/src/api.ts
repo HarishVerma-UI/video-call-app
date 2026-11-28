@@ -158,6 +158,8 @@ export interface ParsedCv {
   skills: string[];
   experience: Experience[];
   education: Education[];
+  /** Detected professional domain (tech, sales, hr, …); '' when undetermined. */
+  category?: JobCategory | '';
   /** True when little usable text was found (e.g. a scanned/image PDF). */
   lowConfidence: boolean;
 }
@@ -239,7 +241,38 @@ export interface Conversation {
 }
 
 // --- jobs & careers ---
-export type JobCategory = 'tech' | 'non-tech';
+// Shared job/CV domain taxonomy. 'non-tech' is the legacy catch-all, shown as
+// "Other"; every other key is a specific professional domain. The CV parser
+// classifies an uploaded resume into one of these, and jobs carry the same set,
+// so a resume and the jobs board speak one language.
+export type JobCategory =
+  | 'tech' | 'data' | 'design' | 'product'
+  | 'sales' | 'marketing' | 'hr' | 'finance'
+  | 'operations' | 'support' | 'non-tech';
+
+/** The taxonomy in display order, with human labels. Drives every category menu. */
+export const JOB_CATEGORIES: { value: JobCategory; label: string }[] = [
+  { value: 'tech', label: 'Tech' },
+  { value: 'data', label: 'Data & Analytics' },
+  { value: 'design', label: 'Design & UX' },
+  { value: 'product', label: 'Product & Project' },
+  { value: 'sales', label: 'Sales & BizDev' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'hr', label: 'HR & Recruiting' },
+  { value: 'finance', label: 'Finance & Accounting' },
+  { value: 'operations', label: 'Operations' },
+  { value: 'support', label: 'Customer Support' },
+  { value: 'non-tech', label: 'Other' },
+];
+
+const JOB_CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
+  JOB_CATEGORIES.map((c) => [c.value, c.label]),
+);
+/** Human label for a category key; unknown/empty falls back to "Other". */
+export function jobCategoryLabel(c: string | null | undefined): string {
+  return JOB_CATEGORY_LABELS[String(c || '')] ?? 'Other';
+}
+
 export type JobType = 'full-time' | 'part-time' | 'contract' | 'internship';
 export type JobExperience = 'entry' | 'mid' | 'senior' | 'lead';
 export type ApplicationStatus = 'applied' | 'shortlisted' | 'rejected';
@@ -364,7 +397,7 @@ export interface AdminStats {
   // Platform (jobs & applications) metrics.
   jobsTotal: number;
   jobsActive: number;
-  jobsByCategory: { tech: number; 'non-tech': number };
+  jobsByCategory: Record<JobCategory, number>;
   applicationsTotal: number;
   applicationsByStatus: { applied: number; shortlisted: number; rejected: number };
 }

@@ -11,7 +11,7 @@ import { DuplicateEmailError, publicUser } from '../db/userStore.js';
 import { directoryProfile, publicApplication, publicJob, publicPost, publicProfile } from '../db/socialStore.js';
 import { hashPassword } from './password.js';
 import { isSuperAdmin, isValidRole, normalizeRole } from './roles.js';
-import { APPLICATION_STATUSES, jobPatchFrom } from '../jobsValidate.js';
+import { APPLICATION_STATUSES, JOB_CATS, jobPatchFrom } from '../jobsValidate.js';
 import { recordAudit, actorOf } from '../audit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -247,7 +247,7 @@ export function createAdmin(opts) {
     if (q) jobs = jobs.filter((j) => (j.title || '').toLowerCase().includes(q) || (j.company || '').toLowerCase().includes(q));
     if (status === 'live') jobs = jobs.filter((j) => j.active !== false);
     else if (status === 'closed') jobs = jobs.filter((j) => j.active === false);
-    if (category === 'tech' || category === 'non-tech') jobs = jobs.filter((j) => (j.category === 'non-tech' ? 'non-tech' : 'tech') === category);
+    if (category && JOB_CATS.includes(category)) jobs = jobs.filter((j) => (j.category || 'tech') === category);
     const total = jobs.length;
     const skip = (page - 1) * limit;
     const paged = jobs.slice(skip, skip + limit);
@@ -387,14 +387,14 @@ export function createAdmin(opts) {
     const extra = typeof opts.getStats === 'function' ? opts.getStats() : { activeCalls: { rooms: 0, participants: 0 }, activeRooms: [], uptimeSec: 0 };
 
     // Platform (jobs & applications) metrics for the super-admin console.
-    const platform = { jobsTotal: 0, jobsActive: 0, jobsByCategory: { tech: 0, 'non-tech': 0 }, applicationsTotal: 0, applicationsByStatus: { applied: 0, shortlisted: 0, rejected: 0 } };
+    const platform = { jobsTotal: 0, jobsActive: 0, jobsByCategory: Object.fromEntries(JOB_CATS.map((c) => [c, 0])), applicationsTotal: 0, applicationsByStatus: { applied: 0, shortlisted: 0, rejected: 0 } };
     const jobsStore = opts.social?.jobs;
     if (jobsStore) {
       const jobs = await jobsStore.list({ activeOnly: false });
       platform.jobsTotal = jobs.length;
       for (const j of jobs) {
         if (j.active !== false) platform.jobsActive++;
-        platform.jobsByCategory[j.category === 'non-tech' ? 'non-tech' : 'tech']++;
+        { const c = JOB_CATS.includes(j.category) ? j.category : 'tech'; platform.jobsByCategory[c]++; }
       }
       const ids = jobs.map((j) => j.id);
       const apps = ids.length ? await jobsStore.applicationsForJobIds(ids) : [];

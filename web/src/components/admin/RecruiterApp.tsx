@@ -6,7 +6,7 @@
 // only ever sees jobs they posted and the people who applied to them.
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  ROLE_LABEL, normalizeRole,
+  ROLE_LABEL, normalizeRole, jobCategoryLabel, JOB_CATEGORIES,
   type ApiClient, type ApplicationStatus, type DirectoryUser, type Job, type JobApplication,
   type JobCategory, type JobExperience, type JobInput, type JobType, type RecruiterDashboard, type UserRole,
 } from '@vca/shared';
@@ -208,7 +208,7 @@ function JobsPage({ goCreate }: { goCreate: () => void }) {
               {jobs.map((j) => (
                 <tr key={j.id}>
                   <td><div className="aa-u__name">{j.title}</div><div className="aa-u__mail">{j.company}</div></td>
-                  <td><span className={`aa-pill aa-pill--${j.category === 'non-tech' ? 'muted' : 'recruiter'}`}>{j.category === 'non-tech' ? 'Non-tech' : 'Tech'}</span></td>
+                  <td><span className={`aa-pill aa-pill--${j.category === 'tech' ? 'recruiter' : 'muted'}`}>{jobCategoryLabel(j.category)}</span></td>
                   <td style={{ color: 'var(--aa-text-2)' }}>{j.type}</td>
                   <td className="aa-tnum"><b>{j.applicantCount ?? 0}</b></td>
                   <td><span className={`aa-pill aa-pill--${j.active === false ? 'muted' : 'good'}`}><span className="aa-pdot" />{j.active === false ? 'Closed' : 'Live'}</span></td>
@@ -345,7 +345,7 @@ function PeoplePage() {
 }
 
 /* ================= POST A JOB (form + JSON import) ================= */
-const CATS: [string, string][] = [['tech', 'Tech'], ['non-tech', 'Non-tech']];
+const CATS: [string, string][] = JOB_CATEGORIES.map((c) => [c.value, c.label]);
 const JTYPES: [string, string][] = [['full-time', 'Full-time'], ['part-time', 'Part-time'], ['contract', 'Contract'], ['internship', 'Internship']];
 const EXPS: [string, string][] = [['entry', 'Entry'], ['mid', 'Mid'], ['senior', 'Senior'], ['lead', 'Lead']];
 const EMPTY_JOB = {

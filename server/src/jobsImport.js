@@ -18,9 +18,25 @@ export function stripHtml(html) {
     .trim();
 }
 
-const TECH_RE = /\b(developer|engineer|programmer|software|frontend|front-end|backend|back-end|full[- ]?stack|devops|data|ml|ai|machine learning|qa|sre|architect|ios|android|mobile|web|cloud|security|react|angular|vue|node|python|java|golang|rust|typescript|php|ruby|\.net|sql)\b/i;
+// Keyword patterns per domain, ordered by specificity. First match wins, so the
+// more specific domains (data, design, …) are tried before the broad 'tech'
+// catch-all. Keeps the taxonomy in jobsValidate.js / shared api.ts.
+const CATEGORY_RES = [
+  ['data', /\b(data analyst|data scientist|data engineer|analytics|business intelligence|\bbi\b|machine learning|\bml\b|tableau|power bi|\betl\b)\b/i],
+  ['design', /\b(ux|ui\/ux|product designer|graphic designer|visual designer|designer|figma|interaction design)\b/i],
+  ['product', /\b(product manager|product owner|scrum master|project manager|program manager|delivery manager)\b/i],
+  ['sales', /\b(sales|account executive|business development|inside sales|relationship manager|account manager)\b/i],
+  ['marketing', /\b(marketing|seo|sem|growth|brand|content writer|copywriter|social media)\b/i],
+  ['hr', /\b(human resources|\bhr\b|recruiter|talent acquisition|people operations|hrbp)\b/i],
+  ['finance', /\b(finance|accountant|accounting|financial analyst|auditor|\btax\b|bookkeeper|controller)\b/i],
+  ['operations', /\b(operations|supply chain|logistics|procurement|warehouse|inventory)\b/i],
+  ['support', /\b(customer support|customer success|customer service|help desk|service desk|technical support)\b/i],
+  ['tech', /\b(developer|engineer|programmer|software|frontend|front-end|backend|back-end|full[- ]?stack|devops|sre|architect|ios|android|mobile|web|cloud|security|react|angular|vue|node|python|java|golang|rust|typescript|php|ruby|\.net|sql|qa|sdet)\b/i],
+];
 export function categorize(title, tags = []) {
-  return TECH_RE.test(`${title} ${(tags || []).join(' ')}`) ? 'tech' : 'non-tech';
+  const hay = `${title} ${(tags || []).join(' ')}`;
+  for (const [cat, re] of CATEGORY_RES) if (re.test(hay)) return cat;
+  return 'non-tech';
 }
 
 export function classifyType(s) {
